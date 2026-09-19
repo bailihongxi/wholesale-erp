@@ -5,35 +5,41 @@
       sub="公司信息、员工与权限、数据备份与云同步"
       :badge="APP_VERSION"
       badge-tone="muted"
-    />
+    >
+      <template #actions>
+        <!-- 一键展开 / 收起：模块多时不必一个个点 -->
+        <div class="collapse-bar">
+          <button class="ghost-btn sm" type="button" @click="expandAll">全部展开</button>
+          <button class="ghost-btn sm" type="button" @click="collapseAll">全部收起</button>
+        </div>
+      </template>
+    </PageHeader>
+
     <!-- 公司信息 -->
-    <section class="block">
-      <h3 class="block-title">公司信息</h3>
+    <CollapseCard v-model="panels.company" title="公司信息">
       <div class="form">
         <input v-model="company.name" class="f-input" placeholder="公司名称" />
         <input v-model="company.address" class="f-input" placeholder="公司地址" />
         <input v-model="company.phone" class="f-input" placeholder="联系电话" />
         <button class="primary-btn full" type="button" @click="saveCompany">保存公司信息</button>
       </div>
-    </section>
+    </CollapseCard>
 
     <!-- 品牌与图标：登录页标志 / 各角色头像 / 网页版快捷图标 -->
-    <BrandSettingsPanel />
+    <BrandSettingsPanel v-model:open="panels.brand" />
 
     <!-- 数据备份与恢复 -->
-    <section class="block">
-      <h3 class="block-title">数据备份与恢复</h3>
+    <CollapseCard v-model="panels.backup" title="数据备份与恢复">
       <div class="btn-row">
         <button class="primary-btn" type="button" @click="exportBackup">⬇️ 导出备份</button>
         <button class="ghost-btn" type="button" @click="triggerImport">⬆️ 导入恢复</button>
         <input ref="fileInput" type="file" accept="application/json" style="display:none" @change="onImport" />
       </div>
       <p class="tip">备份文件命名：erp-backup-YYYYMMDD.json</p>
-    </section>
+    </CollapseCard>
 
     <!-- 示例数据 -->
-    <section class="block">
-      <h3 class="block-title">示例数据</h3>
+    <CollapseCard v-model="panels.demo" title="示例数据">
       <p class="tip block-tip">
         新装系统时数据库为空，各页面会显示「暂无数据」。载入示例数据可一键生成
         商品、供应商、客户、采购单、销售单与出入库记录，便于查看完整业务效果；
@@ -49,11 +55,10 @@
         当前已有 {{ counts.products }} 个商品、{{ counts.purchaseOrders }} 张采购单、{{ counts.saleOrders }} 张销售单
       </p>
       <p class="tip" v-else>当前暂无业务数据</p>
-    </section>
+    </CollapseCard>
 
     <!-- 价格规则：加价比例 -->
-    <section class="block">
-      <h3 class="block-title">价格规则（加价比例）</h3>
+    <CollapseCard v-model="panels.price" title="价格规则（加价比例）">
       <p class="tip block-tip">
         只用维护<b>成本价</b>，批发价与零售价由这里统一推算：
         <b>批发价 = 成本 × (1 + 批发加价率)</b>，<b>零售价 = 成本 × (1 + 零售加价率)</b>。
@@ -96,11 +101,10 @@
           一键应用会覆盖全部商品的批发价与零售价（按每件商品自己的成本重新计算），成本价与库存不受影响。
         </p>
       </div>
-    </section>
+    </CollapseCard>
 
     <!-- 打印设置：纸张与表头 -->
-    <section class="block">
-      <h3 class="block-title">打印设置</h3>
+    <CollapseCard v-model="panels.print" title="打印设置">
       <p class="tip block-tip">
         单据默认按 <b>A5 横版（A4 纸的一半）</b> 打印，也可切换为 <b>A4 竖版</b>；
         明细超过一页容量自动分页，每页重复表头并标注页码。表头内容在此统一维护。
@@ -137,24 +141,21 @@
         <p class="tip">字段改名与排序：在单据详情页点「打印 → ⚙ 表头设置」里调整。</p>
         <button class="primary-btn full" type="button" @click="savePrint">保存打印设置</button>
       </div>
-    </section>
+    </CollapseCard>
 
     <!-- 库房管理 -->
-    <section class="block">
-      <h3 class="block-title">库房管理</h3>
+    <CollapseCard v-model="panels.warehouse" title="库房管理">
       <p class="tip">
-        库房由你自己设定（总仓 / 门店 / 京东仓……）。入库、出库、调拨、盘点都在「库存作业」里选择库房，
+        库房由你自己设定（总仓 / 门店 / 京东仓……）。入库、出库、调拨、盘点都在「库存管理 → 库存作业」里选择库房，
         库存明细会按库房分列显示每个库房的数量。
       </p>
       <button class="ghost-btn full" type="button" @click="router.push('/warehouse?tab=locations')">
         🏬 去管理库房（{{ locationCount }} 个）
       </button>
-    </section>
+    </CollapseCard>
 
     <!-- 云同步：数据加密后存进 GitHub 仓库，仓库同时用来托管 Pages 页面 -->
-    <section class="block">
-      <h3 class="block-title">☁️ 云同步（GitHub）</h3>
-
+    <CollapseCard v-model="panels.sync" title="☁️ 云同步（GitHub）">
       <div class="sync-stat">
         <div class="ss-item">
           <span class="ss-label">数据空间</span>
@@ -230,7 +231,7 @@
           换设备或清理浏览器数据后需要重新填写。
         </p>
       </div>
-    </section>
+    </CollapseCard>
 
     <!-- 退出登录 -->
     <section class="block">
@@ -240,7 +241,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { db } from '../../db'
@@ -259,6 +260,7 @@ import {
   type PrintSettings
 } from '../../utils/printSettings'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import CollapseCard from '../../components/ui/CollapseCard.vue'
 import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import { APP_VERSION } from '../../version'
 import {
@@ -277,6 +279,53 @@ const sampleCost = ref(2000)
 
 const previewWholesale = computed(() => calcWholesale(sampleCost.value, rule.value))
 const previewRetail = computed(() => calcRetail(sampleCost.value, rule.value))
+
+/**
+ * 设置页各模块的展开状态（第十三轮）
+ * 默认只展开「公司信息」，其余收成一行标题，页面不再被表单撑得很长；
+ * 展开状态记在 localStorage，下次进来保持原来的样子。
+ */
+const PANEL_KEYS = ['company', 'brand', 'backup', 'demo', 'price', 'print', 'warehouse', 'sync'] as const
+type PanelKey = typeof PANEL_KEYS[number]
+const PANEL_STORAGE_KEY = 'erp_settings_panels'
+
+function defaultPanels(): Record<PanelKey, boolean> {
+  return {
+    company: true, brand: false, backup: false, demo: false,
+    price: false, print: false, warehouse: false, sync: false
+  }
+}
+
+function readPanels(): Record<PanelKey, boolean> {
+  const base = defaultPanels()
+  try {
+    const raw = localStorage.getItem(PANEL_STORAGE_KEY)
+    if (!raw) return base
+    const saved = JSON.parse(raw) as Partial<Record<PanelKey, boolean>>
+    for (const k of PANEL_KEYS) {
+      if (typeof saved[k] === 'boolean') base[k] = saved[k] as boolean
+    }
+    return base
+  } catch {
+    return base
+  }
+}
+
+const panels = reactive(readPanels())
+watch(panels, () => {
+  try {
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panels))
+  } catch {
+    /* 隐私模式 / 配额满：本次会话内仍然生效，只是不持久化 */
+  }
+})
+
+function expandAll(): void {
+  for (const k of PANEL_KEYS) panels[k] = true
+}
+function collapseAll(): void {
+  for (const k of PANEL_KEYS) panels[k] = false
+}
 
 async function saveRule(): Promise<void> {
   const r: PriceRule = {
@@ -507,6 +556,8 @@ function logout(): void {
 
 <style scoped>
 .settings-page { max-width: 1100px; margin: 0 auto; }
+.collapse-bar { display: flex; gap: 8px; }
+.collapse-bar .ghost-btn { height: 34px; padding: 0 14px; font-size: 13px; border-radius: var(--r-sm); }
 .form { display: flex; flex-direction: column; gap: 10px; }
 .f-input { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 14px; font-size: 14px; outline: none; }
 .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }

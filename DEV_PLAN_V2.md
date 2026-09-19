@@ -5,9 +5,9 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-2（2026-09-19 当前基线）**
-> 本文档为开发执行计划，产品对外版本统一为 **V1.0-2**（`src/version.ts` / `package.json` 同步）。
-> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**。
+> **产品版本：V1.0-3（2026-09-20 当前基线）**
+> 本文档为开发执行计划，产品对外版本统一为 **V1.0-3**（`src/version.ts` / `package.json` 同步）。
+> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**。
 
 ---
 
@@ -837,6 +837,96 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 3. 筛选条子项不写死宽度，交给 `@media (min-width:768px)` 紧凑规则；只有搜索框可放大。
 4. 增删菜单 / 路由必跑 `tests/nav-permission.test.ts` 并同步 `MENU_SPEC.md`。
 5. 图标一律走 `utils/brand.ts` 缺省回落，不在模板里硬编码 emoji。
+
+---
+
+## 十八、V1.0-3 · 第十三轮（2026-09-20）
+
+### 18.1 需求清单
+
+| # | 需求 | 状态 |
+|---|---|---|
+| 1 | 客户 / 供应商资料增加开票信息等公户信息（含地址、备注），并修复「编辑无法保存开票信息」 | ✅ |
+| 2 | 系统设置页各小模块可回弹收缩，保持页面清洁 | ✅ |
+
+### 18.2 改动明细
+
+**A. 开票与对公账户资料**
+
+- `src/types/index.ts`：`Customer` / `Supplier` 各新增 **6 个可选字段** ——
+  `invoiceTitle`（开票抬头）、`taxNo`（纳税人识别号）、`invoiceAddress`（开票地址）、
+  `invoicePhone`（开票电话）、`bankName`（开户银行）、`bankAccount`（对公账号）。
+  **全部设为可选**，老数据不需要迁移。
+- 新增 `src/utils/invoice.ts`：`INVOICE_FIELDS`、`emptyInvoice()`、`hasInvoice()`、
+  `invoiceComplete()`（抬头 + 税号都填才算完整）、`invoiceOf()`（安全读取，缺省空串回落）、`invoiceSummary()`。
+- 新增 `src/components/InvoiceFieldset.vue`：三列网格的六个输入框，客户与供应商共用。
+- `src/views/sales/CustomersView.vue`：
+  - 表单重组为 **基础资料 / 开票与打款资料 / 备注 + 经销商账号** 三组；
+  - **修复缺陷**：`openEdit()` 现在完整回填（含 `address` / `remark` / 六个开票字段），
+    `save()` 完整回写（原来把 `remark` 写死为空串，编辑一次就丢备注）；
+  - 列表新增「开票资料」列（`.inv-badge` 绿「完整」/ 灰「未填」）；
+  - 搜索框扩展为 **名称 / 联系人 / 电话 / 开票抬头 / 税号**。
+- `src/views/purchase/SuppliersView.vue`：整体重做 —— 补齐**备注**字段、新增**搜索框**、
+  接入 `InvoiceFieldset`；列表显示「开票资料完整」徽标 + 开票摘要 + 地址 + 备注。
+- `src/utils/demoData.ts`：3 个客户与 3 个供应商补齐全套开票与对公资料。
+
+**B. 系统设置折叠**
+
+- 新增 `src/components/ui/CollapseCard.vue`：受控折叠卡片（`v-model`），
+  **CSS 折叠而非 `v-if`（DOM 保留）**，箭头回弹动画、`aria-expanded`、键盘 Enter / 空格、
+  `prefers-reduced-motion` 支持。
+- `src/views/boss/SettingsView.vue`：8 个模块全部改为 `CollapseCard`，
+  默认只展开「公司信息」；页头新增「全部展开 / 全部收起」；
+  折叠状态存 `localStorage['erp_settings_panels']`（损坏时静默回落默认值）。
+- `src/components/BrandSettingsPanel.vue`：改为 `v-model:open` 受控，
+  折叠状态交给设置页统一托管，保证一键操作能一起动。
+
+### 18.3 测试
+
+| 项 | 结果 |
+|---|---|
+| 新增 | `tests/invoice-info.test.ts` —— 11 例（六字段定义 / 完整度判定 / 老数据安全 / 能存能回填 / 备注不丢 / 搜索 / 示例数据） |
+| 新增 | `tests/settings-collapse.test.ts` —— 12 例（组件交互 / 键盘 / DOM 保留 / 8 模块 / 默认态 / 单选展开 / 全部展开收起 / localStorage 持久化 / 坏数据回落 / 退出登录不折叠） |
+| 全量 | ✅ **419 通过 / 40 文件 / 0 error** |
+| 构建 | ✅ `npm run build` 0 错误（2.68s） |
+
+### 18.4 实机验证（agent-browser）
+
+| 项 | 结果 |
+|---|---|
+| 设置页折叠 | ✅ 默认 8 个模块仅「公司信息」展开（bodyH=206，其余 =0） |
+| 页面高度 | ✅ **4118px（全展开）→ 810px（默认）→ 588px（全收起）** |
+| 一键操作 | ✅ 「全部展开 / 全部收起」按钮生效，`localStorage` 同步写入全部 8 个键 |
+| 客户开票资料 | ✅ 列表「完整」徽标；编辑表单六字段回填正确、分组清晰；清除商品表后重播示例数据即落库 |
+| 供应商开票资料 | ✅ 「开票资料完整」徽标 + 抬头 / 税号 / 开户行账号摘要 + 地址 + 备注 |
+
+### 18.5 踩坑记录
+
+1. **`CollapseCard` 初版模板里写成了 `open`，而 prop 是 `modelValue`** —— Vue 只给 `[Vue warn]`，
+   不中断构建，表现是**所有模块永远收起、点不开**。由挂载测试第 1 例抓出，
+   已改为 `computed(() => props.modelValue)` + 独立 `toggle()`。
+   **结论：模板引用不存在的属性不会报错，这类组件必须靠挂载测试断言真实渲染结果。**
+2. **受控组件的测试不能直接断言点击后 props 变化** —— 没有父级 `v-model` 回写时 props 不会变，
+   要断言派发的事件（`emitted('update:modelValue')`）或用 `setProps` 模拟父级回写。
+3. **`seedDemoData()` 有「已有商品就跳过」的保护** —— 实机验证时若库里还有上一轮的旧记录，
+   直接调用会静默返回 `ok:false`，看到的是旧数据（表现为「开票字段没生效」）。
+   正确做法：先 `clearBusinessData()` 并清 `customers` / `suppliers`，再播种。
+
+### 18.6 沉淀的约束
+
+1. 让用户填的表单，保存时必须**完整回写全部字段**，编辑时必须**完整回填**；改一个字段不许把别的清空。
+2. 表单字段超过 6 个应**分组**（基础资料 / 开票与打款资料 / 备注），不要平铺一大片。
+3. 开票相关判定统一走 `utils/invoice.ts`，不在页面里各写一套。
+4. 可折叠模块一律用 `ui/CollapseCard.vue`，**CSS 折叠不用 `v-if`**（`v-if` 会让测试拿不到节点、也会清掉未提交的表单）。
+5. 页面级折叠状态由页面统一持有并配「全部展开 / 全部收起」，子组件用 `v-model:open` 接入。
+
+### 18.7 交付
+
+| 项 | 结果 |
+|---|---|
+| 版本 | `src/version.ts` → **V1.0-3**；`package.json` → `1.0.0-3` |
+| 文档 | `PRD.md` V1.8（新增第 20 节）、`DEV_PLAN_V2.md`（第十八章）、`MENU_SPEC.md` 同步 |
+| 仓库 | 提交 + tag `v1.0-3` 推送 `main`；GitHub Pages 重新部署 |
 
 ---
 

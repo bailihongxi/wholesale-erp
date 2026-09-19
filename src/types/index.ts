@@ -62,6 +62,13 @@ export interface Customer {
   loginPassword?: string
   status: 'active' | 'disabled'
   remark: string
+  // ↓ 开票与对公账户信息（第十三轮新增，老数据无此字段也能正常读取）
+  invoiceTitle?: string
+  taxNo?: string
+  invoiceAddress?: string
+  invoicePhone?: string
+  bankName?: string
+  bankAccount?: string
 }
 
 // 供应商
@@ -73,6 +80,32 @@ export interface Supplier {
   address: string
   paymentTerm: string
   remark: string
+  // ↓ 开票与对公账户信息（第十三轮新增）
+  invoiceTitle?: string
+  taxNo?: string
+  invoiceAddress?: string
+  invoicePhone?: string
+  bankName?: string
+  bankAccount?: string
+}
+
+/**
+ * 开票与对公账户信息（客户 / 供应商通用的一组字段）。
+ * 用于表单回显、详情展示与「是否已填」判断。
+ */
+export interface InvoiceInfo {
+  /** 开票抬头（发票上的单位名称） */
+  invoiceTitle: string
+  /** 纳税人识别号（税号） */
+  taxNo: string
+  /** 开票注册地址 */
+  invoiceAddress: string
+  /** 开票登记电话 */
+  invoicePhone: string
+  /** 开户银行（对公） */
+  bankName: string
+  /** 对公银行账号 */
+  bankAccount: string
 }
 
 // 商品档案

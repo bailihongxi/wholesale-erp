@@ -53,10 +53,29 @@ export async function seedDemoData(): Promise<DemoResult> {
   const byModel = (m: string): Product => products.find(p => p.model === m) as Product
 
   // ===== 2. 供应商 =====
+  // 开票与对公账户：让「客户 / 供应商」页能看到资料齐全的样子（第十三轮）
   const supplierSeeds = [
-    { name: '海尔华南总代', contact: '张经理', phone: '13900001111', address: '广州市天河区', paymentTerm: '月结30天', remark: '空调、洗衣机主力供应商' },
-    { name: '格力广东分公司', contact: '李主管', phone: '13900002222', address: '深圳市福田区', paymentTerm: '月结30天', remark: '' },
-    { name: '美的电器批发', contact: '王经理', phone: '13900003333', address: '佛山市顺德区', paymentTerm: '现结', remark: '冰箱、厨电' }
+    {
+      name: '海尔华南总代', contact: '张经理', phone: '13900001111', address: '广州市天河区',
+      paymentTerm: '月结30天', remark: '空调、洗衣机主力供应商',
+      invoiceTitle: '广州海尔电器销售有限公司', taxNo: '91440101MA5ABCD23X',
+      invoiceAddress: '广州市天河区天河路 208 号', invoicePhone: '020-87654321',
+      bankName: '中国银行广州天河支行', bankAccount: '6621 6578 8832 1001'
+    },
+    {
+      name: '格力广东分公司', contact: '李主管', phone: '13900002222', address: '深圳市福田区',
+      paymentTerm: '月结30天', remark: '',
+      invoiceTitle: '珠海格力电器股份有限公司深圳分公司', taxNo: '91440300MA5EFGH71K',
+      invoiceAddress: '深圳市福田区深南大道 6008 号', invoicePhone: '0755-83217890',
+      bankName: '建设银行深圳福田支行', bankAccount: '4425 0196 8800 0000 2311'
+    },
+    {
+      name: '美的电器批发', contact: '王经理', phone: '13900003333', address: '佛山市顺德区',
+      paymentTerm: '现结', remark: '冰箱、厨电',
+      invoiceTitle: '佛山市美的电器批发有限公司', taxNo: '91440606MA4JKLM905',
+      invoiceAddress: '佛山市顺德区北滘镇工业大道 18 号', invoicePhone: '0757-26338888',
+      bankName: '工商银行佛山顺德支行', bankAccount: '3011 5588 0021 3345 678'
+    }
   ]
   for (const s of supplierSeeds) {
     await purchaseStore.createSupplier(s, OPERATOR_ID)
@@ -65,9 +84,27 @@ export async function seedDemoData(): Promise<DemoResult> {
 
   // ===== 3. 客户（含 1 个经销商账号，可直接登录体验经销商端） =====
   const customerSeeds = [
-    { name: '城南电器商行', contact: '陈老板', phone: '13800004444', address: '城南大道 88 号', level: 'A', creditLimit: 200000, paymentTerm: '月结30天', status: 'active' as const, remark: '老客户' },
-    { name: '华联家电超市', contact: '刘店长', phone: '13800005555', address: '华联商场 3 层', level: 'B', creditLimit: 100000, paymentTerm: '月结15天', status: 'active' as const, remark: '' },
-    { name: '顺发家电经销部', contact: '赵总', phone: '13800006666', address: '城西批发市场 A12', level: 'A', creditLimit: 150000, paymentTerm: '月结30天', status: 'active' as const, remark: '已开通经销商自助查询' }
+    {
+      name: '城南电器商行', contact: '陈老板', phone: '13800004444', address: '城南大道 88 号',
+      level: 'A', creditLimit: 200000, paymentTerm: '月结30天', status: 'active' as const, remark: '老客户',
+      invoiceTitle: '城南电器商行', taxNo: '92330106MA2AB1234X',
+      invoiceAddress: '城南大道 88 号', invoicePhone: '0571-88881234',
+      bankName: '农业银行城南支行', bankAccount: '1903 0104 0012 3456'
+    },
+    {
+      name: '华联家电超市', contact: '刘店长', phone: '13800005555', address: '华联商场 3 层',
+      level: 'B', creditLimit: 100000, paymentTerm: '月结15天', status: 'active' as const, remark: '每月 20 号统一开票',
+      invoiceTitle: '华联家电超市有限公司', taxNo: '91330100MA2CD5678Y',
+      invoiceAddress: '城中路 128 号华联商场 3 层', invoicePhone: '0571-88885678',
+      bankName: '招商银行城中支行', bankAccount: '5719 0088 7766 0011'
+    },
+    {
+      name: '顺发家电经销部', contact: '赵总', phone: '13800006666', address: '城西批发市场 A12',
+      level: 'A', creditLimit: 150000, paymentTerm: '月结30天', status: 'active' as const, remark: '已开通经销商自助查询',
+      invoiceTitle: '顺发家电经销部', taxNo: '92330106MA2EF9012Z',
+      invoiceAddress: '城西批发市场 A12 号', invoicePhone: '0571-88889900',
+      bankName: '中国银行城西支行', bankAccount: '3821 7766 0088 5544'
+    }
   ]
   for (const c of customerSeeds) {
     await salesStore.createCustomer(c, OPERATOR_ID)

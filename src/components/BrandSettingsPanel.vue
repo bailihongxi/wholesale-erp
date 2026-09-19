@@ -4,8 +4,7 @@
     登录页标志 / 侧边栏标志 / 系统名称 / 各角色头像 / 网页版快捷图标，
     统一在这里维护；保存即写 localStorage 并全站即时生效。
   -->
-  <section class="block">
-    <h3 class="block-title">品牌与图标</h3>
+  <CollapseCard v-model="openProxy" title="品牌与图标">
     <p class="tip block-tip">
       登录页标志、系统名称、各角色头像，以及网页版（侧边栏 / 手机端底部 Tab / 业务中心）的
       <b>快捷图标</b> 都可以在这里改。改完点一下输入框外面立即全站生效，不需要刷新。
@@ -104,16 +103,25 @@
       <button class="ui-btn ui-btn-sm" type="button" @click="resetModuleIcons">↺ 快捷图标恢复默认</button>
       <button class="ui-btn ui-btn-sm" type="button" @click="resetEverything">↺ 全部恢复出厂设置</button>
     </div>
-  </section>
+  </CollapseCard>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { showToast } from 'vant'
+import CollapseCard from './ui/CollapseCard.vue'
 import {
   useBrand, AVATAR_ROLES, DEFAULT_ROLE_AVATARS, roleLabelOf, type BrandIcon
 } from '../utils/brand'
 import { fileToSquareDataUrl } from '../utils/image'
+
+/** 折叠状态由系统设置页统一托管（全部展开 / 全部收起要能一起动） */
+const props = withDefaults(defineProps<{ open?: boolean }>(), { open: true })
+const emit = defineEmits<{ (e: 'update:open', v: boolean): void }>()
+const openProxy = computed({
+  get: () => props.open,
+  set: (v: boolean) => emit('update:open', v)
+})
 
 const {
   config, modules, iconOf, roleAvatar,
