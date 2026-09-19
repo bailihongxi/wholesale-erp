@@ -185,6 +185,11 @@ body {
   align-items: center;
   gap: var(--sp-2);
   flex-wrap: wrap;
+  /* 让右上角操作区占满卡片头剩余宽度并靠右：
+     卡片头里的筛选条（下拉 / 日期 / 重置）因此能排成一行，
+     否则会被标题挤成「一行一个控件」的竖排。 */
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .ui-card-body {
@@ -725,6 +730,79 @@ body {
   margin-bottom: var(--sp-3);
 }
 .data-toolbar .grow { flex: 1; min-width: 180px; }
+
+/* ============================================================
+   筛选条紧凑化（第十二轮 · 仅电脑端）
+   ------------------------------------------------------------
+   背景：原生控件基线给 input/select 设了 width:100%，于是列表页顶部
+   每个筛选项的 flex-basis 都等于「整行宽度」：
+     · flex-wrap:wrap 的页面 → 搜索框、下拉、日期各占一整行，排布极散
+     · 不换行的页面 → 下拉吃掉整行，把搜索框挤到 min-width 最小值
+   统一规则：只有搜索框放大占满剩余空间，其余控件按内容宽度收缩，
+   一行放不下时自动折成第二行。手机端（<768px）布局完全不动。
+   ============================================================ */
+@media (min-width: 768px) {
+  :is(.toolbar, .data-toolbar, .ui-toolbar) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* 除搜索框外的控件：按内容宽度紧凑排布，不再各占一整行 */
+  :is(.toolbar, .data-toolbar, .ui-toolbar) > :is(input, select, button, label) {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 230px;
+  }
+
+  /* 搜索框是筛选条里唯一需要「放大」的控件：吃掉整行剩余空间 */
+  :is(.toolbar, .data-toolbar, .ui-toolbar) > :is(.search-wrap, .grow) {
+    flex: 1 1 320px;
+    width: auto;
+    min-width: 220px;
+    max-width: none;
+  }
+
+  /* 日期区间是一组，靠在一起不要被拉到行尾 */
+  :is(.toolbar, .data-toolbar, .ui-toolbar) > input[type='date'] { max-width: 158px; }
+
+  /* 卡片头右上角的筛选条占满剩余宽度并靠右，避免被挤成一行一个控件的竖排 */
+  .ui-card-extra > .ui-toolbar {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+}
+
+/* 首屏骨架：页面首次拉数据期间占位，避免「先闪一下空态、再出现列表」 */
+.ui-skeleton {
+  padding: 10px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-xs);
+}
+.ui-skeleton-row {
+  height: 14px;
+  margin: 12px 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f7 0%, #f7f9fc 40%, #eef2f7 80%);
+  background-size: 240% 100%;
+  animation: ui-skeleton-move 1.15s ease-in-out infinite;
+}
+.ui-skeleton-row:first-child { width: 46%; }
+.ui-skeleton-row:nth-child(even) { width: 88%; }
+.ui-skeleton-row:nth-child(odd) { width: 72%; }
+
+@keyframes ui-skeleton-move {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton-row { animation: none; }
+}
 
 /* 行内小标签 */
 .tag {

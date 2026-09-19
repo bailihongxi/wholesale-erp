@@ -8,7 +8,10 @@
           <span class="topbar-title">{{ pageTitle }}</span>
           <span class="topbar-spacer"></span>
           <span class="topbar-user">
-            <span class="tu-avatar">{{ userInitial }}</span>
+            <span class="tu-avatar" :class="{ 'is-img': myAvatar.type === 'image' }">
+              <img v-if="myAvatar.type === 'image'" :src="myAvatar.value" :alt="userName" />
+              <template v-else>{{ myAvatar.value || userInitial }}</template>
+            </span>
             <span class="tu-text">
               <b>{{ userName }}</b>
               <i>{{ roleLabel }}</i>
@@ -38,6 +41,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useResponsive } from '../composables/useResponsive'
 import { useUserStore } from '../stores/user'
+import { useBrand } from '../utils/brand'
 import SideBar from './SideBar.vue'
 import MobileTabBar from './MobileTabBar.vue'
 import MobileTopNav from './MobileTopNav.vue'
@@ -53,6 +57,10 @@ const pageTitle = computed(() => (route.meta.title as string) || '')
 const userName = computed(() => userStore.currentUser?.name ?? '未登录')
 const roleLabel = computed(() => roleName(userStore.role))
 const userInitial = computed(() => (userStore.currentUser?.name ?? '?').slice(0, 1))
+
+// 头像按「角色」取：可在系统设置 → 品牌与图标 里换成别的 emoji 或图片
+const { roleAvatar } = useBrand()
+const myAvatar = computed(() => roleAvatar(userStore.role))
 
 const roleNames: Record<string, string> = {
   boss: '老板',
@@ -130,7 +138,10 @@ function handleLogout(): void {
   font-size: 13px;
   font-weight: 700;
   flex: none;
+  overflow: hidden;
 }
+.tu-avatar.is-img { background: #fff; }
+.tu-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tu-text { display: flex; flex-direction: column; line-height: 1.25; }
 .tu-text b { font-size: 13px; color: var(--c-primary); font-weight: 600; }
 .tu-text i { font-size: 11px; color: var(--c-muted); font-style: normal; }

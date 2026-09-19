@@ -16,7 +16,9 @@
     </div>
 
     <section class="block">
-      <table v-if="!isMobile" class="log-table">
+      <LoadingBlock v-if="loading" :rows="7" />
+
+      <table v-else-if="!isMobile" class="log-table">
         <thead>
           <tr>
             <th>时间</th>
@@ -65,10 +67,13 @@ import { db } from '../../db'
 import { AUDIT_ACTIONS } from '../../utils/audit'
 import type { AuditLog, User } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 
 const { isMobile } = useResponsive()
 
 const logs = ref<AuditLog[]>([])
+/** 首次拉数据期间骨架占位，避免先闪一下「暂无操作日志」 */
+const loading = ref(true)
 const users = ref<User[]>([])
 const keyword = ref('')
 const actionFilter = ref('')
@@ -98,20 +103,23 @@ function fmt(s: string): string {
 }
 
 async function reload(): Promise<void> {
-  logs.value = await db.auditLogs.toArray()
-  users.value = await db.users.toArray()
+  try {
+    logs.value = await db.auditLogs.toArray()
+    users.value = await db.users.toArray()
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(reload)
 </script>
 
 <style scoped>
-.audit-page { max-width: 1100px; margin: 0 auto; }
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.tb-search { flex: 1; min-width: 200px; }
+.tb-search { flex: 1 1 320px; min-width: 200px; }
 .tb-select {
-  height: 44px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 10px;
-  padding: 0 14px; font-size: 14px; background: #fff; outline: none; color: var(--c-text, #1a202c);
+  height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm);
+  padding: 0 14px; font-size: 14px; background: #fff; outline: none; color: var(--c-text);
 }
 .tb-tip { font-size: 12px; color: var(--c-muted, #64748b); }
 

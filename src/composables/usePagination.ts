@@ -27,9 +27,10 @@ export interface Pagination {
   reset(): void
 }
 
-/** 约定的分页粒度：商品档案 100 条，其余商品列表 20 条 */
+/** 约定的分页粒度：商品档案 100 条，其余商品列表 20 条，库存预警 50 条 */
 export const PAGE_SIZE_PRODUCT = 100
 export const PAGE_SIZE_LIST = 20
+export const PAGE_SIZE_ALERT = 50
 
 export function usePagination<T>(source: Ref<T[]>, size = PAGE_SIZE_LIST): Pagination {
   const page = ref(1)

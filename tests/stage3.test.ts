@@ -112,10 +112,11 @@ describe('阶段3：老板工作台重写', () => {
     expect(wrapper.text()).toContain('系统设置')
   })
 
-  it('3.5 侧边栏 12 个菜单路由均可解析（含库存作业）', () => {
+  it('3.5 侧边栏 11 个菜单路由均可解析（库存已收口到 /stock）', () => {
     const paths = getNav('boss').sidebar.map(i => i.route)
-    expect(paths.length).toBe(12)
-    expect(paths).toContain('/warehouse')
+    expect(paths.length).toBe(11)
+    // 第十二轮：库存作业并入库存管理页内，侧边栏只保留 /stock
+    expect(paths).not.toContain('/warehouse')
     expect(paths).toContain('/stock')
     expect(paths).toContain('/boss/audit-logs')
     for (const p of paths) {

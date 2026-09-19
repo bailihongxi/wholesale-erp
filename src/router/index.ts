@@ -52,7 +52,9 @@ const routes = [
 
   // ===== 库房端 =====
   { path: '/warehouse/home', component: () => import('../views/warehouse/WarehouseHomeView.vue'), meta: { role: ['warehouse', 'boss'], title: '库房工作台' } },
-  // 库存作业中心：把入库验货 / 出库拣货 / 调拨 / 盘点 收纳到同一入口下
+  // 库存作业中心：把入库验货 / 出库拣货 / 调拨 / 盘点 收纳到同一入口下。
+  // 第十二轮起侧边栏不再单列该页（已并入「库存管理」/stock 的页内 Tab），
+  // 但本路由与全部子路由保留 —— 收藏夹、外部链接、手机端直达都仍然有效。
   { path: '/warehouse', component: () => import('../views/warehouse/WarehouseOpsView.vue'), meta: { role: ['warehouse', 'boss'], title: '库存作业' } },
   { path: '/warehouse/transfer', component: () => import('../views/warehouse/TransferView.vue'), meta: { role: ['warehouse', 'boss'], title: '调拨作业' } },
   { path: '/warehouse/count', component: () => import('../views/warehouse/CountView.vue'), meta: { role: ['warehouse', 'boss'], title: '盘点作业' } },

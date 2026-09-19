@@ -1,12 +1,15 @@
 <template>
   <div class="ui-page">
+    <!-- embedded 时不重复渲染页头（已被「库存管理」页内 Tab 收纳） -->
     <PageHeader
+      v-if="!embedded"
       title="库存作业"
       sub="验货入库、拣货出库、库间调拨、盘点与退换货、库房维护，统一在此处理"
     />
+    <div v-else class="sec-line">验货入库、拣货出库、调拨、盘点、退换货与库房维护</div>
 
     <!-- 模块导航：带待办角标，一眼看出哪里还有活 -->
-    <SegmentedTabs v-model="tab" :options="tabs" />
+    <SegmentedTabs v-model="tab" :size="embedded ? 'sm' : 'md'" :options="tabs" />
 
     <!-- 六大模块：在库存作业页面内嵌展示，菜单只需一个「库存作业」入口 -->
     <div class="tab-pane">
@@ -35,6 +38,9 @@ import { usePurchaseStore } from '../../stores/purchase'
 import { useSalesStore } from '../../stores/sales'
 
 type ModuleKey = 'inbound' | 'outbound' | 'transfer' | 'count' | 'returns' | 'locations'
+
+/** 被「库存管理」页内 Tab 收纳时置真：不重复渲染页头，Tab 收小一档 */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const route = useRoute()
 const purchaseStore = usePurchaseStore()
@@ -80,4 +86,5 @@ onMounted(loadBadges)
 
 <style scoped>
 .tab-pane { margin-top: var(--sp-4); }
+.sec-line { font-size: 12px; color: var(--c-muted); margin-bottom: var(--sp-2); }
 </style>

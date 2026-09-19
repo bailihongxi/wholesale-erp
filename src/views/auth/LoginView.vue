@@ -3,9 +3,12 @@
     <!-- 电脑端：左侧品牌区 -->
     <section v-if="!isMobile" class="brand-panel">
       <div class="brand-inner">
-        <div class="brand-logo">ERP</div>
-        <h1 class="brand-title">家电批发ERP</h1>
-        <p class="brand-sub">进货 · 库存 · 销售 · 对账 全流程管理</p>
+        <div class="brand-logo" :class="{ 'is-img': logo.type === 'image' }">
+          <img v-if="logo.type === 'image'" :src="logo.value" alt="企业标志" />
+          <template v-else>{{ logo.value }}</template>
+        </div>
+        <h1 class="brand-title">{{ config.loginTitle }}</h1>
+        <p class="brand-sub">{{ config.loginSub }}</p>
         <ul class="brand-feats">
           <li>📦 商品档案统一管理</li>
           <li>🔄 采购入库 / 销售出库闭环</li>
@@ -20,9 +23,12 @@
       <div class="login-card">
         <!-- 手机端：渐变头部 + 头像 -->
         <div v-if="isMobile" class="mobile-header">
-          <div class="avatar">👤</div>
-          <h1 class="system-name">家电批发ERP</h1>
-          <p class="system-sub">家电批发进销存管理系统</p>
+          <div class="avatar" :class="{ 'is-img': logo.type === 'image' }">
+            <img v-if="logo.type === 'image'" :src="logo.value" alt="企业标志" />
+            <template v-else>{{ logo.value }}</template>
+          </div>
+          <h1 class="system-name">{{ config.loginTitle }}</h1>
+          <p class="system-sub">{{ config.loginSub }}</p>
         </div>
 
         <template v-else>
@@ -49,15 +55,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
+import { useBrand } from '../../utils/brand'
 
 const router = useRouter()
 const userStore = useUserStore()
 const { isMobile } = useResponsive()
+
+// 登录页标志与系统名可在「系统设置 → 品牌与图标」里自定义
+const { config } = useBrand()
+const logo = computed(() => config.value.loginLogo)
 
 const phone = ref('')
 const password = ref('')
@@ -132,7 +143,11 @@ async function handleLogin(): Promise<void> {
   font-weight: 800;
   letter-spacing: .5px;
   margin-bottom: 20px;
+  font-size: 20px;
+  overflow: hidden;
 }
+.brand-logo.is-img { background: #fff; }
+.brand-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand-title {
   font-size: 30px;
   letter-spacing: 1px;
@@ -192,7 +207,10 @@ async function handleLogin(): Promise<void> {
   justify-content: center;
   font-size: 36px;
   margin-bottom: 12px;
+  overflow: hidden;
 }
+.avatar.is-img { background: #fff; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .system-name {
   font-size: 22px;
 }

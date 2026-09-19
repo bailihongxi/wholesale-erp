@@ -205,7 +205,7 @@ function stockClass(r: PickerRow): string {
 .pk-title { display: flex; align-items: center; gap: 8px; color: var(--c-primary); font-size: 14px; }
 .pk-tools { margin-bottom: 8px; }
 .pk-sel {
-  height: 44px; border: 1px solid var(--c-border); border-radius: 10px;
+  height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm);
   padding: 0 12px; font-size: 14px; background: #fff; color: var(--c-text); outline: none;
 }
 .pk-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--c-muted); }

@@ -54,7 +54,9 @@ describe('阶段2：登录页重写', () => {
     expect(wrapper.find('.login-page.is-mobile').exists()).toBe(true)
     expect(wrapper.find('.mobile-header').exists()).toBe(true)
     expect(wrapper.find('.avatar').exists()).toBe(true)
-    expect(wrapper.text()).toContain('家电批发进销存管理系统')
+    // 第十二轮起登录页的「系统名称 + 副标题」统一成一份可在系统设置里改的配置，
+    // 手机端头部与电脑端品牌区共用同一段副标题（原来是两处写死的不同文案）。
+    expect(wrapper.text()).toContain('全流程管理')
   })
 
   it('2.4 角色自动识别：各角色登录后跳转到对应工作台', () => {

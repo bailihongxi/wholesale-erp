@@ -1,8 +1,11 @@
 <template>
   <aside class="sidebar" :class="{ collapsed: collapsed }">
     <div class="sidebar-header">
-      <span v-show="!collapsed" class="logo-icon">ERP</span>
-      <span v-show="!collapsed" class="logo-text">家电批发ERP</span>
+      <span v-show="!collapsed" class="logo-icon" :class="{ 'is-img': sideLogo.type === 'image' }">
+        <img v-if="sideLogo.type === 'image'" :src="sideLogo.value" alt="标志" />
+        <template v-else>{{ sideLogo.value }}</template>
+      </span>
+      <span v-show="!collapsed" class="logo-text">{{ config.loginTitle }}</span>
       <!-- 折叠/展开（回弹）按钮：常驻菜单栏，紧跟在「家电批发ERP」之后，
            不再放在功能页面左上角 -->
       <button
@@ -29,7 +32,7 @@
         @drop="onDrop(idx)"
         @dragend="onDragEnd"
       >
-        <span class="menu-icon">{{ item.icon }}</span>
+        <span class="menu-icon">{{ iconOf(item) }}</span>
         <span v-show="!collapsed" class="menu-label">{{ item.label }}</span>
         <span v-show="!collapsed" class="drag-handle" title="按住拖拽可调整顺序">⠿</span>
       </router-link>
@@ -46,7 +49,12 @@ import { useUserStore } from '../stores/user'
 import { useLayoutStore } from '../stores/layout'
 import { useMenuOrderStore } from '../stores/menuOrder'
 import { usePermissionStore } from '../stores/permission'
+import { useBrand } from '../utils/brand'
 import type { NavItem } from '../router/navConfig'
+
+// 快捷图标 / 标志可在「系统设置 → 品牌与图标」里自定义，这里实时读取
+const { config, iconOf } = useBrand()
+const sideLogo = computed(() => config.value.sideLogo)
 
 const userStore = useUserStore()
 const layoutStore = useLayoutStore()
@@ -152,7 +160,10 @@ function handleReset(): void {
   letter-spacing: .3px;
   flex: none;
   box-shadow: 0 2px 8px rgba(47, 107, 255, .35);
+  overflow: hidden;
 }
+.logo-icon.is-img { background: #fff; }
+.logo-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .logo-text {
   flex: 1 1 auto;
   min-width: 0;

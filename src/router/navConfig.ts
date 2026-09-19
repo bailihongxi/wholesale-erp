@@ -51,8 +51,9 @@ export const ALL_MODULES: NavItem[] = [
   { label: '客户管理', icon: '👥', route: '/customers', group: '业务', desc: '客户档案与经销商' },
   { label: '供应商', icon: '🏭', route: '/purchase/suppliers', group: '业务', desc: '供应商档案' },
   // ===== 库存 =====
-  { label: '库存管理', icon: '🗃️', route: '/stock', group: '库存', desc: '库存明细与多库房分布' },
-  { label: '库存作业', icon: '🧱', route: '/warehouse', group: '库存', desc: '验货/拣货/调拨/盘点/退换货' },
+  // 第十二轮：原「库存作业」(/warehouse) 已并入「库存管理」页内 Tab，
+  // 侧边栏只保留一个入口。路由与子路由全部保留，收藏夹不失效。
+  { label: '库存管理', icon: '🗃️', route: '/stock', group: '库存', desc: '库存明细 / 预警 / 验货拣货调拨盘点' },
   // ===== 财务 =====
   { label: '财务管理', icon: '🧾', route: '/finance', group: '财务', desc: '对账 / 经营报表 / 记一笔' },
   { label: '经营报表', icon: '📊', route: '/boss/reports', group: '财务', desc: '销售趋势与毛利分析' },
@@ -76,14 +77,15 @@ export const ALL_MODULE_ROUTES: string[] = ALL_MODULES.map(m => m.route)
  */
 export const DEFAULT_ROLE_PERMS: Record<string, string[]> = {
   boss: [
-    '/boss/home', '/boss/products', '/stock', '/warehouse',
+    '/boss/home', '/boss/products', '/stock',
     '/purchase/orders', '/sales/orders', '/customers', '/purchase/suppliers',
     '/finance', '/boss/users', '/boss/audit-logs', '/boss/settings'
   ],
   purchaser: ['/purchase/home', '/purchase/orders', '/purchase/suppliers'],
   sales: ['/sales/home', '/sales/orders', '/customers'],
   finance: ['/finance/home', '/finance', '/stock'],
-  warehouse: ['/warehouse/home', '/warehouse', '/stock']
+  // 库存作业已并入库存管理页内 Tab，库房角色一个「库存管理」入口即可覆盖全部作业
+  warehouse: ['/warehouse/home', '/stock']
 }
 
 /** 角色显示名 */
@@ -141,10 +143,10 @@ export const navConfig: Record<string, RoleNav> = {
   },
   warehouse: {
     sidebar: modulesOf(DEFAULT_ROLE_PERMS.warehouse),
+    // 库存作业已并入库存管理，手机端底部 Tab 收为两项
     tabbar: [
       { label: '工作台', icon: '🏠', route: '/warehouse/home' },
-      { label: '库存作业', icon: '🧱', route: '/warehouse' },
-      { label: '库存', icon: '🗃️', route: '/stock' }
+      { label: '库存管理', icon: '🗃️', route: '/stock' }
     ]
   }
 }

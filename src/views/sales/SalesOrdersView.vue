@@ -14,9 +14,6 @@
         <option value="partial">部分出库</option>
         <option value="completed">已完成</option>
       </select>
-    </div>
-
-    <div class="toolbar date-bar">
       <input v-model="dateFrom" type="date" class="filter" aria-label="开始日期" @change="reload" />
       <span class="dp-sep">至</span>
       <input v-model="dateTo" type="date" class="filter" aria-label="结束日期" @change="reload" />
@@ -26,7 +23,9 @@
 
     <div class="sum-line">共 {{ orders.length }} 张销售单</div>
 
-    <ul v-if="isMobile" class="card-list">
+    <LoadingBlock v-if="loading" :rows="6" />
+
+    <ul v-else-if="isMobile" class="card-list">
       <li v-for="o in orders" :key="o.id" class="order-card" @click="go(`/sales/orders/${o.id}`)">
         <div class="oc-head">
           <span class="oc-no">{{ o.orderNo }}</span>
@@ -58,7 +57,7 @@
       </tbody>
     </table>
 
-    <button v-if="isMobile" class="fab" type="button" @click="go('/sales/orders/new')">＋</button>
+    <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/sales/orders/new')">＋</button>
   </div>
 </template>
 
@@ -68,6 +67,7 @@ import { useRouter } from 'vue-router'
 import { useSalesStore } from '../../stores/sales'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
+import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import type { SaleOrder, Customer } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
 
@@ -81,6 +81,8 @@ const dateFrom = ref('')
 const dateTo = ref('')
 const orders = ref<SaleOrder[]>([])
 const customers = ref<Customer[]>([])
+/** 首次拉数据期间用骨架占位，避免先闪一下「没有符合条件的销售单」 */
+const loading = ref(true)
 
 const hasFilter = computed(
   () => !!keyword.value || !!statusFilter.value || !!dateFrom.value || !!dateTo.value
@@ -108,6 +110,7 @@ async function reload(): Promise<void> {
     })
   }
   orders.value = data
+  loading.value = false
 }
 
 function resetFilter(): void {
@@ -127,20 +130,25 @@ function statusText(s: string): string {
 function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
-  customers.value = await salesStore.listCustomers()
-  await reload()
+  try {
+    customers.value = await salesStore.listCustomers()
+    await reload()
+  } catch {
+    /* 数据库未就绪时保持空表，不让骨架卡住 */
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
 <style scoped>
 .orders { max-width: 1100px; margin: 0 auto; }
-.toolbar { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
-.tb-search { flex: 1; min-width: 160px; }
-.date-bar { flex-wrap: wrap; margin-bottom: 12px; }
-.filter { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+.tb-search { flex: 1 1 320px; min-width: 200px; }
+.filter { height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); padding: 0 12px; background: #fff; }
 .dp-sep { color: var(--c-muted); font-size: 13px; }
-.reset-btn { height: 44px; padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px; background: #fff; color: var(--c-muted); cursor: pointer; }
-.add-btn { height: 44px; padding: 0 18px; border: none; border-radius: 10px; background: var(--c-accent); color: #fff; cursor: pointer; margin-left: auto; }
+.reset-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); background: #fff; color: var(--c-muted); cursor: pointer; }
+.add-btn { height: 40px; padding: 0 18px; border: none; border-radius: var(--r-sm); background: var(--c-accent); color: #fff; cursor: pointer; margin-left: auto; }
 .sum-line { font-size: 12px; color: var(--c-muted); margin-bottom: 10px; }
 .card-list { list-style: none; }
 .order-card { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }

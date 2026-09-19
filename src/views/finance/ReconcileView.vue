@@ -7,8 +7,11 @@
       @update:model-value="switchMode($event as Mode)"
     />
 
+    <!-- 首次拉数据期间骨架占位，避免先闪一下空态 -->
+    <LoadingBlock v-if="loading" :rows="5" />
+
     <!-- ============ 应收 / 应付 ============ -->
-    <template v-if="mode !== 'history'">
+    <template v-else-if="mode !== 'history'">
       <div class="toolbar">
         <SearchInput
           v-model="keyword"
@@ -130,6 +133,7 @@ import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
+import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import type { PaymentHistoryRow } from '../../types'
 
 type Mode = 'receivable' | 'payable' | 'history'
@@ -163,6 +167,7 @@ const modeOptions = computed(() => [
   { value: 'history', label: '收付款流水' }
 ])
 
+const loading = ref(true)
 const editingId = ref<number | null>(null)
 const editAmount = ref(0)
 
@@ -224,6 +229,14 @@ const payTotal = computed(() =>
 )
 
 async function reload(): Promise<void> {
+  try {
+    await loadAll()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadAll(): Promise<void> {
   // 传 true 取全部单据（含已结清），财务才能查到完整历史
   receivables.value = (await financeStore.listReceivables(true)) as ReconRow[]
   payables.value = (await financeStore.listPayables(true)) as ReconRow[]
@@ -290,9 +303,9 @@ onMounted(reload)
 
 .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
 .tb-search { flex: 1; min-width: 180px; }
-.filter { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; }
+.filter { height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); padding: 0 12px; background: #fff; }
 .dp-sep { color: var(--c-muted); font-size: 13px; }
-.reset-btn { height: 44px; padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px; background: #fff; color: var(--c-muted); cursor: pointer; }
+.reset-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); background: #fff; color: var(--c-muted); cursor: pointer; }
 .sum-line { font-size: 12px; color: var(--c-muted); margin-bottom: 10px; }
 .sum-line .in { color: var(--c-success); }
 .sum-line .out { color: var(--c-danger, #dc2626); }

@@ -4,9 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>家电批发ERP</title>
+    <style>
+      /* 首屏占位：JS 解析完之前先显示品牌与呼吸条，
+         避免白屏一闪（Vue 挂载后 #app 内容会被整块替换掉）。 */
+      html, body { margin: 0; height: 100%; }
+      body { background: #f4f6fa; -webkit-font-smoothing: antialiased; }
+      #app-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #16325c;
+      }
+      #app-boot .boot-logo { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+      #app-boot .boot-bar {
+        width: 148px; height: 4px; border-radius: 999px; overflow: hidden; background: #e3e9f2;
+      }
+      #app-boot .boot-bar::after {
+        content: ''; display: block; width: 60%; height: 100%; border-radius: 999px;
+        background: #2f6bff; animation: boot-move 1s ease-in-out infinite alternate;
+      }
+      @keyframes boot-move { from { transform: translateX(-60%); } to { transform: translateX(110%); } }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="app-boot">
+        <div class="boot-logo">家电批发ERP</div>
+        <div class="boot-bar"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

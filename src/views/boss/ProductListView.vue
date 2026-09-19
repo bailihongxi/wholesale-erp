@@ -35,8 +35,11 @@
       <button class="link-btn" type="button" @click="clearSelection">取消选择</button>
     </div>
 
+    <!-- 首次拉数据期间骨架占位，不闪空态 -->
+    <LoadingBlock v-if="loading" :rows="8" />
+
     <!-- 电脑端：表格（含多选、库存、斑马纹） -->
-    <table v-if="!isMobile" class="data-table prod-table">
+    <table v-else-if="!isMobile" class="data-table prod-table">
       <thead>
         <tr>
           <th class="center" style="width:40px">
@@ -132,7 +135,7 @@
       show-jump
     />
 
-    <button v-if="isMobile" class="fab" type="button" @click="go('/boss/products/new')">＋</button>
+    <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/boss/products/new')">＋</button>
 
     <!-- ================= 导入 ================= -->
     <div v-if="showImport" class="overlay" @click.self="showImport = false">
@@ -259,6 +262,7 @@ import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
+import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import { useProductStore } from '../../stores/product'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
@@ -292,10 +296,17 @@ const rule = ref<PriceRule>(getPriceRule())
 
 // ---------------------------------------------------------------- 列表数据
 
+const loading = ref(true)
+
 async function reload(): Promise<void> {
-  const [list, smap] = await Promise.all([productStore.listAll(true), productStore.stockMap()])
-  all.value = list
-  stockMap.value = smap
+  try {
+    const [list, smap] = await Promise.all([productStore.listAll(true), productStore.stockMap()])
+    all.value = list
+    stockMap.value = smap
+  } finally {
+    // 无论成功失败都要收起骨架，否则页面会停在占位状态
+    loading.value = false
+  }
 }
 
 const filtered = computed<Product[]>(() => {
@@ -541,9 +552,8 @@ onMounted(reload)
 </script>
 
 <style scoped>
-.product-list { max-width: 1200px; margin: 0 auto; }
 .sel {
-  height: 44px; border: 1px solid var(--c-border); border-radius: 10px;
+  height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm);
   padding: 0 12px; font-size: 14px; background: #fff; color: var(--c-text); outline: none;
 }
 .bulk-bar {
@@ -603,7 +613,7 @@ onMounted(reload)
   background: var(--c-accent); color: #fff; font-size: 14px; cursor: pointer;
 }
 .ghost-btn {
-  height: 44px; padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px;
+  height: 40px; padding: 0 14px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm);
   background: #fff; color: var(--c-text); font-size: 14px; cursor: pointer;
 }
 .modal .ghost-btn { height: 40px; }

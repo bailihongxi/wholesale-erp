@@ -227,9 +227,9 @@ onMounted(async () => {
 
 .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
 .tb-search { flex: 1; min-width: 180px; }
-.filter { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; }
+.filter { height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); padding: 0 12px; background: #fff; }
 .dp-sep { color: var(--c-muted); font-size: 13px; }
-.reset-btn { height: 44px; padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px; background: #fff; color: var(--c-muted); cursor: pointer; }
+.reset-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); background: #fff; color: var(--c-muted); cursor: pointer; }
 
 .card-list { list-style: none; }
 .card-list { border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }

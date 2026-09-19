@@ -110,9 +110,55 @@ export const useInventoryStore = defineStore('inventory', () => {
     }
   }
 
-  /** 批量自愈（供批量校验前调用） */
+  /**
+   * 批量自愈（供批量校验前调用）。
+   *
+   * 实现要点：一次把 stock / locationStock 两张表读进内存再算差额，
+   * 只对真正不一致的商品落库。早先是逐个商品查两次库（N 个商品 = 2N 次查询），
+   * 商品上千时首屏会被拖到几秒，这是「库存管理页加载慢」的主因。
+   */
   async function reconcileProducts(productIds: number[]): Promise<void> {
-    for (const id of productIds) await reconcileProduct(id)
+    if (!productIds.length) return
+    const wanted = new Set(productIds)
+    const [stockRows, locRows] = await Promise.all([
+      db.stock.toArray(),
+      db.locationStock.toArray()
+    ])
+    const totalMap = new Map<number, number>()
+    for (const s of stockRows) {
+      if (wanted.has(s.productId)) totalMap.set(s.productId, s.quantity)
+    }
+    const distMap = new Map<number, Array<{ id?: number; locationId: number; quantity: number }>>()
+    for (const r of locRows) {
+      if (!wanted.has(r.productId)) continue
+      const arr = distMap.get(r.productId) ?? []
+      arr.push({ id: r.id, locationId: r.locationId, quantity: r.quantity })
+      distMap.set(r.productId, arr)
+    }
+
+    let defId = 0
+    for (const id of productIds) {
+      const total = totalMap.get(id) ?? 0
+      const rows = distMap.get(id) ?? []
+      const sum = rows.reduce((a, r) => a + r.quantity, 0)
+      const diff = total - sum
+      if (diff === 0) continue
+      if (diff > 0) {
+        // 缺少分布（老数据 / 直接写 stock 的导入场景）→ 差额补到默认库房
+        if (!defId) defId = await defaultLocationId()
+        await applyLocationDelta(id, defId, diff)
+        continue
+      }
+      let need = -diff
+      for (const r of rows.slice().sort((a, b) => b.quantity - a.quantity)) {
+        if (need <= 0) break
+        const take = Math.min(need, r.quantity)
+        if (take > 0) {
+          await db.locationStock.update(r.id!, { quantity: r.quantity - take })
+          need -= take
+        }
+      }
+    }
   }
 
   /**

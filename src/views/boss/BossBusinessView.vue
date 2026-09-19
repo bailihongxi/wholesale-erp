@@ -9,7 +9,7 @@
         class="module-card"
         @click="go(item.route)"
       >
-        <div class="m-icon">{{ item.icon }}</div>
+        <div class="m-icon">{{ iconOf(item) }}</div>
         <div class="m-name">{{ item.label }}</div>
       </div>
     </div>
@@ -21,7 +21,9 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMenuOrderStore } from '../../stores/menuOrder'
 import { getNav } from '../../router/navConfig'
+import { useBrand } from '../../utils/brand'
 
+const { iconOf } = useBrand()
 const router = useRouter()
 const menuOrder = useMenuOrderStore()
 
