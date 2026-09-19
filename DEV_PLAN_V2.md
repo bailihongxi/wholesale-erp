@@ -733,7 +733,7 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | 第 7 轮 | 多库房 + GitHub 云同步 + Pages 部署 | `cloudSync.ts`、`LocationsView`、`deploy-gh-pages.sh` | 356 |
 | 第 8 轮 | 角色权限开关 + 记一笔 + 界面精细化 | `permission.ts`、`ledgerEntries`、`theme.css` + `components/ui/` | 372 |
 | 第 9 轮 | 设计系统采纳收口 | 嵌套页头降级、页头徽标、覆盖率 18/37 页 | 372 |
-| **第 10 轮** | **版本基线 + Git + Pages 上线** | `src/version.ts`、`.gitignore`、首次提交、仓库与 Pages | **372** |
+| **第 10 轮** | **版本基线 + Git + Pages 上线** | `src/version.ts`、`.gitignore`、首次提交 `324420c`、tag `v1.0-1`、仓库与 Pages | **372（0 error）** |
 
 ### 16.3 V1.0-1 功能总览
 
