@@ -311,7 +311,9 @@ onMounted(reload)
 .form-actions { display: flex; gap: 10px; margin-top: 14px; }
 .save { flex: 1; height: 44px; border: none; border-radius: 10px; background: var(--c-accent, #2563eb); color: #fff; cursor: pointer; }
 .save:disabled { opacity: 0.7; }
-.cancel { height: 44px; padding: 0 18px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 10px; background: #fff; cursor: pointer; }
+/* 取消按钮：橘红实底白字（全站规范 2026-09-20） */
+.cancel { height: 44px; padding: 0 18px; border: 1px solid var(--c-amber, #f97316); border-radius: 10px; background: var(--c-amber, #f97316); color: #fff; font-weight: 600; cursor: pointer; }
+.cancel:hover { background: var(--c-amber-hover, #ea580c); border-color: var(--c-amber-hover, #ea580c); }
 .empty { text-align: center; color: var(--c-muted, #64748b); padding: 20px; }
 
 @media (max-width: 767px) {

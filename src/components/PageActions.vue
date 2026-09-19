@@ -72,11 +72,14 @@ const emit = defineEmits<{
 }
 /* 有主操作时，左侧按钮占 1 份、右侧主操作占 2 份；
    只有返回/取消按钮时则铺满整行，方便单手点击（手机端） */
+/* 返回 / 取消统一橘红实底白字（全站规范 2026-09-20）：
+   与蓝色主操作在色相上拉开距离，避免误点提交 */
 .pa-cancel {
   flex: 1;
-  border: 1px solid var(--c-border, #e2e8f0);
-  background: #fff;
-  color: var(--c-muted, #64748b);
+  border: 1px solid var(--c-amber, #f97316);
+  background: var(--c-amber, #f97316);
+  color: #fff;
+  font-weight: 600;
 }
 .pa-confirm {
   flex: 2;
@@ -90,8 +93,9 @@ const emit = defineEmits<{
   cursor: not-allowed;
 }
 .pa-cancel:hover:not(:disabled) {
-  border-color: var(--c-accent, #2563eb);
-  color: var(--c-accent, #2563eb);
+  background: var(--c-amber-hover, #ea580c);
+  border-color: var(--c-amber-hover, #ea580c);
+  color: #fff;
 }
 .pa-confirm:hover:not(:disabled) {
   filter: brightness(1.05);

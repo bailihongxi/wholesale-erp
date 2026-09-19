@@ -324,9 +324,12 @@ onMounted(reload)
 .rc-sub { font-size: 13px; color: var(--c-muted); margin-top: 4px; }
 
 .edit-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.amt-input { width: 120px; height: 40px; border: 1px solid var(--c-border); border-radius: 8px; padding: 0 8px; }
-.confirm-btn { height: 40px; padding: 0 16px; border: none; border-radius: 8px; background: var(--c-success); color: #fff; cursor: pointer; }
-.cancel-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-border); border-radius: 8px; background: #fff; cursor: pointer; }
+/* 双类选择器提特异性，压过全局原生控件基线 :where(input)，固定金额框宽度不撑满整行 */
+.edit-row .amt-input { width: 120px; flex: none; height: 40px; border: 1px solid var(--c-border); border-radius: 8px; padding: 0 8px; }
+.confirm-btn { height: 40px; padding: 0 16px; border: none; border-radius: 8px; background: var(--c-success); color: #fff; cursor: pointer; white-space: nowrap; }
+/* 取消按钮：橘红实底白字（全站规范），white-space 防止汉字竖排 */
+.cancel-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-amber); border-radius: 8px; background: var(--c-amber); color: #fff; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cancel-btn:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); }
 .link-btn { margin-top: 8px; border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 14px; }
 
 .pay-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }

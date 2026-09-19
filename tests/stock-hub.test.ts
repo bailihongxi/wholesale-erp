@@ -136,7 +136,7 @@ describe('库存管理 Hub 页：库存作业已并入', () => {
     await testRouter.isReady()
   })
 
-  it('页内四个 Tab：明细 / 预警 / 流水 / 库存作业', async () => {
+  it('页内四个 Tab：库存作业 / 明细 / 预警 / 流水（库存作业已移到最前）', async () => {
     const w = mount(StockManageView, {
       global: { plugins: [testRouter] }
     })

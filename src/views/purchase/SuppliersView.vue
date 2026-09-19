@@ -209,7 +209,9 @@ onMounted(reload)
 .f-area:focus { border-color: var(--c-accent); }
 .form-actions { display: flex; gap: 10px; margin-top: 14px; }
 .save { flex: 1; height: 40px; border: none; border-radius: var(--r-sm); background: var(--c-accent); color: #fff; cursor: pointer; }
-.cancel { height: 40px; padding: 0 18px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); background: #fff; cursor: pointer; }
+/* 取消按钮：橘红实底白字（全站规范 2026-09-20） */
+.cancel { height: 40px; padding: 0 18px; border: 1px solid var(--c-amber); border-radius: var(--r-sm); background: var(--c-amber); color: #fff; font-weight: 600; cursor: pointer; }
+.cancel:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); }
 .empty { color: var(--c-muted); text-align: center; padding: 20px; }
 
 @media (max-width: 767px) {

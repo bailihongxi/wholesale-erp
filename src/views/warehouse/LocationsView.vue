@@ -228,7 +228,9 @@ onMounted(load)
 /* 操作列里的「改名 / 删除」拉开间距，降低误触 */
 .op-cell { display: inline-flex; align-items: center; gap: 16px; }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
-.link-btn.muted { color: var(--c-muted); }
+/* 取消按钮：橘红实底白字（全站规范 2026-09-20） */
+.link-btn.muted { color: #fff; background: var(--c-amber); border-radius: var(--r-xs); padding: 4px 12px; font-weight: 600; }
+.link-btn.muted:hover { background: var(--c-amber-hover); }
 .link-btn.danger { color: var(--c-danger); }
 .link-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 

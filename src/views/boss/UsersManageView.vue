@@ -186,7 +186,7 @@
           </p>
         </div>
         <div class="modal-foot">
-          <button class="ui-btn" type="button" @click="editing = false">取消</button>
+          <button class="ui-btn ui-btn-cancel" type="button" @click="editing = false">取消</button>
           <button class="ui-btn ui-btn-primary" type="button" @click="saveStaff">保存</button>
         </div>
       </div>

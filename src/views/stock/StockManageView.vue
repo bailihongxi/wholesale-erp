@@ -78,13 +78,14 @@ const productStore = useProductStore()
 const inventoryStore = useInventoryStore()
 const { canSeeAnyPrice } = usePermission()
 
-const TAB_KEYS: StockTab[] = ['detail', 'alert', 'flow', 'ops']
+// 用户要求：库存作业（入库/出库/调拨/盘点/退换货/库房管理）放到 Tab 第一位
+const TAB_KEYS: StockTab[] = ['ops', 'detail', 'alert', 'flow']
 
 const tabOptions = [
+  { value: 'ops', label: '库存作业', icon: '🧱' },
   { value: 'detail', label: '库存明细', icon: '📋' },
   { value: 'alert', label: '库存预警', icon: '⚠️' },
-  { value: 'flow', label: '出入库流水', icon: '🔄' },
-  { value: 'ops', label: '库存作业', icon: '🧱' }
+  { value: 'flow', label: '出入库流水', icon: '🔄' }
 ]
 
 const tab = ref<StockTab>(normalize(route.query.tab))

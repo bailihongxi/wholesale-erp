@@ -5,8 +5,8 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-3（2026-09-20 当前基线）**
-> 本文档为开发执行计划，产品对外版本统一为 **V1.0-3**（`src/version.ts` / `package.json` 同步）。
+> **产品版本：V1.0-4（2026-09-19 当前基线）**
+> 本文档为开发执行计划，产品对外版本统一为 **V1.0-4**（`src/version.ts` / `package.json` 同步）。
 > 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**。
 
 ---
@@ -899,6 +899,51 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | 一键操作 | ✅ 「全部展开 / 全部收起」按钮生效，`localStorage` 同步写入全部 8 个键 |
 | 客户开票资料 | ✅ 列表「完整」徽标；编辑表单六字段回填正确、分组清晰；清除商品表后重播示例数据即落库 |
 | 供应商开票资料 | ✅ 「开票资料完整」徽标 + 抬头 / 税号 / 开户行账号摘要 + 地址 + 备注 |
+
+## 十九、V1.0-4 · 第十四轮（2026-09-19）
+
+### 19.1 需求清单
+
+| # | 需求 | 状态 |
+|---|---|---|
+| 1 | 搜索框输入信息后，默认放大镜未自动隐藏、遮挡输入文字 | ✅ |
+| 2 | 财务管理 → 经营报表排版左右未对齐；库存预警使用 50 条/页分页 + 斑马纹防差行 | ✅ |
+| 3 | 财务「登记收款」行确认 / 取消按钮汉字挤在一起（竖排） | ✅ |
+| 4 | 库存管理 →「库存作业」Tab 移到本行按钮最前端 | ✅ |
+| 5 | 系统内所有「返回」「取消」按键统一橘红底色 | ✅ |
+
+### 19.2 改动明细
+
+- **全局设计系统** `src/styles/theme.css`：
+  - 新增 `--c-amber: #f97316` / `--c-amber-hover: #ea580c` 橘红令牌；
+  - 原生控件基线 `:where(input:not(...):not(...):not(...))` 把类型排除整体写进 `:where()`，**特异性降为 0**，不再压过组件 scoped 单类规则（修搜索框放大镜压字 + 金额框吃满整行）；
+  - `.data-table` 斑马纹加强对比（奇数 `#fff` / 偶数 `#f4f7fc`）；
+  - 新增 `.ui-btn-cancel`（橘红实底白字，定义在 `.ui-btn` 之后靠源码顺序覆盖）；
+  - `.tab-pane > div:is(...)` 兜底纳入 `.reports-page` 等，消除宽屏逐层缩进。
+- **搜索框** `src/components/SearchInput.vue`：输入后 `🔍` 加 `.faded` 淡出；`.search-field` 改 `.search-wrap .search-field` 双类选择器保住左内边距。
+- **经营报表** `src/views/boss/BossReportsView.vue`：`.reports-page` 去 `max-width:1100` 改 `width:100%`；低库存预警内嵌 `<TablePager>` 50 条分页 + 斑马纹（序号 / 缺口列）。
+- **财务对账** `src/views/finance/ReconcileView.vue`：`.edit-row .amt-input{width:120px}` 双类保宽、确认 / 取消按钮 `white-space:nowrap`；取消按钮套橘红。
+- **库存管理** `src/views/stock/StockManageView.vue`：`tabOptions` 把「库存作业」移到第一位（`TAB_KEYS` 同步）。
+- **全站取消 / 返回橘红**：`PageActions.vue` `.pa-cancel`、`CustomersView`/ `SuppliersView` `.cancel`、`PrintPreview` `.pp-btn.ghost`、`LocationsView` `.link-btn.muted`、`UsersManageView` `.ui-btn.ui-btn-cancel`、`ProductListView` 弹窗 `.ghost-btn.dismiss` 全部橘红实底白字。
+- 新增回归测试 `tests/ui-polish-v14.test.ts`（9 例）。
+
+### 19.3 测试
+
+| 项 | 结果 |
+|---|---|
+| 新增 | `tests/ui-polish-v14.test.ts` —— 9 例（放大镜淡出 + 基线特异性 / 报表对齐 + 预警分页斑马纹 / 金额框 nowrap / Tab 顺序 / 橘红令牌与各页取消按钮） |
+| 全量 | ✅ **428 通过 / 41 文件 / 0 error** |
+| 构建 | ✅ `npm run build` 0 错误 |
+
+### 19.4 实机验证（agent-browser，桌面 1600 / 移动 390）
+
+| 项 | 结果 |
+|---|---|
+| 搜索框放大镜 | ✅ 输入后淡出、文字不再被压 |
+| 经营报表 | ✅ 左右对齐（与父级同宽）；预警分页 50 条 + 斑马纹 |
+| 财务登记收款 | ✅ 金额框固定 120px，确认 / 取消按钮横排不挤字、取消橘红 |
+| 库存管理 Tab | ✅ 库存作业排第一位 |
+| 取消 / 返回 | ✅ 各页取消 / 返回按钮均为橘红实底白字 |
 
 ### 18.5 踩坑记录
 

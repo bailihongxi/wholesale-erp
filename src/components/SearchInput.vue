@@ -5,7 +5,8 @@
     同时按 Esc 也能清空，提交/回车立即搜索。
   -->
   <div class="search-wrap" :class="{ 'is-round': round }">
-    <span class="search-icon" aria-hidden="true">🔍</span>
+    <!-- 有输入内容时放大镜淡出：既让位给文字，也避免与首字重叠 -->
+    <span class="search-icon" :class="{ faded: model.length > 0 }" aria-hidden="true">🔍</span>
     <input
       ref="inputEl"
       v-model="model"
@@ -115,11 +116,16 @@ function clear(): void {
   font-size: 13px;
   opacity: 0.5;
   pointer-events: none;
+  transition: opacity .15s ease;
 }
-.search-field {
+/* 输入后放大镜淡出（用户反馈：图标压住输入的文字） */
+.search-icon.faded { opacity: 0; }
+/* ⚠️ 双类选择器提高特异性：全局 input 基线一旦把类型排除写成 :not() 链，
+   特异性会高于单类 scoped 规则，这里 34px 左内边距的意图就会被覆盖 → 放大镜压字。 */
+.search-wrap .search-field {
   width: 100%;
   height: 44px;
-  /* 右侧留出清除按钮的位置，避免文字被按钮压住 */
+  /* 左侧留给放大镜、右侧留给清除按钮，避免文字被压住 */
   padding: 0 40px 0 34px;
   border: 1px solid var(--c-border, #e2e8f0);
   border-radius: 10px;
@@ -132,7 +138,7 @@ function clear(): void {
 .is-round .search-field {
   border-radius: 22px;
 }
-.search-field:focus {
+.search-wrap .search-field:focus {
   border-color: var(--c-accent, #2563eb);
 }
 /* 去掉浏览器原生搜索清除图标，避免与自定义清除按钮重复 */

@@ -16,6 +16,12 @@
   --c-accent-hover: #1e5bef;
   --c-accent-soft: #e8f0ff;      /* 强调色浅底 */
 
+  /* 橘红：全站「取消 / 返回」类按钮的指定底色（2026-09-20 用户硬性规范）
+     —— 取消动作与蓝/绿主操作按钮在色相上明确区分，避免误点 */
+  --c-amber: #f97316;
+  --c-amber-hover: #ea580c;
+  --c-amber-soft: #fff3ea;
+
   /* 状态色 */
   --c-success: #10b981;
   --c-success-soft: #e7f8f1;
@@ -328,6 +334,27 @@ body {
 .ui-btn-danger:hover {
   background: #dc2626;
   border-color: #dc2626;
+  color: #fff;
+}
+
+/* 「取消 / 返回」专用：橘红实底白字（全站统一，2026-09-20 用户硬性规范）。
+   用在 PageActions 的返回/取消、弹窗取消、表单放弃等不做任何副作用提交的按钮上。
+   注意：本类必须定义在 .ui-btn 之后，靠源码顺序覆盖 .ui-btn 的中性底色。 */
+.ui-btn-cancel {
+  background: var(--c-amber);
+  border-color: var(--c-amber);
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ui-btn-cancel:hover {
+  background: var(--c-amber-hover);
+  border-color: var(--c-amber-hover);
+  color: #fff;
+}
+.ui-btn-cancel:disabled {
+  background: var(--c-amber);
+  border-color: var(--c-amber);
   color: #fff;
 }
 
@@ -695,8 +722,9 @@ body {
   border-bottom: 1px solid var(--c-border);
 }
 
+/* 斑马纹：奇偶行对比加强，防止长表看串行（用户反馈） */
 .data-table tbody tr:nth-child(odd) { background: #ffffff; }
-.data-table tbody tr:nth-child(even) { background: #fbfcfe; }
+.data-table tbody tr:nth-child(even) { background: #eef2f9; }
 .data-table tbody tr:hover { background: var(--c-accent-soft); }
 .data-table tbody tr.is-selected { background: #dfeaff; }
 .data-table tbody tr.is-warn { box-shadow: inset 3px 0 0 var(--c-danger); }
@@ -875,8 +903,14 @@ body {
    原生控件基线
    用 :where() 包一层 → 选择器特异性为 0，
    任何组件库（Vant 等）自带样式仍然优先，不会互相打架。
+   ⚠️ 类型排除也必须整体写进 :where() 内部：
+   写成 :where(input):not(...):not(...):not(...) 时，每个 :not() 各贡献一个属性选择器的
+   特异性（合计 0,3,0），**反而压过组件内 scoped 规则**——SearchInput 的
+   `.search-field[data-v-x]{padding:0 40px 0 34px}`、ReconcileView 的 `.amt-input{width:120px}`
+   都只有 (0,2,0)。症状：搜索框放大镜压住输入文字；金额输入框吃满整行、
+   把「确认 / 取消」挤成竖排汉字。
    ============================================================ */
-:where(input):not([type='checkbox']):not([type='radio']):not([type='file']),
+:where(input:not([type='checkbox']):not([type='radio']):not([type='file'])),
 :where(select),
 :where(textarea) {
   font-family: inherit;
@@ -898,9 +932,9 @@ body {
   line-height: 1.6;
   resize: vertical;
 }
-:where(input):focus:not([type='checkbox']):not([type='radio']),
-:where(select):focus,
-:where(textarea):focus {
+:where(input:focus:not([type='checkbox']):not([type='radio'])),
+:where(select:focus),
+:where(textarea:focus) {
   border-color: var(--c-accent);
   box-shadow: 0 0 0 3px var(--c-accent-soft);
 }
@@ -964,9 +998,12 @@ body {
 /* 面板内的子页必须完全跟随父级宽度。
    子页若自带 max-width（或命中 :where(.page) 的 1240px 兜底），
    宽屏下会比父级再窄一档并各自居中，表现为「标题 / Tab / 表格左边缘逐层缩进」的错位。
-   这里用 div.page 提高特异性，确保能盖过子页 scoped 样式里的 max-width。 */
-.tab-pane > div.page,
-.tab-pane > div.ui-page {
+   这里用 div + 类名提高特异性，确保能盖过子页 scoped 样式里的 max-width。 */
+.tab-pane > div:is(
+    .page, .ui-page, .reports-page, .stock-page, .customers-page,
+    .settings-page, .audit-page, .product-list, .product-edit,
+    .detail-page, .orders, .create, .landing, .home
+  ) {
   max-width: none;
   margin: 0;
 }

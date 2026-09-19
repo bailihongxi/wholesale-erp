@@ -439,14 +439,17 @@ function onPrint(): void {
   font-size: 14px;
   cursor: pointer;
 }
+/* 取消按钮：橘红实底白字（全站规范 2026-09-20） */
 .pp-btn.ghost {
-  border: 1px solid var(--c-border, #e2e8f0);
-  background: #fff;
-  color: var(--c-muted, #64748b);
+  border: 1px solid var(--c-amber, #f97316);
+  background: var(--c-amber, #f97316);
+  color: #fff;
+  font-weight: 600;
 }
 .pp-btn.ghost:hover {
-  border-color: var(--c-accent, #2563eb);
-  color: var(--c-accent, #2563eb);
+  border-color: var(--c-amber-hover, #ea580c);
+  background: var(--c-amber-hover, #ea580c);
+  color: #fff;
 }
 .pp-btn.primary {
   border: none;

@@ -73,32 +73,50 @@
       </div>
     </section>
 
-    <!-- 低库存预警 -->
+    <!-- 低库存预警：每页固定 50 条 + 全站斑马纹表格，长清单不会看串行 -->
     <section class="block">
       <h3 class="block-title" :class="{ danger: lowStock.length > 0 }">
         库存预警商品（{{ lowStock.length }}）
+        <span v-if="lowStock.length" class="sec-tip">每页 {{ pager.size.value }} 条 · 低于预警线需及时补货</span>
       </h3>
-      <table v-if="!isMobile" class="warn-table">
+      <table v-if="!isMobile" class="data-table warn-table">
         <thead>
-          <tr><th>商品</th><th>分类</th><th class="num">当前库存</th><th class="num">预警值</th></tr>
+          <tr>
+            <th class="center" style="width:76px">序号</th>
+            <th>商品</th>
+            <th>分类</th>
+            <th class="num">当前库存</th>
+            <th class="num">预警值</th>
+            <th class="num">缺口</th>
+          </tr>
         </thead>
         <tbody>
-          <tr v-for="item in lowStock" :key="item.product.id">
+          <tr v-for="(item, i) in pager.paged.value" :key="item.product.id" class="is-warn">
+            <td class="center c-muted">{{ pager.startIndex.value + i }}</td>
             <td>{{ productStore.productName(item.product) }}</td>
             <td class="c-muted">{{ item.product.category }}</td>
             <td class="num c-danger">{{ item.quantity }}</td>
             <td class="num c-muted">{{ item.product.warnStock }}</td>
+            <td class="num c-danger">{{ gapOf(item) }}</td>
           </tr>
-          <tr v-if="!lowStock.length"><td colspan="4" class="empty">库存充足，无预警商品</td></tr>
+          <tr v-if="!lowStock.length"><td colspan="6" class="empty">库存充足，无预警商品</td></tr>
         </tbody>
       </table>
-      <ul v-else class="warn-list">
-        <li v-for="item in lowStock" :key="item.product.id" class="warn-item">
+      <ul v-else class="warn-list zebra-list">
+        <li v-for="item in pager.paged.value" :key="item.product.id" class="warn-item">
           <span class="w-name">{{ productStore.productName(item.product) }}</span>
           <span class="w-qty">{{ item.quantity }} / 预警 {{ item.product.warnStock }}</span>
         </li>
         <li v-if="!lowStock.length" class="empty">库存充足，无预警商品</li>
       </ul>
+
+      <TablePager
+        v-if="lowStock.length"
+        v-model:page="pageProxy"
+        :total="pager.total.value"
+        :page-count="pager.pageCount.value"
+        :size="pager.size.value"
+      />
     </section>
   </div>
 </template>
@@ -108,8 +126,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useFinanceStore } from '../../stores/finance'
 import { useProductStore } from '../../stores/product'
 import { useResponsive } from '../../composables/useResponsive'
+import { usePagination, PAGE_SIZE_ALERT } from '../../composables/usePagination'
 import type { Product } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import TablePager from '../../components/TablePager.vue'
 
 const financeStore = useFinanceStore()
 const productStore = useProductStore()
@@ -122,6 +142,21 @@ const trend = ref<Array<{ key: string; label: string; sales: number; cost: numbe
 const receivableTotal = ref(0)
 const payableTotal = ref(0)
 const lowStock = ref<Array<{ product: Product; quantity: number }>>([])
+
+/**
+ * 库存预警清单固定每页 50 条（与「库存管理 → 库存预警」同一口径），
+ * 标题里的数字仍是全部预警商品数，只是分页展示，避免长清单铺满整页。
+ */
+const pager = usePagination(lowStock, PAGE_SIZE_ALERT)
+const pageProxy = computed({
+  get: () => pager.page.value,
+  set: v => pager.go(v)
+})
+
+/** 缺口：距离预警线还差多少（预警值 - 当前库存，至少 1） */
+function gapOf(item: { product: Product; quantity: number }): number {
+  return Math.max(1, item.product.warnStock - item.quantity)
+}
 
 const hasRange = computed(() => !!startDate.value || !!endDate.value)
 const rangeLabel = computed(() =>
@@ -184,7 +219,12 @@ watch([startDate, endDate], reload)
 </script>
 
 <style scoped>
-.reports-page { max-width: 1100px; margin: 0 auto; }
+/* ⚠️ 不要在这里写 max-width / margin:auto ——
+   本页既作为独立路由 /boss/reports 打开，也被「财务管理」Hub 页嵌进 .tab-pane。
+   自带宽度会让它在宽屏下比父级（1240px）再窄一档并各自居中，
+   表现为「财务管理标题 → Tab → 报表卡片」左边缘逐层缩进的错位。
+   宽度一律交给全局 :where(.reports-page){max-width:1240px;margin:0 auto} 与父级决定。 */
+.reports-page { width: 100%; }
 
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .range-group { display: flex; align-items: center; gap: 6px; }

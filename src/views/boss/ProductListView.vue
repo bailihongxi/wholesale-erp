@@ -217,7 +217,7 @@
         </p>
 
         <div class="modal-actions">
-          <button class="ghost-btn" type="button" @click="showBulk = false">取消</button>
+          <button class="ghost-btn dismiss" type="button" @click="showBulk = false">取消</button>
           <button class="primary-btn" type="button" @click="doBulkEdit">应用</button>
         </div>
       </div>
@@ -619,6 +619,9 @@ onMounted(reload)
 .modal .ghost-btn { height: 40px; }
 .ghost-btn.sm { height: 30px; padding: 0 10px; font-size: 13px; }
 .ghost-btn.danger { border-color: var(--c-danger); color: var(--c-danger); }
+/* 弹窗里的取消 / 关闭按钮：橘红实底白字（全站规范 2026-09-20） */
+.ghost-btn.dismiss { border-color: var(--c-amber); background: var(--c-amber); color: #fff; font-weight: 600; }
+.ghost-btn.dismiss:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); color: #fff; }
 .ghost-btn.danger.disabled { opacity: 0.4; }
 .report { border-top: 1px dashed var(--c-border); padding-top: 8px; font-size: 13px; }
 .report-line { margin-bottom: 4px; }
