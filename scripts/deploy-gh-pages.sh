@@ -54,5 +54,7 @@ echo "==> 3/3 推送到 $BRANCH"
 git push -q --force "$REPO_URL" "$BRANCH"
 
 echo
-echo "完成。请在 GitHub 仓库 Settings → Pages 里把 Source 选为分支 $BRANCH、目录 /(root)。"
+# 注意：中文全角标点紧贴在 $BRANCH 后面时，bash 会把「BRANCH、目录」整体当成变量名，
+# 在 set -u 下报 unbound variable。这里统一用 ${BRANCH} 显式界定变量名边界。
+echo "完成。请在 GitHub 仓库 Settings → Pages 里把 Source 选为分支 ${BRANCH} 、目录 /(root)。"
 echo "稍等 1~2 分钟即可通过 Pages 地址访问。"
