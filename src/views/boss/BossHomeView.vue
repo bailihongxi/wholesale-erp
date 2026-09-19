@@ -113,8 +113,14 @@ async function loadDemo(): Promise<void> {
 }
 
 onMounted(async () => {
-  await refreshDashboard()
-  await refreshEmpty()
+  // 首屏统计只做展示，加载失败不应把异常抛到挂载流程之外
+  // （数据库被关闭/重置、账号切换等场景都可能让它失败），保持空态即可。
+  try {
+    await refreshDashboard()
+    await refreshEmpty()
+  } catch (e) {
+    console.debug('[工作台] 统计加载失败，页面保持空态：', e)
+  }
 })
 
 function yuan(n: number): string {

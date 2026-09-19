@@ -54,6 +54,8 @@ describe('阶段3：老板工作台重写', () => {
     expect(text).toContain('库存预警')
     expect(text).toContain('今日待办')
     expect(wrapper.findAll('.quick-item').length).toBe(6)
+    // 卸载：组件内统计加载是异步的，留到下个用例（会 db.delete()）会抛 DatabaseClosedError
+    wrapper.unmount()
   })
 
   it('3.2 数据卡片显示真实汇总数据（本月销售额/毛利）', async () => {
@@ -80,6 +82,9 @@ describe('阶段3：老板工作台重写', () => {
     }, { timeout: 3000 })
     expect(wrapper.text()).toContain('¥1,000')
     await flushPromises()
+    // 必须卸载：组件内还有未返回的异步查询，留到下一个用例的 db.delete() 之后
+    // 会抛 DatabaseClosedError，被 vitest 记为 unhandled error。
+    wrapper.unmount()
   })
 
   it('3.3 手机端「业务」落地页覆盖老板全部业务菜单（自动同步，不再写死 4 个）', () => {
