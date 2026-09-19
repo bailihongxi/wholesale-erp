@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家电批发ERP - UI设计最终版（已确认）</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #f5f7fa;
+      color: #1a365d;
+      line-height: 1.6;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .header {
+      text-align: center;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #1a365d, #2563eb);
+      color: #fff;
+      border-radius: 16px;
+      margin-bottom: 32px;
+    }
+    .header h1 { font-size: 28px; margin-bottom: 8px; }
+    .header p { opacity: 0.9; font-size: 14px; }
+    .badge {
+      display: inline-block;
+      background: #10b981;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .section h2 {
+      font-size: 20px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .section h3 {
+      font-size: 16px;
+      margin: 20px 0 12px;
+      color: #2563eb;
+    }
+    .colors { display: flex; gap: 16px; flex-wrap: wrap; }
+    .color-item { text-align: center; }
+    .color-box {
+      width: 72px; height: 72px; border-radius: 10px; margin-bottom: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .color-name { font-size: 12px; color: #333; font-weight: 500; }
+    .color-code { font-size: 11px; color: #94a3b8; }
+    .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .role-card {
+      padding: 16px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .role-card .icon { font-size: 28px; margin-bottom: 8px; }
+    .role-card .name { font-weight: 600; margin-bottom: 4px; }
+    .role-card .desc { font-size: 12px; opacity: 0.8; }
+    .phone-frame {
+      width: 320px;
+      border: 8px solid #1a365d;
+      border-radius: 32px;
+      overflow: hidden;
+      background: #f8fafc;
+      margin: 0 auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+    .phone-screen { min-height: 520px; }
+    .phone-content { padding: 16px; min-height: 420px; }
+    .phone-tabbar {
+      display: flex;
+      background: #fff;
+      border-top: 1px solid #e2e8f0;
+    }
+    .phone-tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .phone-tab.active { color: #2563eb; font-weight: 600; }
+    .desktop-frame {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+    .desktop-body { display: flex; min-height: 480px; }
+    .sidebar {
+      width: 220px;
+      background: #1a365d;
+      color: #fff;
+      padding: 16px 0;
+      transition: width 0.2s;
+    }
+    .sidebar.collapsed { width: 60px; }
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      margin-bottom: 20px;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .sidebar.collapsed .sidebar-header { justify-content: center; padding: 0; }
+    .sidebar.collapsed .sidebar-title { display: none; }
+    .menu-item {
+      padding: 10px 20px;
+      font-size: 14px;
+      opacity: 0.75;
+      cursor: pointer;
+    }
+    .menu-item.active { background: #2563eb; opacity: 1; }
+    .sidebar.collapsed .menu-item { text-align: center; padding: 12px 0; font-size: 18px; }
+    .sidebar.collapsed .menu-text { display: none; }
+    .main-content { flex: 1; padding: 24px; background: #f8fafc; }
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: #fff; border-radius: 10px; padding: 16px; }
+    .stat-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; color: #1a365d; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 8px; overflow: hidden; }
+    .data-table th { background: #f8fafc; padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-weight: 600; }
+    .data-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
+    .permission-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .permission-table th { background: #f8fafc; padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; }
+    .permission-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: center; }
+    .yes { color: #10b981; font-weight: 600; }
+    .no { color: #ef4444; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } .stat-cards { grid-template-columns: repeat(2, 1fr); } }
+    .label { font-weight: 600; color: #1a365d; margin-bottom: 12px; text-align: center; }
+    .category-title { font-size: 12px; color: #94a3b8; margin-bottom: 6px; margin-top: 12px; }
+    .menu-list { background: #fff; border: 1px solid #f1f5f9; border-radius: 8px; }
+    .menu-list-item { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .menu-list-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>家电批发ERP · UI设计最终版</h1>
+      <p>手机版 + 电脑版 · 自动适配 · 6角色权限 · 业务全闭环</p>
+      <div class="badge">✓ 已确认 · 作为开发依据</div>
+    </div>
+
+    <!-- ========== 1. 设计基础 ========== -->
+    <div class="section">
+      <h2>一、设计基础</h2>
+
+      <h3>1. 配色方案</h3>
+      <div class="colors">
+        <div class="color-item">
+          <div class="color-box" style="background:#1a365d;"></div>
+          <div class="color-name">主色 · 深海军蓝</div>
+          <div class="color-code">#1a365d</div>
+        </div>
+        <div class="color-item">
+          <div class="color-box" style="background:#2563eb;"></div>
+          <div class="color-name">强调色 · 科技蓝</div>
+          <div class="color-code">#2563eb</div>
+        </div>
+        <div class="color-item">
+          <div class="color-box" style="background:#10b981;"></div>
+          <div class="color-name">成功 · 翠绿</div>
+          <div class="color-code">#10b981</div>
+        </div>
+        <div class="color-item">
+          <div class="color-box" style="background:#f59e0b;"></div>
+          <div class="color-name">警告 · 琥珀</div>
+          <div class="color-code">#f59e0b</div>
+        </div>
+        <div class="color-item">
+          <div class="color-box" style="background:#ef4444;"></div>
+          <div class="color-name">危险 · 朱红</div>
+          <div class="color-code">#ef4444</div>
+        </div>
+        <div class="color-item">
+          <div class="color-box" style="background:#f8fafc;border:1px solid #e2e8f0;"></div>
+          <div class="color-name">背景 · 浅灰白</div>
+          <div class="color-code">#f8fafc</div>
+        </div>
+      </div>
+
+      <h3>2. 六大角色</h3>
+      <div class="role-grid">
+        <div class="role-card" style="background:#eff6ff;">
+          <div class="icon">👑</div>
+          <div class="name">老板</div>
+          <div class="desc">全部功能 · 最高权限<br>所有数据可见</div>
+        </div>
+        <div class="role-card" style="background:#f0fdf4;">
+          <div class="icon">🛒</div>
+          <div class="name">采购</div>
+          <div class="desc">采购单 · 供应商<br>可见进价</div>
+        </div>
+        <div class="role-card" style="background:#fffbeb;">
+          <div class="icon">💼</div>
+          <div class="name">销售</div>
+          <div class="desc">销售单 · 客户<br>不可见进价</div>
+        </div>
+        <div class="role-card" style="background:#fef2f2;">
+          <div class="icon">🏭</div>
+          <div class="name">库房</div>
+          <div class="desc">入库 · 出库 · 库存<br>不可见价格</div>
+        </div>
+        <div class="role-card" style="background:#f5f3ff;">
+          <div class="icon">💰</div>
+          <div class="name">财务</div>
+          <div class="desc">应收应付 · 收付款<br>可见全部价格</div>
+        </div>
+        <div class="role-card" style="background:#ecfeff;">
+          <div class="icon">🏪</div>
+          <div class="name">经销商</div>
+          <div class="desc">产品目录 · 批发价<br>只看产品+批发价</div>
+        </div>
+      </div>
+
+      <h3>3. 数据权限矩阵</h3>
+      <table class="permission-table">
+        <thead>
+          <tr>
+            <th>角色</th>
+            <th>进价</th>
+            <th>批发价</th>
+            <th>库存数量</th>
+            <th>客户/供应商</th>
+            <th>员工管理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>👑 老板</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">全部</td><td class="yes">✅</td></tr>
+          <tr><td>🛒 采购</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">供应商</td><td class="no">❌</td></tr>
+          <tr><td>💼 销售</td><td class="no">❌</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">自己的客户</td><td class="no">❌</td></tr>
+          <tr><td>🏭 库房</td><td class="no">❌</td><td class="no">❌</td><td class="yes">✅</td><td class="no">❌</td><td class="no">❌</td></tr>
+          <tr><td>💰 财务</td><td class="yes">✅</td><td class="yes">✅</td><td>一般</td><td class="yes">全部</td><td class="no">❌</td></tr>
+          <tr><td>🏪 经销商</td><td class="no">❌</td><td class="yes">✅</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ========== 2. 登录页 ========== -->
+    <div class="section">
+      <h2>二、登录页（简化版）</h2>
+      <p style="margin-bottom:20px;color:#666;font-size:14px;">
+        结构：头像 → 系统名称 → 手机号 → 密码 → 登录按钮<br>
+        角色自动识别，无需手动选择。输手机号+密码后系统自动判断角色，进入对应工作台。
+      </p>
+
+      <div class="two-col">
+        <div>
+          <div class="label">📱 手机端登录页</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-content" style="padding:0;">
+                <div style="background:linear-gradient(180deg,#1a365d 0%,#1a365d 180px,#f8fafc 180px);min-height:520px;">
+                  <!-- 头像 -->
+                  <div style="display:flex;flex-direction:column;align-items:center;padding-top:50px;">
+                    <div style="width:80px;height:80px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:36px;box-shadow:0 4px 16px rgba(0,0,0,0.15);">👤</div>
+                  </div>
+                  <!-- 系统名 -->
+                  <div style="text-align:center;margin-top:14px;">
+                    <div style="color:#fff;font-size:19px;font-weight:600;">家电批发ERP</div>
+                    <div style="color:rgba(255,255,255,0.7);font-size:11px;margin-top:3px;">专业 · 高效 · 一站式管理</div>
+                  </div>
+                  <!-- 表单 -->
+                  <div style="margin:28px 16px 0;background:#fff;border-radius:16px;padding:24px 20px;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+                    <div style="margin-bottom:14px;">
+                      <div style="font-size:12px;color:#666;margin-bottom:5px;">手机号</div>
+                      <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;color:#999;font-size:14px;display:flex;align-items:center;gap:8px;">
+                        <span>📱</span><span>请输入手机号</span>
+                      </div>
+                    </div>
+                    <div style="margin-bottom:20px;">
+                      <div style="font-size:12px;color:#666;margin-bottom:5px;">密码</div>
+                      <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;color:#999;font-size:14px;display:flex;align-items:center;gap:8px;">
+                        <span>🔒</span><span>请输入密码</span>
+                      </div>
+                    </div>
+                    <div style="background:#2563eb;color:#fff;text-align:center;padding:13px;border-radius:8px;font-weight:600;">登 录</div>
+                    <div style="text-align:center;margin-top:12px;font-size:11px;color:#999;">默认老板：13800000000 / admin123</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label">💻 电脑端登录页</div>
+          <div class="desktop-frame">
+            <div class="desktop-body" style="min-height:480px;">
+              <div style="flex:1;background:linear-gradient(135deg,#1a365d,#2563eb);color:#fff;padding:40px;display:flex;flex-direction:column;justify-content:center;">
+                <div style="font-size:48px;margin-bottom:14px;">🏪</div>
+                <h2 style="margin:0 0 6px 0;font-size:26px;">家电批发ERP</h2>
+                <p style="opacity:0.8;margin:0 0 28px 0;font-size:13px;">专业 · 高效 · 一站式管理</p>
+                <div style="font-size:12px;opacity:0.7;line-height:2;">
+                  ✅ 手机/电脑同步使用<br>
+                  ✅ 数据本地存储不丢失<br>
+                  ✅ 6角色权限自动识别<br>
+                  ✅ 采购销售财务全闭环
+                </div>
+              </div>
+              <div style="flex:1;padding:40px;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+                <div style="width:72px;height:72px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:12px;">👤</div>
+                <div style="font-weight:600;color:#1a365d;margin-bottom:2px;">欢迎登录</div>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:24px;">角色自动识别</div>
+                <div style="width:100%;margin-bottom:14px;">
+                  <div style="font-size:12px;color:#666;margin-bottom:5px;">手机号</div>
+                  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:11px;color:#999;font-size:13px;display:flex;align-items:center;gap:8px;">
+                    <span>📱</span><span>请输入手机号</span>
+                  </div>
+                </div>
+                <div style="width:100%;margin-bottom:20px;">
+                  <div style="font-size:12px;color:#666;margin-bottom:5px;">密码</div>
+                  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:11px;color:#999;font-size:13px;display:flex;align-items:center;gap:8px;">
+                    <span>🔒</span><span>请输入密码</span>
+                  </div>
+                </div>
+                <div style="width:100%;background:#2563eb;color:#fff;text-align:center;padding:12px;border-radius:8px;font-weight:600;">登 录</div>
+                <div style="text-align:center;margin-top:10px;font-size:11px;color:#999;">默认老板：13800000000 / admin123</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 3. 手机端设计 ========== -->
+    <div class="section">
+      <h2>三、手机端设计（宽度 &lt; 768px）</h2>
+      <p style="margin-bottom:20px;color:#666;font-size:14px;">
+        底部 3 个 Tab：工作台 / 业务 / 我的。所有模块全部保留，按分类折叠组织。
+      </p>
+
+      <div class="two-col">
+        <!-- 工作台Tab -->
+        <div>
+          <div class="label">📊 工作台 Tab</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-content">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+                  <div style="background:#eff6ff;padding:10px;border-radius:8px;">
+                    <div style="font-size:11px;color:#666;">本月销售</div>
+                    <div style="font-size:16px;font-weight:700;color:#2563eb;">¥12.8万</div>
+                  </div>
+                  <div style="background:#f0fdf4;padding:10px;border-radius:8px;">
+                    <div style="font-size:11px;color:#666;">本月毛利</div>
+                    <div style="font-size:16px;font-weight:700;color:#10b981;">¥2.3万</div>
+                  </div>
+                </div>
+                <div class="category-title">今日待办</div>
+                <div class="menu-list" style="margin-bottom:16px;">
+                  <div class="menu-list-item">📥 待入库 <span style="color:#666;font-size:12px;">2 单 ›</span></div>
+                  <div class="menu-list-item">📤 待发货 <span style="color:#666;font-size:12px;">3 单 ›</span></div>
+                  <div class="menu-list-item">💰 待收款 <span style="color:#666;font-size:12px;">¥42,000 ›</span></div>
+                </div>
+                <div class="category-title">快捷操作</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">
+                  <div style="background:#f8fafc;padding:10px;border-radius:8px;font-size:12px;">📦<br>新增商品</div>
+                  <div style="background:#f8fafc;padding:10px;border-radius:8px;font-size:12px;">🛒<br>采购单</div>
+                  <div style="background:#f8fafc;padding:10px;border-radius:8px;font-size:12px;">💼<br>销售单</div>
+                </div>
+              </div>
+              <div class="phone-tabbar">
+                <div class="phone-tab active">📊<br>工作台</div>
+                <div class="phone-tab">📋<br>业务</div>
+                <div class="phone-tab">👤<br>我的</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 业务Tab -->
+        <div>
+          <div class="label">📋 业务 Tab（全部业务模块）</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-content">
+                <div class="category-title">商品中心</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">📦 商品档案 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">🏭 库存管理 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">采购管理</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">🛒 采购单 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">🚚 供应商 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">销售管理</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">💼 销售单 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">👥 客户管理 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">库房管理</div>
+                <div class="menu-list">
+                  <div class="menu-list-item">📥 待收货入库 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">📤 待发货出库 <span style="color:#94a3b8;">›</span></div>
+                </div>
+              </div>
+              <div class="phone-tabbar">
+                <div class="phone-tab">📊<br>工作台</div>
+                <div class="phone-tab active">📋<br>业务</div>
+                <div class="phone-tab">👤<br>我的</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 我的Tab -->
+        <div>
+          <div class="label">👤 我的 Tab（管理类模块）</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-content">
+                <div class="category-title">财务管理</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">💰 应收应付 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">📈 毛利核算 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">人事权限</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">👥 员工管理 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">🏪 经销商管理 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">报表中心</div>
+                <div class="menu-list" style="margin-bottom:14px;">
+                  <div class="menu-list-item">📊 销售报表 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">📦 库存报表 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">💵 财务报表 <span style="color:#94a3b8;">›</span></div>
+                </div>
+                <div class="category-title">系统设置</div>
+                <div class="menu-list">
+                  <div class="menu-list-item">🖨️ 打印模板 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">💾 数据备份 <span style="color:#94a3b8;">›</span></div>
+                  <div class="menu-list-item">🚪 退出登录 <span style="color:#94a3b8;">›</span></div>
+                </div>
+              </div>
+              <div class="phone-tabbar">
+                <div class="phone-tab">📊<br>工作台</div>
+                <div class="phone-tab">📋<br>业务</div>
+                <div class="phone-tab active">👤<br>我的</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 4. 电脑端设计 ========== -->
+    <div class="section">
+      <h2>四、电脑端设计（宽度 ≥ 768px）</h2>
+
+      <h3>1. 老板工作台（完整布局）</h3>
+      <div class="desktop-frame">
+        <div class="desktop-body">
+          <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+              <span class="sidebar-title">🏪 ERP</span>
+              <span style="cursor:pointer;" onclick="toggleSidebar()">≡</span>
+            </div>
+            <div class="menu-item active">📊 <span class="menu-text">工作台</span></div>
+            <div class="menu-item">📦 <span class="menu-text">商品档案</span></div>
+            <div class="menu-item">🏭 <span class="menu-text">库存管理</span></div>
+            <div class="menu-item">🛒 <span class="menu-text">采购管理</span></div>
+            <div class="menu-item">💼 <span class="menu-text">销售管理</span></div>
+            <div class="menu-item">👥 <span class="menu-text">客户管理</span></div>
+            <div class="menu-item">🚚 <span class="menu-text">供应商</span></div>
+            <div class="menu-item">💰 <span class="menu-text">财务管理</span></div>
+            <div class="menu-item">👥 <span class="menu-text">员工管理</span></div>
+            <div class="menu-item">🏪 <span class="menu-text">经销商</span></div>
+            <div class="menu-item">📈 <span class="menu-text">经营报表</span></div>
+            <div class="menu-item">⚙️ <span class="menu-text">系统设置</span></div>
+          </div>
+          <div class="main-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+              <div>
+                <h2 style="margin:0 0 4px 0;">早上好，王总</h2>
+                <p style="font-size:13px;color:#666;margin:0;">今天有 2 笔采购待入库，3 笔销售待发货</p>
+              </div>
+              <button style="background:#2563eb;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;">+ 快速新建</button>
+            </div>
+            <div class="stat-cards">
+              <div class="stat-card">
+                <div class="stat-label">本月销售额</div>
+                <div class="stat-value">¥128,500</div>
+                <div style="font-size:11px;color:#10b981;margin-top:4px;">↑ 12.5% 较上月</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">本月毛利</div>
+                <div class="stat-value" style="color:#10b981;">¥23,400</div>
+                <div style="font-size:11px;color:#666;margin-top:4px;">毛利率 18.2%</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">应收款</div>
+                <div class="stat-value" style="color:#ef4444;">¥42,000</div>
+                <div style="font-size:11px;color:#666;margin-top:4px;">6个客户未结清</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">库存预警</div>
+                <div class="stat-value" style="color:#f59e0b;">3 种</div>
+                <div style="font-size:11px;color:#666;margin-top:4px;">低于安全库存</div>
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:16px;">
+              <div style="font-weight:600;margin-bottom:12px;">⚡ 快捷操作</div>
+              <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;text-align:center;">
+                <div>📦<br><span style="font-size:12px;">新增商品</span></div>
+                <div>🛒<br><span style="font-size:12px;">采购单</span></div>
+                <div>💼<br><span style="font-size:12px;">销售单</span></div>
+                <div>👥<br><span style="font-size:12px;">新建员工</span></div>
+                <div>🏪<br><span style="font-size:12px;">经销商</span></div>
+                <div>🖨️<br><span style="font-size:12px;">打印</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>2. 侧边栏折叠交互</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div class="label">📖 展开状态（220px）</div>
+          <div class="desktop-frame">
+            <div class="desktop-body">
+              <div class="sidebar">
+                <div class="sidebar-header"><span class="sidebar-title">🏪 ERP</span><span>≡</span></div>
+                <div class="menu-item active">📊 <span class="menu-text">工作台</span></div>
+                <div class="menu-item">📦 <span class="menu-text">商品档案</span></div>
+                <div class="menu-item">🛒 <span class="menu-text">采购管理</span></div>
+              </div>
+              <div class="main-content" style="font-size:13px;color:#666;">内容区较窄<br>适合表单、详情</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="label">📕 折叠状态（60px）</div>
+          <div class="desktop-frame">
+            <div class="desktop-body">
+              <div class="sidebar collapsed">
+                <div class="sidebar-header"><span class="sidebar-title">🏪 ERP</span><span>≡</span></div>
+                <div class="menu-item active">📊</div>
+                <div class="menu-item">📦</div>
+                <div class="menu-item">🛒</div>
+              </div>
+              <div class="main-content" style="font-size:13px;color:#666;">内容区宽 160px<br>适合宽表格、报表</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:#eff6ff;border-radius:8px;font-size:13px;color:#2563eb;">
+        💡 点左上角「≡」切换折叠/展开，状态自动保存。折叠后鼠标悬停图标弹出菜单名称。
+      </div>
+    </div>
+
+    <!-- ========== 5. 老板完整模块 ========== -->
+    <div class="section">
+      <h2>五、老板完整功能模块（10大类 · 全部功能）</h2>
+      <div class="role-grid">
+        <div class="role-card" style="background:linear-gradient(135deg,#1a365d,#2563eb);color:#fff;">
+          <div class="icon">📊</div>
+          <div class="name">工作台</div>
+          <div class="desc" style="opacity:0.9;">经营概览 · 待办 · 快捷操作</div>
+        </div>
+        <div class="role-card" style="background:#eff6ff;">
+          <div class="icon">📦</div>
+          <div class="name">商品中心</div>
+          <div class="desc">商品档案 · 价格管理 · 库存预警 · 分类扩展</div>
+        </div>
+        <div class="role-card" style="background:#f0fdf4;">
+          <div class="icon">🛒</div>
+          <div class="name">采购管理</div>
+          <div class="desc">采购单 · 供应商 · 入库记录 · 采购报表</div>
+        </div>
+        <div class="role-card" style="background:#fffbeb;">
+          <div class="icon">💼</div>
+          <div class="name">销售管理</div>
+          <div class="desc">销售单 · 客户管理 · 毛利分析 · 销售报表</div>
+        </div>
+        <div class="role-card" style="background:#fef2f2;">
+          <div class="icon">🏭</div>
+          <div class="name">库房管理</div>
+          <div class="desc">实时库存 · 出入库流水 · 盘点 · 预警</div>
+        </div>
+        <div class="role-card" style="background:#f5f3ff;">
+          <div class="icon">💰</div>
+          <div class="name">财务管理</div>
+          <div class="desc">应收应付 · 收付款 · 毛利核算 · 财务报表</div>
+        </div>
+        <div class="role-card" style="background:#ecfeff;">
+          <div class="icon">👥</div>
+          <div class="name">人事权限</div>
+          <div class="desc">员工账号 · 权限分配 · 经销商管理</div>
+        </div>
+        <div class="role-card" style="background:#fff7ed;">
+          <div class="icon">📈</div>
+          <div class="name">经营报表</div>
+          <div class="desc">销售趋势 · 采购分析 · 库存周转 · 导出Excel</div>
+        </div>
+        <div class="role-card" style="background:#f8fafc;">
+          <div class="icon">🖨️</div>
+          <div class="name">打印中心</div>
+          <div class="desc">采购单打印 · 销售单打印 · 带/不带价格切换</div>
+        </div>
+        <div class="role-card" style="background:#f8fafc;">
+          <div class="icon">⚙️</div>
+          <div class="name">系统设置</div>
+          <div class="desc">数据备份 · 云同步 · 公司信息 · 操作日志</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 6. 响应式说明 ========== -->
+    <div class="section">
+      <h2>六、响应式自动适配</h2>
+      <div style="font-size:14px;color:#666;line-height:2;">
+        <p><strong>📱 手机模式（窗口宽度 &lt; 768px）</strong></p>
+        <p>→ 底部 Tab 导航 + 单列卡片布局，单手操作友好</p>
+        <p><strong>💻 电脑模式（窗口宽度 ≥ 768px）</strong></p>
+        <p>→ 左侧固定导航栏 + 表格/多列布局，办公效率更高</p>
+        <p><strong>🔄 自动切换</strong></p>
+        <p>→ Vue 响应式组件监听窗口宽度，同一套代码自动切换布局</p>
+        <p><strong>💾 状态记忆</strong></p>
+        <p>→ 侧边栏折叠状态、登录账号、数据全部自动保存，刷新/关闭不丢失</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+  </script>
+</body>
+</html>

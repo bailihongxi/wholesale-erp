@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>正在跳转…</title>
+<script>
+  // 本系统用的是 hash 路由（/#/warehouse），刷新时服务端只会收到 "/"，
+  // 正常情况下不会走到这里。万一访问到了不存在的路径，
+  // 这里保留 hash 后回到首页，避免用户看到 GitHub 的 404 页。
+  (function () {
+    var base = location.pathname.replace(/[^/]*$/, '');
+    location.replace(location.origin + base + (location.hash || ''));
+  })();
+</script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "wholesale-erp",
+  "private": true,
+  "version": "1.0.0-1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "bash scripts/deploy-gh-pages.sh"
+  },
+  "dependencies": {
+    "dexie": "^4.0.10",
+    "pinia": "^2.3.1",
+    "vant": "^4.9.15",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^2.1.10"
+  }
+}

@@ -1,0 +1,164 @@
+<template>
+  <!--
+    统一搜索框：全项目所有「搜索」输入框都必须使用本组件。
+    自带清除按钮（×），仅在有输入内容时显示；点击立即清空并触发搜索，
+    同时按 Esc 也能清空，提交/回车立即搜索。
+  -->
+  <div class="search-wrap" :class="{ 'is-round': round }">
+    <span class="search-icon" aria-hidden="true">🔍</span>
+    <input
+      ref="inputEl"
+      v-model="model"
+      class="search-field"
+      type="search"
+      autocomplete="off"
+      :placeholder="placeholder"
+      @input="onInput"
+      @keyup.enter="emitSearch"
+      @keydown.esc.prevent="clear"
+    />
+    <button
+      v-show="model.length > 0"
+      class="clear-btn"
+      type="button"
+      title="清除"
+      aria-label="清除搜索关键词"
+      @click="clear"
+    >
+      ×
+    </button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+
+const props = withDefaults(
+  defineProps<{
+    /** 搜索关键词（v-model 绑定） */
+    modelValue: string
+    placeholder?: string
+    /** 输入防抖毫秒数，0 表示立即触发。默认 300ms */
+    debounce?: number
+    round?: boolean
+  }>(),
+  {
+    placeholder: '搜索',
+    debounce: 300,
+    round: false
+  }
+)
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+  (e: 'search', value: string): void
+  (e: 'clear'): void
+}>()
+
+const inputEl = ref<HTMLInputElement | null>(null)
+let timer: ReturnType<typeof setTimeout> | null = null
+
+const model = ref(props.modelValue)
+
+// 外部变更（如筛选条件重置）时同步回输入框
+watch(
+  () => props.modelValue,
+  v => {
+    if (v !== model.value) model.value = v
+  }
+)
+
+function clearTimer(): void {
+  if (timer !== null) {
+    clearTimeout(timer)
+    timer = null
+  }
+}
+
+function emitSearch(): void {
+  clearTimer()
+  emit('update:modelValue', model.value)
+  emit('search', model.value)
+}
+
+function onInput(): void {
+  emit('update:modelValue', model.value)
+  clearTimer()
+  if (props.debounce <= 0) {
+    emit('search', model.value)
+    return
+  }
+  timer = setTimeout(() => emit('search', model.value), props.debounce)
+}
+
+/** 清空关键词：立即触发一次空搜索，并把焦点还给输入框 */
+function clear(): void {
+  clearTimer()
+  model.value = ''
+  emit('update:modelValue', '')
+  emit('search', '')
+  emit('clear')
+  inputEl.value?.focus()
+}
+</script>
+
+<style scoped>
+.search-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+}
+.search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 13px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.search-field {
+  width: 100%;
+  height: 44px;
+  /* 右侧留出清除按钮的位置，避免文字被按钮压住 */
+  padding: 0 40px 0 34px;
+  border: 1px solid var(--c-border, #e2e8f0);
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  color: var(--c-text, #1a202c);
+  box-sizing: border-box;
+}
+.is-round .search-field {
+  border-radius: 22px;
+}
+.search-field:focus {
+  border-color: var(--c-accent, #2563eb);
+}
+/* 去掉浏览器原生搜索清除图标，避免与自定义清除按钮重复 */
+.search-field::-webkit-search-cancel-button,
+.search-field::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.clear-btn {
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #cbd5e1;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.clear-btn:hover {
+  background: #94a3b8;
+}
+</style>

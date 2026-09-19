@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物（GitHub Pages 走 gh-pages 分支，主分支不入库）
+dist/
+dist-ssr/
+
+# 本地缓存、覆盖率与临时文件
+.vite/
+coverage/
+*.timestamp-*.mjs
+*.tsbuildinfo
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 环境变量（含密钥时不入库）
+.env
+.env.local
+.env.*.local
+
+# WorkBuddy 本地工作数据
+# 含本机绝对路径与会话记忆，公开仓库不上传
+.workbuddy/
