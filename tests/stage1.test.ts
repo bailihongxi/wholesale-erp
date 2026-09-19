@@ -106,16 +106,17 @@ describe('阶段1：全局布局框架', () => {
   })
 
   // ===== 导航项数量 =====
-  it('1.7 老板端侧边栏含 12 个模块菜单（库存作业 + 财务管理统一入口）', () => {
+  it('1.7 老板端侧边栏含 11 个模块菜单（库存作业并入库存管理）', () => {
     const nav = getNav('boss')
     // 经营报表已归入「财务管理」页内（第八轮），侧边栏不再单列
-    expect(nav.sidebar.length).toBe(12)
+    expect(nav.sidebar.length).toBe(11)
     const routes = nav.sidebar.map(i => i.route)
-    // 入库验货 / 出库拣货 已统一归入「库存作业」(/warehouse)，不再各自单列
+    // 入库验货 / 出库拣货 已统一归入「库存作业」，第十二轮起「库存作业」整页
+    // 又并入「库存管理」/stock 的页内 Tab，侧边栏只留一个库存入口
     expect(routes).not.toContain('/warehouse/inbound')
     expect(routes).not.toContain('/warehouse/outbound')
-    expect(routes).toContain('/warehouse')
-    // 库存查询已与库存管理合并为统一的 /stock
+    expect(routes).not.toContain('/warehouse')
+    // 库存查询已与库存管理合并为统一的 /stock（库存作业也收进这一页）
     expect(routes).toContain('/stock')
     expect(routes).not.toContain('/warehouse/stock')
     expect(routes).not.toContain('/boss/stock')
@@ -130,16 +131,16 @@ describe('阶段1：全局布局框架', () => {
     expect(nav.tabbar.length).toBe(3)
   })
 
-  it('1.9 SideBar 渲染出老板全部 12 个菜单项（含库存作业）', async () => {
+  it('1.9 SideBar 渲染出老板全部 11 个菜单项（库存作业已并入库存管理）', async () => {
     await loginBoss()
     const wrapper = mount(SideBar, { global: { plugins: [testRouter] } })
     const items = wrapper.findAll('.menu-item')
-    expect(items.length).toBe(12)
+    expect(items.length).toBe(11)
     expect(wrapper.text()).toContain('商品档案')
     expect(wrapper.text()).toContain('系统设置')
-    // 入库验货 / 出库拣货 已合并为统一的「库存作业」入口
-    expect(wrapper.text()).toContain('库存作业')
+    // 「库存作业」已并入「库存管理」页内 Tab，侧边栏不再单列
     expect(wrapper.text()).toContain('库存管理')
+    expect(wrapper.text()).not.toContain('库存作业')
     // 操作日志为新增菜单
     expect(wrapper.text()).toContain('操作日志')
     // 合并后不再出现旧入口

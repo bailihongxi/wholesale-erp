@@ -199,17 +199,17 @@ onMounted(load)
 <style scoped>
 .page { max-width: 1100px; margin: 0 auto; }
 
-.add-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.add-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .txt-input {
-  flex: 1; min-width: 160px; height: 44px; border: 1px solid var(--c-border);
-  border-radius: 10px; padding: 0 12px; font-size: 14px; color: var(--c-text);
+  flex: 1; min-width: 160px; height: 40px; border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-sm); padding: 0 12px; font-size: 14px; color: var(--c-text);
   background: #fff; box-sizing: border-box;
 }
-.txt-input.remark { flex: 1.4; }
-.txt-input.inline { height: 32px; min-width: 120px; border-radius: 6px; font-size: 13px; }
+.txt-input.remark { flex: 1.6; }
+.txt-input.inline { height: 32px; min-width: 120px; border-radius: var(--r-xs); font-size: 13px; }
 .txt-input:focus { outline: none; border-color: var(--c-accent); }
 
-.btn { height: 44px; border-radius: 10px; font-size: 14px; cursor: pointer; padding: 0 24px; }
+.btn { height: 40px; border-radius: var(--r-sm); font-size: 14px; cursor: pointer; padding: 0 20px; flex: 0 0 auto; }
 .btn.primary { border: none; background: var(--c-accent); color: #fff; }
 .btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 

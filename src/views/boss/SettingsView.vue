@@ -17,6 +17,9 @@
       </div>
     </section>
 
+    <!-- 品牌与图标：登录页标志 / 各角色头像 / 网页版快捷图标 -->
+    <BrandSettingsPanel />
+
     <!-- 数据备份与恢复 -->
     <section class="block">
       <h3 class="block-title">数据备份与恢复</h3>
@@ -256,6 +259,7 @@ import {
   type PrintSettings
 } from '../../utils/printSettings'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import { APP_VERSION } from '../../version'
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule

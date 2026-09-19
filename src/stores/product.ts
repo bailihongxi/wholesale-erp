@@ -73,15 +73,14 @@ export const useProductStore = defineStore('product', () => {
   }
 
   async function getLowStockProducts(): Promise<Array<{ product: Product; quantity: number }>> {
-    const all = await db.products.where('status').equals('active').toArray()
-    const result: Array<{ product: Product; quantity: number }> = []
-    for (const p of all) {
-      const qty = await getStock(p.id!)
-      if (qty <= p.warnStock) {
-        result.push({ product: p, quantity: qty })
-      }
-    }
-    return result
+    // 一次性把库存表读进内存再比对：逐个 getStock 在商品上千时会很慢
+    const [all, smap] = await Promise.all([
+      db.products.where('status').equals('active').toArray(),
+      stockMap()
+    ])
+    return all
+      .map(p => ({ product: p, quantity: smap[p.id!] ?? 0 }))
+      .filter(x => x.quantity <= x.product.warnStock)
   }
 
   return {

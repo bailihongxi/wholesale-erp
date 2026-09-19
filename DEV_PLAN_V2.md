@@ -5,9 +5,9 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-1（2026-09-19 发布基线）**
-> 本文档为开发执行计划，产品对外版本统一为 **V1.0-1**（`src/version.ts` / `package.json` 同步）。
-> 发布基线章节见文末 **「十六、V1.0-1 发布基线」**。
+> **产品版本：V1.0-2（2026-09-19 当前基线）**
+> 本文档为开发执行计划，产品对外版本统一为 **V1.0-2**（`src/version.ts` / `package.json` 同步）。
+> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**。
 
 ---
 
@@ -771,6 +771,72 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 - 经营报表导出 Excel / PDF
 - 条码扫描枪直连录入
 - 采购建议（按库存预警自动生成补货单）
+
+---
+
+## 十七、V1.0-2 · 第十二轮（2026-09-19）
+
+### 17.1 需求清单
+
+| # | 需求 | 状态 |
+|---|---|---|
+| 1 | 库存作业菜单并入库存管理（Hub 页）；库存预警每页 50 条 + 斑马纹 | ✅ |
+| 2 | 消除页面「闪现」与加载慢 | ✅ |
+| 3 | 电脑端筛选条紧凑化（搜索框放大、其余收缩，收进 1～2 行，不动手机端） | ✅ |
+| 4 | 快捷图标 / 登录页头像 / 各角色头像可自定义 | ✅ |
+| 5 | 库房管理「新增库房」行同样紧凑化（截图红框） | ✅ |
+
+### 17.2 改动明细
+
+**A. 库存合并（信息架构）**
+- `src/views/stock/StockManageView.vue` 重写为 Hub 页：`PageHeader` + `SegmentedTabs`（detail / alert / flow / ops）+ `.tab-pane`，数据统一加载后传给子模块。
+- 新增 `StockDetailView.vue` / `StockAlertView.vue` / `StockFlowView.vue` 三个子页。
+- `src/views/warehouse/WarehouseOpsView.vue` 新增 `embedded` 属性（内嵌时隐藏页头、Tab 收小）。
+- `src/router/navConfig.ts`：`ALL_MODULES` 去掉独立「库存作业」（老板 12→11 项）、`DEFAULT_ROLE_PERMS.boss` 去掉 `/warehouse`、库房角色改 `[/warehouse/home, /stock]`、手机 Tab 改为「工作台 / 库存管理」。
+- `/warehouse` 及全部子路由保留，收藏夹不失效。
+
+**B. 库存预警**
+- `src/composables/usePagination.ts` 新增 `PAGE_SIZE_ALERT = 50`。
+- `StockAlertView` 用 `.data-table.alert-table`（全站斑马纹）+ `TablePager` + 搜索 / 分类 / 库房 / 重置。
+
+**C. 加载性能**
+- 新增 `src/components/ui/LoadingBlock.vue` 骨架屏；7 个列表首页接入（采购单、销售单、商品档案、操作日志、客户、对账、库存管理）。
+- `src/stores/product.ts` `getLowStockProducts` 改批量（`Promise.all([listAll, stockMap])`）；`src/stores/inventory.ts` `reconcileProducts` 改「一次读全表 + Map 比对」，消除 N+1。
+- `src/main.ts` 新增 `prefetchRoutes()`：`load` 后 `requestIdleCallback` 预取懒加载 chunk。
+- `index.html` 加 `#app-boot` 品牌占位消除白屏。
+
+**D. 电脑端筛选条（`@media (min-width:768px)`）**
+- `theme.css`：toolbar 内 `input/select/button/label` → `flex:0 0 auto; max-width:230px`；`.search-wrap/.grow` → `flex:1 1 320px`；`input[type=date]` → `max-width:158px`；`.ui-card-extra` 占满靠右。
+- 控件统一 40px / `--r-sm` / `--c-border-strong`；销售单两个 toolbar 合并为一个；库房管理 `.add-row` 对齐。
+
+**E. 品牌可配置**
+- 新增 `src/utils/brand.ts`（`useBrand()`，localStorage `erp_brand_config`，缺省回落 navConfig）、`src/utils/image.ts`（`fileToSquareDataUrl`，压 96px 方图）、`src/components/BrandSettingsPanel.vue`（挂系统设置页）。
+- 接入：`SideBar` / `MobileTabBar` / `AppLayout` / `LoginView` / `BossBusinessView` / `RoleMineView` / `SettingsView`。
+
+### 17.3 测试
+
+| 项 | 结果 |
+|---|---|
+| 新增 | `tests/stock-hub.test.ts` —— 19 例（预警 50 条 / 斑马纹 / Hub 四 Tab / 骨架 / 筛选条媒体查询 / 品牌配置） |
+| 校准 | `stage1`、`stage3`（12→11 菜单项）、`warehouse-menu`（去掉 `/warehouse` 断言 + 手机 Tab）、`permission`（库房权限 `[/warehouse/home, /stock]`）、`history-search`（对账页骨架用 `vi.waitFor`）、`stage2`（登录副标题文案） |
+| 全量 | ✅ **392 通过 / 38 文件 / 0 error** |
+| 构建 | ✅ `npm run build` 0 错误（2.94s） |
+
+### 17.4 实机验证（agent-browser）
+
+| 项 | 结果 |
+|---|---|
+| 库存预警 | ✅ 示例数据 6 商品 → 5 条预警，斑马纹交替，分页「共5条 · ‹ 1 ›」 |
+| 电脑端筛选条 | ✅ 采购单 / 销售单 / 客户 / 审计 / 库存明细 / 商品档案 / 财务 均 1～2 行 |
+| 手机端复核 | ✅ 390 视口 `navW=390 / contentX=0 / contentW=390`，布局未变 |
+
+### 17.5 沉淀的约束
+
+1. 列表页一律 `.data-table` + `TablePager`，页容量用常量（如 `PAGE_SIZE_ALERT`），不写死数字。
+2. 有异步数据的首屏必须挂 `LoadingBlock`，不要直接渲染空态。
+3. 筛选条子项不写死宽度，交给 `@media (min-width:768px)` 紧凑规则；只有搜索框可放大。
+4. 增删菜单 / 路由必跑 `tests/nav-permission.test.ts` 并同步 `MENU_SPEC.md`。
+5. 图标一律走 `utils/brand.ts` 缺省回落，不在模板里硬编码 emoji。
 
 ---
 

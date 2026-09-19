@@ -7,7 +7,7 @@
       class="tab-item"
       active-class="active"
     >
-      <span class="tab-icon">{{ item.icon }}</span>
+      <span class="tab-icon">{{ iconOf(item) }}</span>
       <span class="tab-label">{{ item.label }}</span>
     </router-link>
   </nav>
@@ -18,6 +18,9 @@ import { computed, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
 import { usePermissionStore } from '../stores/permission'
 import { getNav, type NavItem } from '../router/navConfig'
+import { useBrand } from '../utils/brand'
+
+const { iconOf } = useBrand()
 
 const userStore = useUserStore()
 const permStore = usePermissionStore()

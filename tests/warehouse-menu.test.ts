@@ -22,18 +22,18 @@ describe('库房管理接入左侧菜单栏', () => {
     await router.isReady()
   })
 
-  it('老板左侧菜单包含库存管理与库存作业（库房业务统一入口）', () => {
+  it('老板左侧菜单只有「库存管理」一个库存入口（库存作业已并入）', () => {
     const routes = getNav('boss').sidebar.map(i => i.route)
-    // 入库验货 / 出库拣货 已统一归入「库存作业」(/warehouse)，不再各自单列
+    // 入库验货 / 出库拣货 已统一归入「库存作业」，第十二轮起「库存作业」整页
+    // 又并入「库存管理」/stock 的页内 Tab → 侧边栏只保留 /stock 一个入口
     expect(routes).not.toContain('/warehouse/inbound')
     expect(routes).not.toContain('/warehouse/outbound')
+    expect(routes).not.toContain('/warehouse')
     // 库存已合并为统一的 /stock（不再单独保留「库存查询」）
     expect(routes).toContain('/stock')
     expect(routes).not.toContain('/warehouse/stock')
-    // 「库存作业」是库房业务的统一入口
-    expect(routes).toContain('/warehouse')
-    // 库存作业下的四个子模块路由均可解析（入库验货/出库拣货/调拨/盘点）
-    for (const sub of ['/warehouse/inbound', '/warehouse/outbound', '/warehouse/transfer', '/warehouse/count']) {
+    // 虽然不再单列菜单，但库存作业页与其子模块路由必须全部保留、可直达
+    for (const sub of ['/warehouse', '/warehouse/inbound', '/warehouse/outbound', '/warehouse/transfer', '/warehouse/count']) {
       expect(router.resolve(sub).matched.length, `路由未注册: ${sub}`).toBeGreaterThan(0)
     }
   })
@@ -56,10 +56,18 @@ describe('库房管理接入左侧菜单栏', () => {
     expect(routes).not.toContain('/boss/reports')
   })
 
-  it('库房左侧菜单包含库存管理', () => {
+  it('库房左侧菜单包含库存管理（一个入口覆盖全部库存作业）', () => {
     const routes = getNav('warehouse').sidebar.map(i => i.route)
     expect(routes).toContain('/stock')
+    expect(routes).not.toContain('/warehouse')
     expect(new Set(routes).size).toBe(routes.length)
+  })
+
+  it('库房手机端底部 Tab 也只剩库存管理入口', () => {
+    const tabs = getNav('warehouse').tabbar.map(i => i.route)
+    expect(tabs).toContain('/warehouse/home')
+    expect(tabs).toContain('/stock')
+    expect(tabs).not.toContain('/warehouse')
   })
 
   it('老板可访问入库页（守卫放行，不重定向）', async () => {

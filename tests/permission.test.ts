@@ -45,15 +45,17 @@ describe('角色权限配置（模块开关矩阵）', () => {
     const store = usePermissionStore()
     await store.ensure()
 
-    const res = await store.setPerms('warehouse', ['/warehouse', '/stock'])
+    // 库存作业已并入「库存管理」，这里改用仍登记在模块清单里的两个模块做验证
+    const res = await store.setPerms('warehouse', ['/warehouse/home', '/stock'])
     expect(res.ok).toBe(true)
 
-    expect(store.canAccess('warehouse', '/warehouse')).toBe(true)
     expect(store.canAccess('warehouse', '/stock')).toBe(true)
+    expect(store.canAccess('warehouse', '/warehouse/home')).toBe(true)
     expect(store.canAccess('warehouse', '/boss/products')).toBe(false)
 
+    // 侧边栏按模块清单顺序（工作台 → 库存）输出
     const sidebar = store.sidebarOf('warehouse').map(i => i.route)
-    expect(sidebar).toEqual(['/warehouse', '/stock'])
+    expect(sidebar).toEqual(['/warehouse/home', '/stock'])
   })
 
   it('配置会持久化到数据库，重新建 store 后仍然生效', async () => {
@@ -91,7 +93,7 @@ describe('角色权限配置（模块开关矩阵）', () => {
     const store = usePermissionStore()
     await store.ensure()
 
-    await store.setPerms('warehouse', ['/warehouse'])
+    await store.setPerms('warehouse', ['/stock'])
     expect(store.isCustomized('warehouse')).toBe(true)
 
     await store.resetPerms('warehouse')

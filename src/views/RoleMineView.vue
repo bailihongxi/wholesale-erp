@@ -3,7 +3,10 @@
     <h3 class="landing-title">我的</h3>
 
     <div class="user-card">
-      <div class="u-avatar">{{ initial }}</div>
+      <div class="u-avatar" :class="{ 'is-img': myAvatar.type === 'image' }">
+        <img v-if="myAvatar.type === 'image'" :src="myAvatar.value" alt="" />
+        <template v-else>{{ myAvatar.value || initial }}</template>
+      </div>
       <div class="u-info">
         <div class="u-name">{{ userStore.currentUser?.name || '未登录' }}</div>
         <div class="u-role">{{ roleLabel }}</div>
@@ -12,7 +15,7 @@
 
     <ul class="entry-list">
       <li v-for="e in entries" :key="e.route" @click="go(e.route)">
-        <span class="e-icon">{{ e.icon }}</span>
+        <span class="e-icon">{{ iconOf(e) }}</span>
         <span class="e-name">{{ e.label }}</span>
         <span class="e-arrow">›</span>
       </li>
@@ -29,10 +32,15 @@ import { useUserStore } from '../stores/user'
 import { usePermissionStore } from '../stores/permission'
 import type { NavItem } from '../router/navConfig'
 import { ROLE_LABELS } from '../router/navConfig'
+import { useBrand } from '../utils/brand'
 
 const router = useRouter()
 const userStore = useUserStore()
 const permStore = usePermissionStore()
+
+// 角色头像与快捷图标都可以在系统设置里自定义
+const { iconOf, roleAvatar } = useBrand()
+const myAvatar = computed(() => roleAvatar(userStore.role))
 
 const initial = computed(() => (userStore.currentUser?.name ?? '?').slice(0, 1))
 const roleLabel = computed(() => ROLE_LABELS[userStore.role ?? ''] ?? '-')
@@ -75,7 +83,10 @@ function handleLogout(): void {
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; font-weight: 700; flex: none;
+  overflow: hidden;
 }
+.u-avatar.is-img { background: #fff; }
+.u-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .u-name { font-weight: 600; font-size: 16px; }
 .u-role {
   display: inline-block; margin-top: 4px;

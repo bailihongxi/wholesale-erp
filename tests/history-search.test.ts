@@ -261,8 +261,10 @@ describe('各模块查询与历史痕迹', () => {
     const wrapper = mount(ReconcileView, { global: { plugins: [testRouter] } })
     await vi.waitFor(() => expect(wrapper.findAll('.ui-seg button').length).toBe(3), { timeout: 3000 })
 
-    // 已全额收款 → 默认「未结清」下应收列表为空
-    expect(wrapper.text()).toContain('没有符合条件的应收')
+    // 已全额收款 → 默认「未结清」下应收列表为空。
+    // 注意：列表在首屏加载完成前显示骨架（不再直接闪空态），所以要轮询等待，
+    // 断言本身没有放宽 —— 仍然要求出现这句空态文案。
+    await vi.waitFor(() => expect(wrapper.text()).toContain('没有符合条件的应收'), { timeout: 3000 })
 
     // 切到流水页仍能看到这笔收款
     await wrapper.findAll('.ui-seg button')[2].trigger('click')

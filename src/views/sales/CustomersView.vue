@@ -21,7 +21,9 @@
     <div class="block">
       <h3 class="block-title">客户列表（{{ list.length }}<span v-if="hasKeyword"> / 共 {{ customers.length }}</span>）</h3>
 
-      <ul v-if="isMobile" class="card-list">
+      <LoadingBlock v-if="loading" :rows="6" />
+
+      <ul v-else-if="isMobile" class="card-list">
         <li v-for="c in list" :key="c.id" class="cust-card" @click="openEdit(c)">
           <div class="c-head">
             <span class="c-name">{{ c.name }}</span>
@@ -107,6 +109,7 @@ import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
 import type { Customer } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 
 const salesStore = useSalesStore()
 const { isMobile } = useResponsive()
@@ -140,8 +143,14 @@ const list = computed(() => {
   return data
 })
 
+const loading = ref(true)
+
 async function reload(): Promise<void> {
-  customers.value = await salesStore.listCustomers()
+  try {
+    customers.value = await salesStore.listCustomers()
+  } finally {
+    loading.value = false
+  }
 }
 
 function openNew(): void {
@@ -211,13 +220,12 @@ onMounted(reload)
 </script>
 
 <style scoped>
-.customers-page { max-width: 1100px; margin: 0 auto; }
 .toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.tb-search { flex: 1; min-width: 200px; }
+.tb-search { flex: 1 1 320px; min-width: 200px; }
 .tb-select, .add-btn {
-  height: 44px; border-radius: 10px; font-size: 14px; cursor: pointer; outline: none;
+  height: 40px; border-radius: var(--r-sm); font-size: 14px; cursor: pointer; outline: none;
 }
-.tb-select { border: 1px solid var(--c-border, #e2e8f0); padding: 0 14px; background: #fff; color: var(--c-text, #1a202c); }
+.tb-select { border: 1px solid var(--c-border-strong); padding: 0 14px; background: #fff; color: var(--c-text); }
 .add-btn { border: none; padding: 0 18px; background: var(--c-accent, #2563eb); color: #fff; white-space: nowrap; }
 
 
