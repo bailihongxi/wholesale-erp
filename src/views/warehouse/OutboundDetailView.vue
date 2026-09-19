@@ -38,7 +38,7 @@
         出库库房
         <span class="sec-tip">本次发货全部从所选库房出库；「可用库存」显示的就是该库房的现有数量</span>
       </h4>
-      <select v-model.number="locationId" class="loc-sel" @change="onLocationChange">
+      <select v-model.number="locationId" class="ui-select loc-sel" @change="onLocationChange">
         <option v-for="l in locations" :key="l.id" :value="l.id">
           {{ l.name }}
         </option>
@@ -383,10 +383,8 @@ async function handleOutbound(): Promise<void> {
 }
 .remark-box:focus { outline: none; border-color: var(--c-accent); }
 /* 出库库房下拉 */
-.loc-sel {
-  width: 100%; max-width: 320px; height: 44px; border: 1px solid var(--c-border);
-  border-radius: 10px; padding: 0 12px; background: #fff; font-size: 14px; color: var(--c-text);
-}
+/* 库房下拉：外观走设计系统的 .ui-select，这里只约束宽度 */
+.loc-sel { width: 100%; max-width: 320px; }
 /* 操作列里的「明细 / 撤销」拉开间距，降低误触 */
 .op-cell { display: inline-flex; align-items: center; gap: 16px; }
 .tb-scroll { overflow-x: auto; }

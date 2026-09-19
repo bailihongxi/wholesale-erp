@@ -1,12 +1,6 @@
 <template>
   <div class="page">
-    <div class="ui-seg">
-      <button :class="{ active: tab === 'sale' }" type="button" @click="tab = 'sale'">销售退货</button>
-      <button :class="{ active: tab === 'purchase' }" type="button" @click="tab = 'purchase'">采购退货</button>
-      <button :class="{ active: tab === 'history' }" type="button" @click="tab = 'history'">
-        退换货历史（{{ history.length }}）
-      </button>
-    </div>
+    <SegmentedTabs v-model="tab" size="sm" :options="tabOptions" />
 
     <!-- ============ 销售退货 / 采购退货 ============ -->
     <template v-if="tab === 'sale' || tab === 'purchase'">
@@ -15,14 +9,14 @@
           {{ tab === 'sale' ? '选择销售单' : '选择采购单' }}
           <span class="sec-tip">退货将冲减对应单据的应收 / 应付，并自动调整所选库房的库存</span>
         </h4>
-        <select v-model.number="selOrderId" class="ord-sel" @change="onOrderChange">
+        <select v-model.number="selOrderId" class="ui-select ord-sel" @change="onOrderChange">
           <option :value="0">— 请选择{{ tab === 'sale' ? '销售单' : '采购单' }} —</option>
           <option v-for="o in orders" :key="o.id" :value="o.id">
             {{ o.orderNo }} · {{ partyNameOf(o) }} · ¥{{ o.totalAmount.toLocaleString() }}
           </option>
         </select>
         <label class="field-label">{{ tab === 'sale' ? '退回库房' : '退出库房' }}</label>
-        <select v-model.number="locationId" class="ord-sel">
+        <select v-model.number="locationId" class="ui-select ord-sel">
           <option v-for="l in locations" :key="l.id" :value="l.id">
             {{ l.name }}
           </option>
@@ -160,6 +154,7 @@ import { useInventoryStore } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
+import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { SaleOrder, PurchaseOrder, Location } from '../../types'
 
 const salesStore = useSalesStore()
@@ -182,6 +177,13 @@ const locations = ref<Location[]>([])
 const locationId = ref(0)
 const lines = ref<Array<{ productId: number; name: string; maxQty: number; qty: number; price: number; reason: string }>>([])
 const history = ref<ReturnRow[]>([])
+
+/** 页内 Tab 选项 */
+const tabOptions = computed(() => [
+  { value: 'sale', label: '销售退货' },
+  { value: 'purchase', label: '采购退货' },
+  { value: 'history', label: `退换货历史（${history.value.length}）` }
+])
 const activeDetail = ref<ReturnRow | null>(null)
 
 const orders = computed(() => (tab.value === 'sale' ? saleOrders.value : purchaseOrders.value))
@@ -268,7 +270,8 @@ watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void 
 
 <style scoped>
 .page { max-width: 1100px; margin: 0 auto; }
-.ord-sel { width: 100%; height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; font-size: 14px; color: var(--c-text); margin-bottom: 10px; }
+/* 单据 / 库房下拉：外观走设计系统的 .ui-select */
+.ord-sel { width: 100%; margin-bottom: 10px; }
 .field-label { display: block; font-size: 12px; color: var(--c-muted); margin-bottom: 6px; }
 .remark-box { width: 100%; box-sizing: border-box; border: 1px solid var(--c-border); border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.6; resize: vertical; color: var(--c-text); font-family: inherit; }
 .remark-box:focus { outline: none; border-color: var(--c-accent); }

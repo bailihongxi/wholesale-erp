@@ -1,16 +1,11 @@
 <template>
   <div class="page">
-    <div class="ui-seg">
-      <button :class="{ active: mode === 'receivable' }" type="button" @click="switchMode('receivable')">
-        应收（客户欠）
-      </button>
-      <button :class="{ active: mode === 'payable' }" type="button" @click="switchMode('payable')">
-        应付（欠供应商）
-      </button>
-      <button :class="{ active: mode === 'history' }" type="button" @click="switchMode('history')">
-        收付款流水
-      </button>
-    </div>
+    <SegmentedTabs
+      :model-value="mode"
+      size="sm"
+      :options="modeOptions"
+      @update:model-value="switchMode($event as Mode)"
+    />
 
     <!-- ============ 应收 / 应付 ============ -->
     <template v-if="mode !== 'history'">
@@ -134,6 +129,7 @@ import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
+import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { PaymentHistoryRow } from '../../types'
 
 type Mode = 'receivable' | 'payable' | 'history'
@@ -159,6 +155,13 @@ const payables = ref<ReconRow[]>([])
 const payments = ref<PaymentHistoryRow[]>([])
 const customerMap = ref<Record<number, string>>({})
 const supplierMap = ref<Record<number, string>>({})
+
+/** 页内 Tab 选项（应收 / 应付 / 收付款流水） */
+const modeOptions = computed(() => [
+  { value: 'receivable', label: '应收（客户欠）' },
+  { value: 'payable', label: '应付（欠供应商）' },
+  { value: 'history', label: '收付款流水' }
+])
 
 const editingId = ref<number | null>(null)
 const editAmount = ref(0)

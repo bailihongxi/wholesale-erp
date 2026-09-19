@@ -111,14 +111,17 @@ describe('阶段6：库房+财务模块重写', () => {
     await testRouter.push(`/warehouse/outbound/${oid}`)
     await testRouter.isReady()
     const wrapper = mount(OutboundDetailView, { global: { plugins: [testRouter] } })
-    await vi.waitFor(() => expect((wrapper.vm as any).items.length).toBeGreaterThan(0), { timeout: 3000 })
+    // 6.2 要等详情页把单据、商品、库房分布都查完才就绪；
+    // 全量并行跑（37 个测试文件抢 CPU）时 3 秒会偶发不够，放宽到 10 秒，
+    // 断言强度不变（仍然是「必须等到加载完成」）。
+    await vi.waitFor(() => expect((wrapper.vm as any).items.length).toBeGreaterThan(0), { timeout: 10000 })
     await flushPromises()
 
     await wrapper.find('.pa-confirm').trigger('click')
 
     await vi.waitFor(async () => {
       expect(await productStore.getStock(p.id!)).toBe(98)
-    }, { timeout: 3000 })
+    }, { timeout: 10000 })
   })
 
   it('6.3 库房库存管理页不显示任何价格；老板可见价格', async () => {

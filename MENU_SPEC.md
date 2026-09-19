@@ -690,4 +690,53 @@
 
 ---
 
+## 十二、第十一轮：库存作业界面重做与手机端布局修复（2026-09-19）
+
+### 12.1 用户反馈
+
+> 库存作业页面排版太老旧古板，与整体系统不协调，而且页面排布头部与显示部分错位了。
+
+### 12.2 三条根因
+
+| # | 现象 | 根因 |
+|---|---|---|
+| 1 | 页内子 Tab 像「灰框老式胶囊」 | 手写 `<div class="ui-seg"><button>` 时**漏了 `.ui-seg-item` 类**，退回浏览器默认按钮外观 |
+| 2 | 头部 / Tab / 表格左边缘逐层缩进 | `InboundView` 私有容器 `max-width: 1100px` 与父级 1240px 不一致，宽屏下各自居中 |
+| 3 | **手机端顶栏变左侧竖条、内容被挤窄** | `.app-layout` 是 `flex` 且默认 `row`，手机端顶栏 / 内容 / 底部 Tab 被横排 |
+
+第 3 条影响**所有手机端页面**，是本次最有价值的修复。
+
+### 12.3 改动清单
+
+| 范围 | 文件 | 改动 |
+|---|---|---|
+| 设计系统 | `src/styles/theme.css` | 分段控件改「浅色凹槽 + 选中项白色浮起卡片」；新增 `.ui-seg.md` / `.ui-seg.sm` 两档尺寸与 `.ui-seg-badge` 待办角标；手机端横向滑动；`.tab-pane > div.ui-page` 宽度兜底 |
+| 通用组件 | `src/components/ui/SegmentedTabs.vue` | 支持 `options[{key,label,icon,badge}]` + `size` + `v-model` |
+| 库存作业 Hub | `WarehouseOpsView.vue` | 容器改 `ui-page`；模块导航用 `.ui-seg.md` + 图标 + **实时待办角标** |
+| 5 个子页 | `InboundView` / `OutboundView` / `TransferView` / `CountView` / `ReturnsView` | 页内 Tab 统一换 `SegmentedTabs`（`size="sm"`，带计数）；`InboundView` 去掉 1100px 私有宽度 |
+| 财务中心 | `ReconcileView.vue` | 对账页三个 Tab 同样换组件 |
+| 布局缺陷 | `AppLayout.vue` | **新增 `.app-layout.is-mobile { flex-direction: column }`** |
+| 下拉控件 | 入库详情 / 出库详情 / 调拨 / 盘点 / 退换货 | 挂 `.ui-select`，私有样式只留宽度 —— 恢复边框、圆角与下拉箭头 |
+
+### 12.4 验收结果
+
+| 项目 | 结果 |
+|---|---|
+| 1440 / 1280 视口 | ✅ 标题、模块 Tab、页内 Tab、表格 全部 `x=244` |
+| 手机端 390 × 844 | ✅ 顶栏 `w=390` 通栏，子页 `x=12 w=366` |
+| 库房下拉 | ✅ `ui-select loc-sel`，`h=40 / 1px / r=8 / 有箭头` |
+| 全量测试 | ✅ **372 通过 / 37 文件 / 0 error** |
+| `npm run build` | ✅ **0 错误** |
+
+截图归档：`docs/screenshots/round11-*.png`（7 张）。
+
+### 12.5 后续开发约束
+
+1. 页内 Tab 一律用 `SegmentedTabs` 组件，别手写裸 `<button>`。
+2. Hub 页内嵌子页不要写 `max-width` 或自己 `margin: 0 auto`。
+3. `.app-layout.is-mobile { flex-direction: column }` 不可删。
+4. 下拉控件挂 `.ui-select`，私有样式只写宽度 / 外边距。
+
+---
+
 **文档结束。** 若需要对上表第四节「还没做的功能」继续开发，按表格顺序推进即可。

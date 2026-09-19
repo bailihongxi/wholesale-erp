@@ -78,6 +78,13 @@ function handleLogout(): void {
   display: flex;
   background: #f8fafc;
 }
+/* 手机端：顶栏 / 内容 / 底部 Tab 必须纵向排列。
+   .app-layout 默认是 row，漏掉这一条时三者会横排 ——
+   顶栏被压成左侧窄竖条、内容被挤到右侧只剩一小块，
+   表现就是「头部与显示部分错位」。 */
+.app-layout.is-mobile {
+  flex-direction: column;
+}
 .main-col {
   flex: 1;
   display: flex;

@@ -1,17 +1,12 @@
 <template>
   <div class="page">
-    <div class="ui-seg">
-      <button :class="{ active: tab === 'create' }" type="button" @click="tab = 'create'">新建盘点</button>
-      <button :class="{ active: tab === 'history' }" type="button" @click="tab = 'history'">
-        盘点历史（{{ history.length }}）
-      </button>
-    </div>
+    <SegmentedTabs v-model="tab" size="sm" :options="tabOptions" />
 
     <!-- ============ 新建盘点 ============ -->
     <template v-if="tab === 'create'">
       <section class="block">
         <h4 class="sec-title">盘点库位</h4>
-        <select v-model.number="locId" class="loc-sel" @change="onLocChange">
+        <select v-model.number="locId" class="ui-select loc-sel" @change="onLocChange">
           <option v-for="l in locations" :key="l.id" :value="l.id">{{ l.name }}</option>
         </select>
         <p class="sec-tip">盘点会按实盘数校正系统库存：盘盈自动入库、盘亏自动出库，并留存盘点单。</p>
@@ -150,6 +145,7 @@ import { useInventoryStore, type StocktakeRow } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
 
 const productStore = useProductStore()
@@ -164,6 +160,12 @@ const sysMap = ref<Record<number, number>>({})
 const products = ref<Product[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; sys: number; actual: number }>>([])
 const history = ref<StocktakeRow[]>([])
+
+/** 页内 Tab 选项 */
+const tabOptions = computed(() => [
+  { value: 'create', label: '新建盘点' },
+  { value: 'history', label: `盘点历史（${history.value.length}）` }
+])
 const activeDetail = ref<StocktakeRow | null>(null)
 
 const locName = computed(() => locations.value.find(l => l.id === locId.value)?.name ?? '库位')
@@ -246,7 +248,8 @@ watch(tab, v => { if (v === 'history') void loadHistory() })
 
 <style scoped>
 .page { max-width: 1100px; margin: 0 auto; }
-.loc-sel { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; font-size: 14px; color: var(--c-text); }
+/* 库位下拉：外观走设计系统的 .ui-select，这里只约束宽度 */
+.loc-sel { min-width: 150px; }
 .quick-row { display: flex; gap: 10px; margin: 12px 0; }
 .btn { height: 44px; border-radius: 10px; font-size: 14px; cursor: pointer; padding: 0 24px; }
 .btn.sm { height: 36px; padding: 0 14px; font-size: 13px; }

@@ -1,13 +1,6 @@
 <template>
   <div class="page">
-    <div class="ui-seg">
-      <button :class="{ active: tab === 'pending' }" type="button" @click="tab = 'pending'">
-        待收货（{{ orders.length }}）
-      </button>
-      <button :class="{ active: tab === 'history' }" type="button" @click="tab = 'history'">
-        入库历史（{{ filteredDocs.length }} 张单）
-      </button>
-    </div>
+    <SegmentedTabs v-model="tab" size="sm" :options="tabOptions" />
 
     <!-- ============ 待收货 ============ -->
     <template v-if="tab === 'pending'">
@@ -127,6 +120,7 @@ import { useResponsive } from '../../composables/useResponsive'
 import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
+import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { PurchaseOrder, Supplier } from '../../types'
 
 const router = useRouter()
@@ -146,6 +140,12 @@ const dateFrom = ref('')
 const dateTo = ref('')
 
 const hasFilter = computed(() => !!keyword.value || !!dateFrom.value || !!dateTo.value)
+
+/** 页内 Tab 选项（数量随数据实时变化，故用 computed 生成） */
+const tabOptions = computed(() => [
+  { value: 'pending', label: `待收货（${orders.value.length}）` },
+  { value: 'history', label: `入库历史（${filteredDocs.value.length} 张单）` }
+])
 
 const filteredDocs = computed<StockDocRow[]>(() => {
   let data = docs.value

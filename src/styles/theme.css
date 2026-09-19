@@ -350,14 +350,20 @@ body {
 .ui-link.danger { color: var(--c-danger); }
 
 /* ---------- 7. 分段 Tab ---------- */
+/* 设计说明：早期版本用「深蓝实心块」表示选中，一行排开很像一排按钮阵列，观感陈旧。
+   现改为「浅色槽 + 白色浮起卡片」的现代分段控件：
+   容器自身退回到背景里，选中项浮起来，整体更像导航而不是按钮。
+   ⚠️ 子页里的 Tab 必须用 .ui-seg-item 类（或直接用 SegmentedTabs 组件），
+   只写裸 <button> 会退回浏览器默认样式（2px 灰边框 + 灰底），与本系统风格冲突。 */
 .ui-seg {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--c-surface);
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--c-surface-alt);
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
-  box-shadow: var(--sh-xs);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, .05);
   flex-wrap: wrap;
 }
 
@@ -365,32 +371,104 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 16px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: calc(var(--r-md) - 3px);
   background: transparent;
   color: var(--c-text-2);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background .15s ease, color .15s ease;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
 }
 
-.ui-seg-item:hover { background: var(--c-primary-soft); color: var(--c-primary); }
+.ui-seg-item:hover { background: rgba(255, 255, 255, .72); color: var(--c-primary); }
 
 .ui-seg-item.active {
-  background: var(--c-primary);
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(22, 50, 92, .22);
+  background: var(--c-surface);
+  color: var(--c-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .10), 0 0 0 1px rgba(26, 54, 93, .08);
 }
 
 .ui-seg-ico { font-size: 14px; line-height: 1; }
 
+/* 待办角标：如「入库验货 ②」提示还有 2 张待收货单 */
+.ui-seg-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 小号：用于 Hub 页（库存作业 / 财务中心）内嵌子页的「页内切换」，
+   比父级模块导航低一档，避免上下两层长得一模一样。 */
+.ui-seg.sm {
+  padding: 2px;
+  border-radius: var(--r-sm);
+  margin-bottom: var(--sp-3);
+}
+.ui-seg.sm .ui-seg-item {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: calc(var(--r-sm) - 2px);
+  color: var(--c-muted);
+}
+.ui-seg.sm .ui-seg-item.active {
+  color: var(--c-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08), 0 0 0 1px rgba(26, 54, 93, .07);
+}
+
+/* 兜底：老页面若手写 <div class="ui-seg"><button>（按钮没带 .ui-seg-item 类），
+   会退回浏览器默认按钮样式 —— 2px 灰边框 + 灰底，与本系统风格明显冲突。
+   下面这条保证即使漏写类名也不会崩样式；新页面请直接用 SegmentedTabs 组件。 */
+.ui-seg > button:not(.ui-seg-item) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: calc(var(--r-md) - 3px);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .16s ease, color .16s ease;
+}
+.ui-seg > button:not(.ui-seg-item):hover { background: rgba(255, 255, 255, .72); color: var(--c-primary); }
+.ui-seg > button.active:not(.ui-seg-item) {
+  background: var(--c-surface);
+  color: var(--c-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .10), 0 0 0 1px rgba(26, 54, 93, .08);
+}
+
+/* 手机端：模块多时横向滑动，避免挤成两行 */
 @media (max-width: 767px) {
-  .ui-seg { width: 100%; }
-  .ui-seg-item { flex: 1; justify-content: center; padding: 0 8px; }
+  .ui-seg {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ui-seg::-webkit-scrollbar { display: none; }
+  .ui-seg-item { flex: none; padding: 0 14px; }
 }
 
 /* ---------- 8. 表单 ---------- */
@@ -803,4 +881,40 @@ body {
 }
 .tab-pane .ui-page-sub {
   font-size: 12px;
+}
+
+/* 面板内的子页必须完全跟随父级宽度。
+   子页若自带 max-width（或命中 :where(.page) 的 1240px 兜底），
+   宽屏下会比父级再窄一档并各自居中，表现为「标题 / Tab / 表格左边缘逐层缩进」的错位。
+   这里用 div.page 提高特异性，确保能盖过子页 scoped 样式里的 max-width。 */
+.tab-pane > div.page,
+.tab-pane > div.ui-page {
+  max-width: none;
+  margin: 0;
+}
+
+/* ============================================================
+   空态统一（早期的 .empty 类）
+   各页历史上各写一份 .empty，留白 / 字号 / 有无图标都不一致；
+   表格里的空态只有一行小灰字，观感单薄。
+   这里统一到与 EmptyState 组件同源的观感 —— 只改样式，不动各页结构。
+   ============================================================ */
+.empty,
+.data-table td.empty,
+.data-table th.empty {
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 36px 16px;
+  background: transparent;
+}
+.empty::before,
+.data-table td.empty::before {
+  content: '📭';
+  display: block;
+  margin-bottom: 8px;
+  font-size: 26px;
+  line-height: 1;
+  opacity: .45;
 }

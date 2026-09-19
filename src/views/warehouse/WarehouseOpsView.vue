@@ -2,13 +2,14 @@
   <div class="ui-page">
     <PageHeader
       title="库存作业"
-      sub="入库验货、出库拣货、库存调拨、库存盘点、退换货、库房管理，统一在此处理"
+      sub="验货入库、拣货出库、库间调拨、盘点与退换货、库房维护，统一在此处理"
     />
 
+    <!-- 模块导航：带待办角标，一眼看出哪里还有活 -->
     <SegmentedTabs v-model="tab" :options="tabs" />
 
     <!-- 六大模块：在库存作业页面内嵌展示，菜单只需一个「库存作业」入口 -->
-    <div class="pane">
+    <div class="tab-pane">
       <InboundView v-if="tab === 'inbound'" />
       <OutboundView v-else-if="tab === 'outbound'" />
       <TransferView v-else-if="tab === 'transfer'" />
@@ -20,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import InboundView from './InboundView.vue'
 import OutboundView from './OutboundView.vue'
@@ -30,27 +31,53 @@ import ReturnsView from './ReturnsView.vue'
 import LocationsView from './LocationsView.vue'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
+import { usePurchaseStore } from '../../stores/purchase'
+import { useSalesStore } from '../../stores/sales'
 
 type ModuleKey = 'inbound' | 'outbound' | 'transfer' | 'count' | 'returns' | 'locations'
 
-const tabs: Array<{ value: ModuleKey; label: string; icon: string }> = [
-  { value: 'inbound', label: '入库验货', icon: '⬇️' },
-  { value: 'outbound', label: '出库拣货', icon: '⬆️' },
+const route = useRoute()
+const purchaseStore = usePurchaseStore()
+const salesStore = useSalesStore()
+
+/** 待收货 / 待发货单数，作为「入库验货 / 出库拣货」的角标 */
+const pendingIn = ref(0)
+const pendingOut = ref(0)
+
+const tabs = computed(() => [
+  { value: 'inbound', label: '入库验货', icon: '⬇️', badge: pendingIn.value },
+  { value: 'outbound', label: '出库拣货', icon: '⬆️', badge: pendingOut.value },
   { value: 'transfer', label: '库存调拨', icon: '🔁' },
   { value: 'count', label: '库存盘点', icon: '🔍' },
   { value: 'returns', label: '退换货', icon: '↩️' },
   { value: 'locations', label: '库房管理', icon: '🏬' }
-]
+])
 
-const route = useRoute()
 const tab = ref<ModuleKey>((route.query.tab as ModuleKey) || 'inbound')
 
 // 支持从系统设置等处带 ?tab=locations 直接落到库房管理
 watch(() => route.query.tab, q => {
-  if (q && tabs.some(t => t.value === q)) tab.value = q as ModuleKey
+  if (q && tabs.value.some(t => t.value === q)) tab.value = q as ModuleKey
 })
+
+/** 角标随子页操作刷新：切模块时重新取一次，保证「做完一单角标就减一」 */
+async function loadBadges(): Promise<void> {
+  try {
+    const [ins, outs] = await Promise.all([
+      purchaseStore.listPendingInbound(),
+      salesStore.listPendingOutbound()
+    ])
+    pendingIn.value = ins.length
+    pendingOut.value = outs.length
+  } catch {
+    /* 数据库尚未就绪时保持无角标，不影响页面使用 */
+  }
+}
+
+watch(tab, loadBadges)
+onMounted(loadBadges)
 </script>
 
 <style scoped>
-.pane { margin-top: var(--sp-4); }
+.tab-pane { margin-top: var(--sp-4); }
 </style>

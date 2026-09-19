@@ -1,11 +1,6 @@
 <template>
   <div class="page">
-    <div class="ui-seg">
-      <button :class="{ active: tab === 'create' }" type="button" @click="tab = 'create'">新建调拨</button>
-      <button :class="{ active: tab === 'history' }" type="button" @click="tab = 'history'">
-        调拨历史（{{ history.length }}）
-      </button>
-    </div>
+    <SegmentedTabs v-model="tab" size="sm" :options="tabOptions" />
 
     <!-- ============ 新建调拨 ============ -->
     <template v-if="tab === 'create'">
@@ -14,14 +9,14 @@
         <div class="loc-row">
           <label class="loc-field">
             <span class="lf-label">调出库位</span>
-            <select v-model.number="fromLoc" class="loc-sel" @change="reloadMaps">
+            <select v-model.number="fromLoc" class="ui-select loc-sel" @change="reloadMaps">
               <option v-for="l in locations" :key="l.id" :value="l.id">{{ l.name }}</option>
             </select>
           </label>
           <span class="loc-arrow">➜</span>
           <label class="loc-field">
             <span class="lf-label">调入库位</span>
-            <select v-model.number="toLoc" class="loc-sel" @change="reloadMaps">
+            <select v-model.number="toLoc" class="ui-select loc-sel" @change="reloadMaps">
               <option v-for="l in locations" :key="l.id" :value="l.id">{{ l.name }}</option>
             </select>
           </label>
@@ -156,6 +151,7 @@ import { useInventoryStore, type TransferRow } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
 
 const productStore = useProductStore()
@@ -172,6 +168,12 @@ const toMap = ref<Record<number, number>>({})
 const products = ref<Product[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; fromStock: number; toStock: number; qty: number }>>([])
 const history = ref<TransferRow[]>([])
+
+/** 页内 Tab 选项 */
+const tabOptions = computed(() => [
+  { value: 'create', label: '新建调拨' },
+  { value: 'history', label: `调拨历史（${history.value.length}）` }
+])
 const activeDetail = ref<TransferRow | null>(null)
 
 const fromName = computed(() => locations.value.find(l => l.id === fromLoc.value)?.name ?? '来源')
@@ -254,7 +256,8 @@ watch(tab, v => { if (v === 'history') void loadHistory() })
 .loc-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .loc-field { display: flex; flex-direction: column; gap: 4px; }
 .lf-label { font-size: 12px; color: var(--c-muted); }
-.loc-sel { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 12px; background: #fff; font-size: 14px; color: var(--c-text); }
+/* 库位下拉：外观走设计系统的 .ui-select，这里只约束宽度 */
+.loc-sel { min-width: 150px; }
 .loc-arrow { font-size: 18px; color: var(--c-accent); padding-bottom: 10px; }
 .warn-line { margin-top: 8px; font-size: 13px; color: var(--c-danger); }
 .mini-input { width: 84px; height: 32px; border: 1px solid var(--c-border); border-radius: 6px; padding: 0 8px; text-align: right; font-size: 14px; }
