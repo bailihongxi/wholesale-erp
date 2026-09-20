@@ -53,7 +53,16 @@ const router = useRouter()
 
 // 说明：侧边栏折叠/展开（回弹）按钮已统一移入左侧菜单栏头部，
 // 紧跟在「家电批发ERP」文字之后；顶部栏与功能页面左上角都不再放置该按钮。
-const pageTitle = computed(() => (route.meta.title as string) || '')
+const pageTitle = computed(() => {
+  const t = (route.meta.title as string) || ''
+  // 工作台标题按当前登录角色动态显示：系统内置管理员 → 管理员工作台，其他 → 角色名+工作台
+  if (t.endsWith('工作台')) {
+    if (userStore.currentUser?.system) return '管理员工作台'
+    const label = roleName(userStore.role)
+    return `${label}工作台`
+  }
+  return t
+})
 const userName = computed(() => userStore.currentUser?.name ?? '未登录')
 const roleLabel = computed(() => roleName(userStore.role))
 const userInitial = computed(() => (userStore.currentUser?.name ?? '?').slice(0, 1))

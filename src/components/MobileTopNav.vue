@@ -8,11 +8,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useUserStore } from '../stores/user'
+import { ROLE_LABELS } from '../router/navConfig'
 
 const props = withDefaults(defineProps<{ title?: string }>(), { title: '' })
 const route = useRoute()
+const userStore = useUserStore()
 
-const title = computed(() => props.title || (route.meta.title as string) || '')
+const title = computed(() => {
+  const t = props.title || (route.meta.title as string) || ''
+  if (t.endsWith('工作台')) {
+    if (userStore.currentUser?.system) return '管理员工作台'
+    return `${ROLE_LABELS[userStore.role || ''] || '员工'}工作台`
+  }
+  return t
+})
 
 // 说明：返回按钮已统一移到左侧菜单栏（电脑端「家电批发ERP」之后），
 // 手机端通过底部 Tab 导航返回，功能页面左上角不再放置返回按钮。
