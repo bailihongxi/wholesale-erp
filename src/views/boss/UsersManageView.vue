@@ -193,7 +193,8 @@
     </div>
 
     <!-- ==================== 新建 / 编辑员工 ==================== -->
-    <div v-if="editing" class="modal-mask" @click.self="editing = false">
+    <!-- 阻塞弹窗：点击遮罩不会关闭，避免误触丢掉正在编辑的表单；按 ESC 可关闭 -->
+    <div v-if="editing" class="modal-mask">
       <div class="modal">
         <div class="modal-head">
           <b>{{ form.id ? '编辑员工' : '新建员工' }}</b>
@@ -308,7 +309,8 @@
     </div>
 
     <!-- ==================== 重置密码结果 ==================== -->
-    <div v-if="resetResult" class="modal-mask" @click.self="resetResult = null">
+    <!-- 阻塞弹窗：临时密码只展示一次，点遮罩不会关闭；按 ESC 可关闭 -->
+    <div v-if="resetResult" class="modal-mask">
       <div class="modal modal-sm">
         <div class="modal-head">
           <b>密码已重置</b>
@@ -333,7 +335,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { showToast } from 'vant'
 import { useUserStore } from '../../stores/user'
 import { usePermissionStore } from '../../stores/permission'
@@ -588,6 +590,15 @@ async function toggleStatus(u: User): Promise<void> {
 async function load(): Promise<void> {
   staff.value = await userStore.listUsers()
 }
+
+// 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（保存中不响应，避免关掉正在提交的表单）
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  if (resetResult.value) { resetResult.value = null; return }
+  if (editing.value && !saving.value) editing.value = false
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 onMounted(async () => {
   await permStore.ensure()

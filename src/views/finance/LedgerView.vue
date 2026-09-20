@@ -85,6 +85,27 @@
               <option v-for="n in partyNames" :key="n" :value="n"></option>
             </datalist>
           </label>
+          <label class="ui-field">
+            <span class="ui-label">关联单据<span class="ui-hint">（选填）</span></span>
+            <div class="link-row">
+              <select v-model="form.linkDocType" class="ui-select link-type" aria-label="单据类型">
+                <option value="">不关联</option>
+                <option v-for="t in LEDGER_LINK_TYPES" :key="t.key" :value="t.key">
+                  {{ t.label }}（{{ t.prefix }}…）
+                </option>
+              </select>
+              <input
+                v-model="form.linkDocNo"
+                class="ui-input"
+                list="ledger-link-docs"
+                :disabled="!form.linkDocType"
+                :placeholder="form.linkDocType ? `选择或输入${linkTypeLabel(form.linkDocType)}号` : '先选择单据类型'"
+              />
+            </div>
+            <datalist id="ledger-link-docs">
+              <option v-for="n in linkDocNos" :key="n" :value="n"></option>
+            </datalist>
+          </label>
         </div>
 
         <label class="ui-field remark-field">
@@ -153,6 +174,7 @@
             <th>日期</th>
             <th>分类</th>
             <th>往来单位</th>
+            <th>关联单据</th>
             <th class="num">金额</th>
             <th>备注</th>
             <th class="center">操作</th>
@@ -168,6 +190,7 @@
               </span>
             </td>
             <td>{{ r.counterparty || '—' }}</td>
+            <td class="link-cell">{{ linkCell(r) }}</td>
             <td class="num" :class="r.direction === 'in' ? 'amt-in' : 'amt-out'">
               {{ r.direction === 'in' ? '+' : '-' }}¥{{ money(r.amount) }}
             </td>
@@ -179,7 +202,7 @@
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="4">合计</td>
+            <td colspan="5">合计</td>
             <td class="num" :class="summary.net >= 0 ? 'amt-in' : 'amt-out'">
               {{ summary.net >= 0 ? '+' : '-' }}¥{{ money(Math.abs(summary.net)) }}
             </td>
@@ -210,7 +233,7 @@ import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { db } from '../../db'
 import {
-  LEDGER_CATEGORIES, categoriesOf, categoryLabel, categoryIcon, todayStr
+  LEDGER_CATEGORIES, LEDGER_LINK_TYPES, linkTypeLabel, categoriesOf, categoryLabel, categoryIcon, todayStr
 } from '../../utils/ledger'
 import type { LedgerDirection, LedgerEntry } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -236,7 +259,42 @@ const form = reactive({
   amount: '',
   entryDate: todayStr(),
   counterparty: '',
+  linkDocType: '',
+  linkDocNo: '',
   remark: ''
+})
+
+/** 当前所选单据类型的全部单号（datalist 候选） */
+const linkDocNos = ref<string[]>([])
+
+async function loadLinkDocs(type: string): Promise<void> {
+  if (!type) {
+    linkDocNos.value = []
+    return
+  }
+  let nos: string[] = []
+  if (type === 'inbound' || type === 'outbound') {
+    const recType = type === 'inbound' ? 'purchase_in' : 'sale_out'
+    const records = await db.stockRecords.where('type').equals(recType).toArray()
+    nos = Array.from(new Set(records.map(r => r.batchNo).filter(Boolean) as string[]))
+  } else if (type === 'return') {
+    nos = (await db.returnOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+  } else if (type === 'purchase') {
+    nos = (await db.purchaseOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+  } else if (type === 'sale') {
+    nos = (await db.saleOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+  } else if (type === 'transfer') {
+    nos = (await db.transferOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+  } else if (type === 'stocktake') {
+    nos = (await db.stocktakes.toArray()).map(r => r.orderNo).filter(Boolean)
+  }
+  // 新单号在前，方便选择最近的单据
+  linkDocNos.value = [...new Set(nos)].sort().reverse()
+}
+
+watch(() => form.linkDocType, t => {
+  form.linkDocNo = ''
+  loadLinkDocs(t)
 })
 
 const categories = computed(() => categoriesOf(form.direction))
@@ -274,6 +332,8 @@ function resetForm(): void {
   form.amount = ''
   form.entryDate = todayStr()
   form.counterparty = ''
+  form.linkDocType = ''
+  form.linkDocNo = ''
   form.remark = ''
   lastNo.value = ''
 }
@@ -299,7 +359,9 @@ async function submit(): Promise<void> {
     counterparty: form.counterparty,
     entryDate: form.entryDate,
     operatorId: userStore.currentUser?.id ?? 1,
-    remark: form.remark
+    remark: form.remark,
+    linkDocType: form.linkDocType,
+    linkDocNo: form.linkDocNo
   })
   saving.value = false
   showToast(res.message)
@@ -330,6 +392,13 @@ function clearFilter(): void {
   filter.category = ''
   filter.from = ''
   filter.to = ''
+}
+
+/** 关联单据的展示文本：类型标签 + 单号，未关联显示 — */
+function linkCell(r: LedgerEntry): string {
+  if (!r.linkDocNo) return '—'
+  const label = linkTypeLabel(r.linkDocType ?? '')
+  return label ? `${label} ${r.linkDocNo}` : r.linkDocNo
 }
 
 async function reload(): Promise<void> {
@@ -430,6 +499,12 @@ onMounted(async () => {
 
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--c-text-2); }
 .remark-cell { max-width: 220px; color: var(--c-text-2); font-size: 13px; }
+.link-cell { color: var(--c-primary); font-size: 12.5px; white-space: nowrap; }
+.link-row { display: grid; grid-template-columns: 132px 1fr; gap: 8px; }
+.link-type { width: 100%; }
+@media (max-width: 767px) {
+  .link-row { grid-template-columns: 1fr; }
+}
 
 .f-dir { width: 116px; }
 .f-cat { width: 130px; }

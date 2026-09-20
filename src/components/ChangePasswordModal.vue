@@ -1,5 +1,6 @@
 <template>
-  <div v-if="open" class="cp-mask" @click.self="close">
+  <!-- 阻塞弹窗：点击遮罩不会关闭，避免误触丢失正在编辑的内容；按 ESC 可安全关闭 -->
+  <div v-if="open" class="cp-mask">
     <div class="cp-modal">
       <div class="cp-head">
         <b>修改密码</b>
@@ -31,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { showToast } from 'vant'
 import { useUserStore } from '../stores/user'
 import { PASSWORD_MIN_LEN } from '../utils/password'
@@ -60,6 +61,13 @@ watch(() => props.open, v => {
 function close(): void {
   emit('update:open', false)
 }
+
+// 按 ESC 关闭弹窗（弹窗为阻塞式，点遮罩不会关闭）
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape' && props.open && !saving.value) close()
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 async function submit(): Promise<void> {
   // 经销商账号在客户表里，不走员工改密通道

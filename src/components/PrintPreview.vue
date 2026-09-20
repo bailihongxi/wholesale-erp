@@ -5,7 +5,8 @@
     - 表头：公司抬头 / 副标题 / 地址 / 电话 / 页脚 / 签章栏 可在此编辑并持久化
     - 底部固定「取消」「打印」两个按钮
   -->
-  <div v-if="visible" class="pp-mask" @click.self="onCancel">
+  <!-- 阻塞弹窗：点击遮罩不会关闭（预览里可能正在改表头 / 核对明细）；按 ESC 可取消 -->
+  <div v-if="visible" class="pp-mask">
     <div class="pp-dialog" role="dialog" aria-modal="true" :aria-label="title">
       <div class="pp-head">
         <span class="pp-title">{{ title }}</span>
@@ -102,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { printIframe, printHTML } from '../utils/print'
 import {
   getPrintSettings,
@@ -240,6 +241,13 @@ function resetHeader(): void {
 function onCancel(): void {
   emit('cancel')
 }
+
+// 按 ESC 关闭预览（阻塞弹窗：点遮罩不会关闭，避免误触丢掉正在核对 / 编辑的内容）
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape' && props.visible) onCancel()
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 function onPrint(): void {
   // 优先打印预览 iframe；浏览器不支持时回退到新窗口打印

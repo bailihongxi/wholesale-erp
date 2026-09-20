@@ -95,7 +95,7 @@ import { useRoute } from 'vue-router'
 import { db } from '../../db'
 import { useFinanceStore } from '../../stores/finance'
 import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
-import { categoryLabel } from '../../utils/ledger'
+import { categoryLabel, linkTypeLabel } from '../../utils/ledger'
 import type { LedgerEntry } from '../../types'
 import TablePager from '../../components/TablePager.vue'
 import ReconcileView from './ReconcileView.vue'
@@ -222,7 +222,8 @@ async function loadFlow(): Promise<void> {
       kindLabel: '记一笔',
       badge: 'info',
       summary: `${e.orderNo} · ${categoryLabel(e.category)}` +
-        (e.counterparty ? ` · ${e.counterparty}` : '') + (e.remark ? ` · ${e.remark}` : ''),
+        (e.counterparty ? ` · ${e.counterparty}` : '') + (e.remark ? ` · ${e.remark}` : '') +
+        (e.linkDocNo ? ` · 关联${linkTypeLabel(e.linkDocType ?? '')}${e.linkDocNo}` : ''),
       in: e.direction === 'in' ? e.amount : 0,
       out: e.direction === 'out' ? e.amount : 0
     })

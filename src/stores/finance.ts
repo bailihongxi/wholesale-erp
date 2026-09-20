@@ -262,6 +262,10 @@ export const useFinanceStore = defineStore('finance', () => {
     entryDate?: string
     operatorId: number
     remark?: string
+    /** 关联单据类型（inbound/outbound/return/purchase/sale/transfer/stocktake），空表示不关联 */
+    linkDocType?: string
+    /** 关联单据号 */
+    linkDocNo?: string
   }): Promise<{ ok: boolean; message: string; orderNo?: string }> {
     const amount = Number(params.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -280,6 +284,8 @@ export const useFinanceStore = defineStore('finance', () => {
       entryDate: params.entryDate || todayStr(),
       operatorId: params.operatorId,
       remark: (params.remark ?? '').trim(),
+      linkDocType: (params.linkDocType ?? '').trim(),
+      linkDocNo: (params.linkDocNo ?? '').trim(),
       createdAt: now
     }
     await db.ledgerEntries.add(entry)
@@ -287,7 +293,8 @@ export const useFinanceStore = defineStore('finance', () => {
       params.operatorId,
       AUDIT_ACTIONS.LEDGER_ADD,
       `${params.direction === 'in' ? '收入' : '支出'} ${orderNo} · ${categoryLabel(params.category)} ¥${entry.amount}` +
-        (entry.counterparty ? `（${entry.counterparty}）` : '')
+        (entry.counterparty ? `（${entry.counterparty}）` : '') +
+        (entry.linkDocNo ? ` · 关联${entry.linkDocNo}` : '')
     )
     return { ok: true, message: `已记一笔 ${orderNo}`, orderNo }
   }

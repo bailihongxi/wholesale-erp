@@ -138,7 +138,8 @@
     <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/boss/products/new')">＋</button>
 
     <!-- ================= 导入 ================= -->
-    <div v-if="showImport" class="overlay" @click.self="showImport = false">
+    <!-- 阻塞弹窗：点击遮罩不会关闭，避免误触丢掉粘贴的导入内容；按 ESC 可关闭 -->
+    <div v-if="showImport" class="overlay">
       <div class="modal">
         <h4>导入商品</h4>
         <p class="modal-tip">
@@ -195,7 +196,8 @@
     </div>
 
     <!-- ================= 批量编辑 ================= -->
-    <div v-if="showBulk" class="overlay" @click.self="showBulk = false">
+    <!-- 阻塞弹窗：点击遮罩不会关闭；按 ESC 可关闭 -->
+    <div v-if="showBulk" class="overlay">
       <div class="modal">
         <h4>批量编辑（{{ selected.length }} 项）</h4>
         <p class="modal-tip">勾选的字段才会写入，未勾选保持不变。</p>
@@ -224,7 +226,8 @@
     </div>
 
     <!-- ================= 重复商品 ================= -->
-    <div v-if="showDup" class="overlay" @click.self="showDup = false">
+    <!-- 阻塞弹窗：点击遮罩不会关闭；按 ESC 可关闭 -->
+    <div v-if="showDup" class="overlay">
       <div class="modal wide">
         <h4>重复商品</h4>
         <p v-if="!dupGroups.length" class="modal-tip">没有发现重名商品，档案很干净。</p>
@@ -257,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
@@ -547,6 +550,16 @@ async function doBulkEdit(): Promise<void> {
   clearSelection()
   await reload()
 }
+
+// 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  if (showImport.value && !importing.value) { showImport.value = false; return }
+  if (showBulk.value) { showBulk.value = false; return }
+  if (showDup.value) { showDup.value = false }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 onMounted(reload)
 </script>

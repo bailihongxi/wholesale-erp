@@ -50,6 +50,32 @@ export function directionLabel(d: LedgerDirection): string {
   return d === 'in' ? '收入' : '支出'
 }
 
+/**
+ * 「记一笔」可关联的单据类型。
+ * 送货费、物流费等费用往往由某张具体单据产生（如 RK 入库单的卸货费、XS 销售单的送货费），
+ * 关联后可在流水里一眼看出这笔钱是哪个单据带来的。
+ */
+export interface LedgerLinkType {
+  key: string
+  label: string
+  /** 单号前缀（提示用，如入库单 RK…） */
+  prefix: string
+}
+
+export const LEDGER_LINK_TYPES: LedgerLinkType[] = [
+  { key: 'inbound', label: '入库单', prefix: 'RK' },
+  { key: 'outbound', label: '出库单', prefix: 'CK' },
+  { key: 'return', label: '退换货单', prefix: 'TH' },
+  { key: 'purchase', label: '采购单', prefix: 'CG' },
+  { key: 'sale', label: '销售单', prefix: 'XS' },
+  { key: 'transfer', label: '调拨单', prefix: 'DB' },
+  { key: 'stocktake', label: '盘点单', prefix: 'PD' }
+]
+
+export function linkTypeLabel(key: string): string {
+  return LEDGER_LINK_TYPES.find(t => t.key === key)?.label ?? ''
+}
+
 /** 生成记一笔单号：JY + 日期 + 3 位随机 */
 export function genLedgerNo(date: Date = new Date()): string {
   const y = date.getFullYear()

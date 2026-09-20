@@ -75,6 +75,10 @@ export interface LedgerEntry {
   entryDate: string
   operatorId: number
   remark: string
+  /** 关联单据类型：inbound / outbound / return / purchase / sale / transfer / stocktake，空表示不关联 */
+  linkDocType?: string
+  /** 关联单据号（如 RK20260920-123 / CG20260919001 / TH…），便于追踪费用来源单据 */
+  linkDocNo?: string
   createdAt: string
 }
 

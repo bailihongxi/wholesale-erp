@@ -75,10 +75,12 @@ function buildCss(paper: PaperSize): string {
   }
 
   .hd { text-align: center; padding-bottom: 6px; border-bottom: 2px solid #1a365d; }
-  .hd-co { font-size: ${f.co}; font-weight: 700; letter-spacing: 2px; color: #1a365d; margin: 0 0 4px; }
-  .hd-sub { font-size: ${f.base}; color: #64748b; margin: 0 0 4px; }
-  .hd-title { font-size: ${f.title}; font-weight: 600; letter-spacing: 6px; margin: 0; color: #1a365d; }
-  .hd-info { font-size: ${f.base}; color: #64748b; margin: 4px 0 0; }
+  /* 头部一行排布：公司抬头居左、单据标题绝对居中（三列 grid，两侧 1fr 平衡） */
+  .hd-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+  .hd-co { font-size: ${f.co}; font-weight: 700; letter-spacing: 2px; color: #1a365d; margin: 0; justify-self: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hd-title { font-size: ${f.title}; font-weight: 600; letter-spacing: 6px; margin: 0; color: #1a365d; justify-self: center; white-space: nowrap; }
+  .hd-sub { font-size: ${f.base}; color: #64748b; margin: 2px 0 0; }
+  .hd-info { font-size: ${f.base}; color: #64748b; margin: 2px 0 0; }
 
   .meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 12px;
           margin: 7px 0 6px; color: #475569; }
@@ -310,9 +312,11 @@ function buildPageHtml(
 
   return `<section class="page">
     <div class="hd">
-      <p class="hd-co">${esc(settings.companyName.trim() || data.companyName || getCompanyName())}</p>
+      <div class="hd-row">
+        <span class="hd-co">${esc(settings.companyName.trim() || data.companyName || getCompanyName())}</span>
+        <span class="hd-title">${esc(data.title)}</span>
+      </div>
       ${settings.subtitle ? `<p class="hd-sub">${esc(settings.subtitle)}</p>` : ''}
-      <p class="hd-title">${esc(data.title)}</p>
       ${hdInfo ? `<p class="hd-info">${hdInfo}</p>` : ''}
     </div>
 
