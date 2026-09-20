@@ -1347,3 +1347,33 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | 测试 | 全量 **522 通过 / 48 文件** |
 | 版本 | V1.0-12 / 1.0.0-12 |
 | 实测（390×844） | 调拨首屏 245ms、盘点 46ms（原 5 秒+）；员工弹窗 759px 高可滚动 |
+
+---
+
+## 二十九、V2.0-1（2026-09-21）：云数据库迁移 + 工作台标题动态化
+
+| 文件 | 改动 |
+|---|---|
+| `src/db/supabaseClient.ts` | 新增。Supabase client + `USE_CLOUD` 开关（vitest 环境强制 false） |
+| `src/db/cloudDb.ts` | 新增。`CloudTable` 适配 Dexie 常用 API，`createCloudDb()` 输出与 Dexie db 同构对象 |
+| `src/db/index.ts` | `USE_CLOUD=true` 时导出 cloudDb，否则导出本地 Dexie（保底） |
+| `src/utils/cloudMigrate.ts` | 新增。24 张表批量 upsert 到 Supabase，可重复执行 |
+| `src/views/boss/SettingsView.vue` | 数据备份区加「☁️ 迁移到云端」按钮 |
+| `src/components/AppLayout.vue` | 工作台标题按当前用户动态显示（system → 管理员工作台） |
+| `src/components/MobileTopNav.vue` | 手机端顶栏同步动态标题 |
+| `supabase/schema.sql` | 24 张表 DDL + 索引 + anon 授权（BY DEFAULT identity） |
+| `src/version.ts` / `package.json` | V2.0-1 / 2.0.0-1 |
+| 测试 | 版本断言同步 V2.0-1；其余 522 全绿 |
+
+### 29.1 验收
+| 项 | 结果 |
+|---|---|
+| 测试 | 全量 **522 通过 / 48 文件** |
+| 版本 | V2.0-1 / 2.0.0-1 |
+| 实机 | hawsystem 登录标题「管理员工作台」；商品读云端正常；新增写云端成功 |
+| 部署 | main 已推送（df1efd2），gh-pages 已部署 |
+
+### 29.2 下阶段待办（第二阶段 P1）
+1. Supabase Realtime 实时多人同步（A 开单 B 自动刷新）。
+2. Supabase Auth 接管员工登录 + RLS 行级权限（销售只看自己的单）。
+3. 审批流、多档客户价、业务员提成、赊销额度（业务深化）。

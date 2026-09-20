@@ -1803,3 +1803,43 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 ### 29.7 验收
 - 新增 `tests/round24-mobile.test.ts`（5 例）：手机端 colspan / col-spec 钩子 / theme.css 规则 / 报价单价格切换。
 - 全量 **522 通过 / 48 文件**；`npm run build` 0 错误。
+
+---
+
+## 三十、V2.0-1（2026-09-21）：云数据库迁移 + 多人共用地基
+
+> 第一阶段（V1.0-12）功能冻结，进入第二阶段。本轮完成"50 人共用"的地基——
+> 数据从单机 IndexedDB 迁到 Supabase 云数据库，所有客户端读写同一份数据。
+
+### 30.1 架构变化
+| 项 | V1.0-12（旧） | V2.0-1（新） |
+|---|---|---|
+| 数据存储 | 每台设备本地 IndexedDB | Supabase PostgreSQL（云端共享） |
+| 多人共用 | 不支持（各自一份） | 支持（一份数据所有人读） |
+| 实时性 | 本机即时 | 刷新后可见（Realtime 待加） |
+| 部署 | GitHub Pages 静态站 | 不变（前端仍在 GitHub Pages，数据在 Supabase） |
+| 保底 | — | V1.0-12 保留在 git 历史，可随时切回 |
+
+### 30.2 本轮交付
+- **Supabase 项目**：免费档、悉尼节点（ap-southeast-2）、24 张业务表全部建好。
+- **数据访问层**：新增 `src/db/cloudDb.ts`，`CloudTable` 类模仿 Dexie Table 常用 API
+  （`toArray / get / put / add / delete / update / count / where().equals() / anyOf()`），
+  业务代码零改动切换。
+- **数据源开关**：`src/db/supabaseClient.ts` 的 `USE_CLOUD`；测试环境（vitest）强制 false，
+  单元测试仍跑本地 Dexie。
+- **数据迁移**：`src/utils/cloudMigrate.ts` + 系统设置 → 数据备份区「☁️ 迁移到云端」按钮，
+  一键把 IndexedDB 全量 upsert 到 Supabase（可重复执行，按 id 覆盖）。
+- **id sequence**：迁移后已重置到 max(id)+1，新插入从 100 开始不冲突。
+- **工作台标题动态化**：AppLayout / MobileTopNav 根据当前登录角色显示——
+  `hawsystem`（system=true）→「管理员工作台」；其他角色 →「XX工作台」（采购/销售/财务/库房）。
+
+### 30.3 已知边界（第二阶段后续）
+- 刷新才同步：A 开单 B 需刷新才看到（Supabase Realtime 未接）。
+- 无行级权限：销售仍能看所有销售单（RLS + Supabase Auth 待接）。
+- 无冲突检测：两人同时改同一单，后保存覆盖先保存。
+- 安全：第一版未开 RLS，应用层自有登录保护；接 Supabase Auth 后收紧。
+
+### 30.4 验收
+- 全量 **522 通过 / 48 文件**；`npm run build` 0 错误。
+- 实机：hawsystem 登录显示「管理员工作台」；商品档案从云端读 6 条；新增商品写云端成功。
+- 版本：V2.0-1 / 2.0.0-1。
