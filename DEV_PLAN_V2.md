@@ -5,9 +5,9 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-8（2026-09-20 当前基线）**
-> 本文档为开发执行计划，产品对外版本统一为 **V1.0-8**（`src/version.ts` / `package.json` 同步）。
-> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**，第十四轮见 **「十九、V1.0-4 · 第十四轮」**，第十五 / 十六轮见 **「二十、V1.0-5 · 第十五轮」「二十一、V1.0-5 · 第十六轮」**，第十七轮见 **「二十二、V1.0-6 · 第十七轮」**，第十八轮见 **「二十三、V1.0-7 · 第十八轮」**，第十九轮见 **「二十四、V1.0-8 · 第十九轮」**。
+> **产品版本：V1.0-9（2026-09-20 当前基线）**
+> 本文档为开发执行计划，产品对外版本统一为 **V1.0-9**（`src/version.ts` / `package.json` 同步）。
+> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**，第十四轮见 **「十九、V1.0-4 · 第十四轮」**，第十五 / 十六轮见 **「二十、V1.0-5 · 第十五轮」「二十一、V1.0-5 · 第十六轮」**，第十七轮见 **「二十二、V1.0-6 · 第十七轮」**，第十八轮见 **「二十三、V1.0-7 · 第十八轮」**，第十九轮见 **「二十四、V1.0-8 · 第十九轮」**，第二十轮见 **「二十五、V1.0-9 · 第二十轮」**。
 
 ---
 
@@ -1226,3 +1226,49 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | 版本 | `src/version.ts` → **V1.0-8**；`package.json` → `1.0.0-8` |
 | 文档 | `PRD.md` V2.3（第 25 节）、本文件第二十四章、`MENU_SPEC.md` 第十九轮标注 同步 |
 | 仓库 | 提交 + tag `v1.0-8` 推送 `main`；GitHub Pages 重新部署 |
+
+---
+
+## 二十五、V1.0-9 · 第二十轮（2026-09-20）：赠品管理 + 报价单
+
+### 25.1 需求
+
+> ① **赠品**：采购时厂家随货送赠品、销售时给经销商 / 客户送赠品——赠品行走正常单据（验货入库、拣货出库、库存可查），金额计 0、不参与合计，打印标「赠品」；
+> ② **报价单**：客户询价给临时报价单（BJ 前缀），订单确定后一键转销售单——明细价格带过去、散客自动建档、双向可查、不能重复转换；报价单收进「销售管理」页内 Tab，不新增独立菜单。
+
+### 25.2 改动明细
+
+| 文件 | 改动 |
+|---|---|
+| `src/types/index.ts` | `PurchaseOrderItem` / `SaleOrderItem` 增 `isGift?`；新增 `QuoteOrder` / `QuoteOrderItem` 接口 |
+| `src/db/index.ts` | 库升级 v8：新增 `quoteOrders` / `quoteOrderItems` 表（索引：orderNo / customerId / status / quoteDate / salesId、quoteOrderId / productId） |
+| `src/utils/orderNo.ts` | 新增 `genQuoteNo()`：BJ + yyyyMMdd + 3 位随机 |
+| `src/utils/audit.ts` | `AUDIT_ACTIONS` 增 `QUOTE_CREATE` / `QUOTE_DELETE` / `QUOTE_CONVERT` |
+| `src/stores/purchase.ts` | `createOrder` 支持 isGift（价格 0、不计 totalAmount）；`inbound` 流水备注附加「赠品」 |
+| `src/stores/sales.ts` | `createOrder` 支持 isGift（按模式取价时赠品恒 0）；`outbound` 流水备注附加「赠品」 |
+| `src/views/purchase/PurchaseCreateView.vue` | 明细表新增「赠品」列（勾选后进价禁用、金额显示 🎁 赠品）、合计过滤赠品 + 含赠品件数 |
+| `src/views/sales/SalesCreateView.vue` | 同上；切批发/零售价时跳过赠品行 |
+| `src/views/purchase/PurchaseOrderDetailView.vue` / `src/views/sales/SaleOrderDetailView.vue` | 明细行「🎁 赠品」徽标、单价「—」/金额「赠品」、合计提示含赠品件数、打印 isGift 透传 |
+| `src/utils/printTemplate.ts` | `PrintItem` 增 `isGift?`；打印单价列「—」/金额列「赠品」 |
+| `src/stores/stockDoc.ts` / `src/views/warehouse/StockDocDetailView.vue` | `StockDocItem` 增 `isGift?`（按流水备注「赠品」标记）；出入库单打印识别赠品行 |
+| `src/stores/quotes.ts` | **新建**：createQuote / listQuotes / getQuote / getQuoteItems / removeQuote / convertToSale（散客自动建档、回填销售单号、防重复转换） |
+| `src/views/sales/QuotesView.vue` | **新建**：列表 / 新建 / 详情三态，页内 Tab「销售单 / 报价单」，详情「转为销售单」+ 打印 + 删除 |
+| `src/views/sales/SalesOrdersView.vue` | 页头下新增「销售单 / 报价单」Tab 切换 |
+| `src/router/index.ts` | 新增路由 `/sales/quotes`（sales + boss） |
+| `tests/round20.test.ts` | 新增 7 例（采购赠品入库 / 销售赠品出库 / 打印赠品 / 报价单创建与单号 / 散客转单建档 / 老客户不重复建档 / 禁止重复转换） |
+
+### 25.3 要点与约定
+
+- 赠品行：`isGift=true` → price=0、subtotal=0、不入 totalAmount；库存照常增减；出入库流水备注含「赠品」；打印 price='—' / amount='赠品'。
+- 报价单：`genQuoteNo()` = BJ+日期-3位随机；status `draft/sent/converted/void`；转单字段 `convertedSaleOrderId` / `convertedSaleNo` 回填；散客 `customerId=0` + `customerName`，转单时自动建档（sales store 已有 createCustomer 同表直写）。
+- 赠品台账（按供应商 / 客户汇总）按方案留作第二步，本轮不做。
+
+### 25.4 验收
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 全量 **507 通过 / 46 文件**（含新增 `tests/round20.test.ts` 7 例） |
+| 构建 | `npm run build` 0 错误 |
+| 版本 | `src/version.ts` → **V1.0-9**；`package.json` → `1.0.0-9` |
+| 文档 | `PRD.md` V2.4（第 26 节）、本文件第二十五章、`MENU_SPEC.md` 第二十轮标注 同步 |
+| 仓库 | 提交 + tag `v1.0-9` 推送 `main`；GitHub Pages 重新部署 |

@@ -205,7 +205,9 @@ const printData = computed<PrintOrderData>(() => ({
     unit: it.unit,
     quantity: Number(editQty.value[it.productId] ?? it.quantity),
     price: it.price,
-    subtotal: Number(editQty.value[it.productId] ?? it.quantity) * it.price
+    subtotal: Number(editQty.value[it.productId] ?? it.quantity) * it.price,
+    // 出入库流水的赠品行（getDoc 归并时按备注里的「赠品」标记），打印时显示为赠品
+    isGift: it.isGift
   })),
   totalQuantity: editTotalQty.value,
   totalAmount: editTotalAmount.value,

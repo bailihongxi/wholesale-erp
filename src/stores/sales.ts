@@ -28,7 +28,7 @@ export const useSalesStore = defineStore('sales', () => {
   async function createOrder(data: {
     customerId: number
     salesId: number
-    items: Array<{ product: Product; quantity: number; price?: number }>
+    items: Array<{ product: Product; quantity: number; price?: number; isGift?: boolean }>
     /** 批发 / 零售 */
     priceMode?: 'wholesale' | 'retail'
     remark: string
@@ -62,17 +62,19 @@ export const useSalesStore = defineStore('sales', () => {
     }) as number
 
     for (const item of data.items) {
-      // 优先用开单人填写的单价，其次按本单零售 / 批发模式取商品档案上的对应价格
+      // 赠品行：金额计 0、不参与合计（送经销商的赠品，拣货照常出库）
+      const isGift = item.isGift === true
       const mode = data.priceMode ?? 'wholesale'
-      const price = item.price ?? (mode === 'retail' ? item.product.retailPrice : item.product.wholesalePrice)
+      const price = isGift ? 0 : (item.price ?? (mode === 'retail' ? item.product.retailPrice : item.product.wholesalePrice))
       const subtotal = price * item.quantity
-      totalAmount += subtotal
+      if (!isGift) totalAmount += subtotal
       await db.saleOrderItems.add({
         saleOrderId: orderId,
         productId: item.product.id!,
         quantity: item.quantity,
         price,
-        subtotal
+        subtotal,
+        isGift
       })
     }
     await db.saleOrders.update(orderId, { totalAmount })
@@ -153,7 +155,7 @@ export const useSalesStore = defineStore('sales', () => {
         }
         // 同时维护所选库房的库存分布（出库一律从用户选定的库房出）
         await inv.applyLocationDelta(item.productId, locId, -actual)
-        // 记流水（出库记负数）
+        // 记流水（出库记负数）；赠品行备注附加「赠品」标记
         await db.stockRecords.add({
           type: 'sale_out',
           refOrderId: orderId,
@@ -163,7 +165,7 @@ export const useSalesStore = defineStore('sales', () => {
           createdAt: new Date().toISOString(),
           batchNo,
           locationId: locId,
-          remark
+          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark
         })
       }
     }

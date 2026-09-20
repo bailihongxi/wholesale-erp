@@ -27,10 +27,13 @@
 
       <ul v-if="isMobile" class="item-cards">
         <li v-for="(it, i) in items" :key="i" class="item-card">
-          <div class="ic-name">{{ nameOf(it.productId) }}</div>
+          <div class="ic-name">
+            {{ nameOf(it.productId) }}
+            <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+          </div>
           <div class="ic-line">数量 {{ it.quantity }} {{ unitOf(it.productId) }}</div>
-          <div v-if="canSeeAnyPrice" class="ic-line">单价 ¥{{ money(it.price) }}</div>
-          <div v-if="canSeeAnyPrice" class="ic-line">金额 ¥{{ money(it.subtotal) }}</div>
+          <div v-if="canSeeAnyPrice" class="ic-line">单价 {{ it.isGift ? '—' : '¥' + money(it.price) }}</div>
+          <div v-if="canSeeAnyPrice" class="ic-line">金额 {{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</div>
         </li>
         <li v-if="!items.length" class="empty">暂无明细</li>
       </ul>
@@ -49,17 +52,22 @@
         <tbody>
           <tr v-for="(it, i) in items" :key="i">
             <td>{{ i + 1 }}</td>
-            <td>{{ nameOf(it.productId) }}</td>
+            <td>
+              {{ nameOf(it.productId) }}
+              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+            </td>
             <td>{{ unitOf(it.productId) }}</td>
             <td class="num">{{ it.quantity }}</td>
-            <td v-if="canSeeAnyPrice" class="num">¥{{ money(it.price) }}</td>
-            <td v-if="canSeeAnyPrice" class="num">¥{{ money(it.subtotal) }}</td>
+            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '—' : '¥' + money(it.price) }}</td>
+            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</td>
           </tr>
           <tr v-if="!items.length"><td :colspan="colspan" class="empty">暂无明细</td></tr>
         </tbody>
         <tfoot v-if="items.length">
           <tr>
-            <td colspan="3" class="total-label">合计</td>
+            <td colspan="3" class="total-label">
+              合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span>
+            </td>
             <td class="num">{{ totalQty }}</td>
             <td v-if="canSeeAnyPrice" class="num"></td>
             <td v-if="canSeeAnyPrice" class="num"><b>¥{{ money(order?.totalAmount ?? 0) }}</b></td>
@@ -159,7 +167,8 @@ const showPrice = ref(true)
 const showPreview = ref(false)
 
 const colspan = computed(() => (canSeeAnyPrice.value ? 6 : 4))
-const totalQty = computed(() => items.value.reduce((s, it) => s + it.quantity, 0))
+const totalQty = computed(() => items.value.filter(it => !it.isGift).reduce((s, it) => s + it.quantity, 0))
+const giftQty = computed(() => items.value.filter(it => it.isGift).reduce((s, it) => s + it.quantity, 0))
 
 /** 打印用原始数据：交给预览组件按纸张/表头设置实时排版 */
 const printData = computed<PrintOrderData | null>(() => {
@@ -180,7 +189,8 @@ const printData = computed<PrintOrderData | null>(() => {
       unit: unitOf(it.productId),
       quantity: it.quantity,
       price: it.price,
-      subtotal: it.subtotal
+      subtotal: it.subtotal,
+      isGift: it.isGift
     })),
     totalQuantity: totalQty.value,
     totalAmount: o.totalAmount,
@@ -269,6 +279,8 @@ watch(() => route.params.id, loadOrder)
 
 <style scoped>
 .detail-page { max-width: 1100px; margin: 0 auto; }
+.gift-badge { display: inline-block; margin-left: 6px; font-size: 11px; color: var(--c-accent); background: #eaf1ff; border-radius: 4px; padding: 1px 6px; }
+.gift-note { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--c-accent); }
 .d-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .d-no { display: inline-block; font-size: 18px; color: var(--c-primary, #1a365d); margin: 0 8px 0 0; }
 .d-badge { font-size: 12px; padding: 2px 10px; border-radius: 10px; background: var(--c-bg, #f1f5f9); color: var(--c-muted, #64748b); }

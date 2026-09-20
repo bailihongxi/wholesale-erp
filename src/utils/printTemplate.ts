@@ -17,6 +17,8 @@ export interface PrintItem {
   quantity: number
   price: number
   subtotal: number
+  /** 赠品行（第二十轮）：金额列与单价列打印为「赠品 / —」，不显示金额 */
+  isGift?: boolean
 }
 
 export interface PrintOrderData {
@@ -235,8 +237,12 @@ function rowHtml(cols: PrintColumn[], item: PrintItem, no: number): string {
       case 'model': return `<td>${esc(item.model)}</td>`
       case 'unit': return `<td class="${COL_CLASS.unit}">${esc(item.unit)}</td>`
       case 'qty': return `<td class="${COL_CLASS.qty}">${item.quantity}</td>`
-      case 'price': return `<td class="${COL_CLASS.price}">${money(item.price)}</td>`
-      case 'amount': return `<td class="${COL_CLASS.amount}">${money(item.subtotal)}</td>`
+      case 'price': return item.isGift
+        ? `<td class="${COL_CLASS.price}">—</td>`
+        : `<td class="${COL_CLASS.price}">${money(item.price)}</td>`
+      case 'amount': return item.isGift
+        ? `<td class="${COL_CLASS.amount}">赠品</td>`
+        : `<td class="${COL_CLASS.amount}">${money(item.subtotal)}</td>`
       default: return '<td></td>'
     }
   }).join('')

@@ -6,7 +6,8 @@ import type {
   SaleOrder, SaleOrderItem,
   StockRecord, Payment, AuditLog,
   Location, TransferOrder, TransferItem, LocationStock, Stocktake, StocktakeItem,
-  ReturnOrder, ReturnItem, RolePerm, LedgerEntry
+  ReturnOrder, ReturnItem, RolePerm, LedgerEntry,
+  QuoteOrder, QuoteOrderItem
 } from '../types'
 
 class ERPDatabase extends Dexie {
@@ -32,6 +33,8 @@ class ERPDatabase extends Dexie {
   returnItems!: Table<ReturnItem, number>
   rolePerms!: Table<RolePerm, number>
   ledgerEntries!: Table<LedgerEntry, number>
+  quoteOrders!: Table<QuoteOrder, number>
+  quoteOrderItems!: Table<QuoteOrderItem, number>
 
   constructor() {
     super('wholesale-erp')
@@ -99,6 +102,13 @@ class ERPDatabase extends Dexie {
         if (!u.employeeNo) patch.employeeNo = `E${String(seq).padStart(3, '0')}`
         if (Object.keys(patch).length) await tx.table('users').update(u.id, patch)
       }
+    })
+    // v8：报价单（第二十轮）——客户询价 → 临时报价 → 转销售单。
+    // quoteOrders 存报价单主表（散客名字直接存 customerName，转单时自动建档）；
+    // quoteOrderItems 与销售单明细同构，转换时整单复制。
+    this.version(8).stores({
+      quoteOrders: '++id, orderNo, customerId, status, quoteDate, salesId',
+      quoteOrderItems: '++id, quoteOrderId, productId'
     })
   }
 }

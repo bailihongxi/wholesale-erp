@@ -1,6 +1,17 @@
 <template>
   <div class="orders" :class="isMobile ? 'is-mobile' : 'is-desktop'">
     <PageHeader title="销售单" sub="销售开单、审核与出库进度" />
+
+    <!-- 页内 Tab：销售单 / 报价单（第二十轮起报价单收进销售管理页内） -->
+    <div class="orders-tabs">
+      <button type="button" :class="{ active: route.path === '/sales/orders' }" @click="go('/sales/orders')">
+        销售单
+      </button>
+      <button type="button" :class="{ active: route.path === '/sales/quotes' }" @click="go('/sales/quotes')">
+        报价单
+      </button>
+    </div>
+
     <div class="toolbar">
       <SearchInput
         v-model="keyword"
@@ -74,7 +85,7 @@
 import TablePager from '../../components/TablePager.vue'
 import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSalesStore } from '../../stores/sales'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
@@ -83,6 +94,7 @@ import type { SaleOrder, Customer } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
 
 const router = useRouter()
+const route = useRoute()
 const salesStore = useSalesStore()
 const { isMobile } = useResponsive()
 
@@ -160,6 +172,12 @@ onMounted(async () => {
 
 <style scoped>
 .orders { max-width: 1100px; margin: 0 auto; }
+.orders-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.orders-tabs button {
+  height: 36px; padding: 0 18px; border: 1px solid var(--c-border-strong);
+  border-radius: 18px; background: #fff; color: var(--c-muted); font-size: 14px; cursor: pointer;
+}
+.orders-tabs button.active { background: var(--c-primary); border-color: var(--c-primary); color: #fff; font-weight: 600; }
 .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
 .tb-search { flex: 1 1 320px; min-width: 200px; }
 .filter { height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm); padding: 0 12px; background: #fff; }

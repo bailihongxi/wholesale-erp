@@ -61,7 +61,8 @@
               <th class="num" style="width:88px">可用库存</th>
               <th class="num" style="width:96px">数量</th>
               <th class="num" style="width:110px">单价（可改）</th>
-              <th class="num" style="width:110px">金额</th>
+              <th class="num" style="width:96px">金额</th>
+              <th class="center" style="width:88px">赠品</th>
               <th class="center" style="width:64px">操作</th>
             </tr>
           </thead>
@@ -79,21 +80,27 @@
                 <input v-model.number="it.quantity" type="number" min="1" :max="it.stock" class="mini-input" :class="{ bad: overStock(it) }" />
               </td>
               <td class="num">
-                <input v-model.number="it.price" type="number" min="0" class="mini-input price" />
+                <input v-model.number="it.price" type="number" min="0" class="mini-input price" :disabled="it.isGift" />
               </td>
-              <td class="num">¥{{ money(it.price * it.quantity) }}</td>
+              <td class="num">
+                <span v-if="it.isGift" class="gift-tag">🎁 赠品</span>
+                <template v-else>¥{{ money(it.price * it.quantity) }}</template>
+              </td>
+              <td class="center">
+                <input v-model="it.isGift" type="checkbox" class="gift-check" aria-label="标记为赠品" />
+              </td>
               <td class="center">
                 <button class="rm-btn" type="button" @click="removeItem(idx)">移除</button>
               </td>
             </tr>
             <tr v-if="!form.items.length">
-              <td colspan="9" class="empty">尚未添加商品，请从下方列表中选择</td>
+              <td colspan="10" class="empty">尚未添加商品，请从下方列表中选择</td>
             </tr>
           </tbody>
           <tfoot v-if="form.items.length">
             <tr>
-              <td colspan="5" class="total-label">
-                合计<span class="t-note">{{ form.items.length }} 项商品</span>
+              <td colspan="6" class="total-label">
+                合计<span class="t-note">{{ form.items.length }} 项商品{{ giftQty ? `，含赠品 ${giftQty} 件` : '' }}</span>
               </td>
               <td class="num t-qty">{{ totalQty }}</td>
               <td class="num"></td>
@@ -151,6 +158,8 @@ interface Line {
   quantity: number
   price: number
   stock: number
+  /** 赠品行：金额计 0、不参与合计，照常出库 */
+  isGift: boolean
 }
 
 const form = reactive({
@@ -163,11 +172,13 @@ const rows = ref<PickerRow[]>([])
 const submitting = ref(false)
 const priceMode = ref<PriceMode>('wholesale')
 
-const totalQty = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
-const total = computed(() => form.items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0))
+/** 合计只统计非赠品行；赠品单独计数展示（赠品行照常占库存、参与超库存校验） */
+const totalQty = computed(() => form.items.filter(it => !it.isGift).reduce((s, it) => s + (Number(it.quantity) || 0), 0))
+const giftQty = computed(() => form.items.filter(it => it.isGift).reduce((s, it) => s + (Number(it.quantity) || 0), 0))
+const total = computed(() => form.items.filter(it => !it.isGift).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0))
 const hasOverStock = computed(() => form.items.some(overStock))
 const canSubmit = computed(() =>
-  form.customerId > 0 && form.items.length > 0 && totalQty.value > 0 && !hasOverStock.value
+  form.customerId > 0 && form.items.length > 0 && totalQty.value + giftQty.value > 0 && !hasOverStock.value
 )
 
 const selectedMap = computed<Record<number, number>>(() => {
@@ -191,7 +202,8 @@ function overStock(it: Line): boolean { return (Number(it.quantity) || 0) > it.s
 function switchMode(mode: PriceMode): void {
   if (priceMode.value === mode) return
   priceMode.value = mode
-  for (const it of form.items) it.price = priceByMode(it.product)
+  // 赠品行价格恒为 0，不跟随切换
+  for (const it of form.items) if (!it.isGift) it.price = priceByMode(it.product)
   showToast(mode === 'retail' ? '已切换到零售价' : '已切换到批发价')
 }
 
@@ -206,7 +218,7 @@ function addItem(p: Product): void {
     existing.quantity += 1
     return
   }
-  form.items.push({ product: p, quantity: 1, price: priceByMode(p), stock })
+  form.items.push({ product: p, quantity: 1, price: priceByMode(p), stock, isGift: false })
 }
 
 function removeItem(idx: number): void { form.items.splice(idx, 1) }
@@ -225,7 +237,8 @@ async function handleSubmit(): Promise<void> {
     items: form.items.map(it => ({
       product: it.product,
       quantity: Number(it.quantity) || 0,
-      price: Number(it.price) || 0
+      price: Number(it.price) || 0,
+      isGift: it.isGift
     })),
     priceMode: priceMode.value,
     remark: form.remark
@@ -288,6 +301,9 @@ onMounted(async () => {
 .data-table tfoot td.t-qty { font-size: 18px; color: var(--c-text); }
 .data-table tfoot td.t-amount { font-size: 20px; color: var(--c-danger); }
 .rm-btn { border: none; background: none; color: var(--c-danger); cursor: pointer; font-size: 13px; }
+.gift-tag { color: var(--c-accent); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.gift-check { width: 16px; height: 16px; accent-color: var(--c-accent); cursor: pointer; }
+.mini-input:disabled { background: #f7f9fc; color: var(--c-muted); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 .warn-line { margin-top: 8px; font-size: 13px; color: var(--c-danger); }
 </style>

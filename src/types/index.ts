@@ -188,6 +188,8 @@ export interface PurchaseOrderItem {
   quantity: number
   price: number
   subtotal: number
+  /** 赠品行（第二十轮）：金额计 0、不参与合计，但照常入库与打印标记 */
+  isGift?: boolean
 }
 
 // 销售单主表
@@ -217,6 +219,8 @@ export interface SaleOrderItem {
   quantity: number
   price: number
   subtotal: number
+  /** 赠品行（第二十轮）：金额计 0、不参与合计，但照常出库与打印标记 */
+  isGift?: boolean
 }
 
 // 出入库流水
@@ -384,4 +388,34 @@ export interface AuditLog {
   action: string
   detail: string
   createdAt: string
+}
+
+// 报价单（第二十轮）
+export interface QuoteOrder {
+  id?: number
+  orderNo: string
+  /** 客户ID；散客（未建档询价）为 0，名字存 customerName，转销售单时自动建档 */
+  customerId: number
+  customerName: string
+  quoteDate: string
+  /** draft 待报价 / sent 已报价 / converted 已转销售单 / void 已失效 */
+  status: 'draft' | 'sent' | 'converted' | 'void'
+  totalAmount: number
+  /** 有效期天数（选填），到期后自动视为待确认 */
+  validDays?: number
+  remark: string
+  salesId: number
+  /** 转销售单后回填：销售单 ID 与单号，双向可查 */
+  convertedSaleOrderId?: number
+  convertedSaleNo?: string
+  createdAt: string
+}
+
+export interface QuoteOrderItem {
+  id?: number
+  quoteOrderId: number
+  productId: number
+  quantity: number
+  price: number
+  subtotal: number
 }

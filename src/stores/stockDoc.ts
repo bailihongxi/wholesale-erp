@@ -57,6 +57,8 @@ export interface StockDocItem {
   subtotal: number
   /** 来源单据上的订购数量，用于限制改量上限 */
   orderedQty: number
+  /** 赠品行（第二十轮）：出入库流水备注带「赠品」的明细行，打印时显示为赠品 */
+  isGift?: boolean
 }
 
 export interface StockDocDetail {
@@ -213,7 +215,8 @@ export const useStockDocStore = defineStore('stockDoc', () => {
         quantity: qty,
         price,
         subtotal: qty * price,
-        orderedQty: info?.orderedQty ?? qty
+        orderedQty: info?.orderedQty ?? qty,
+        isGift: (r.remark ?? '').includes('赠品')
       })
     }
 

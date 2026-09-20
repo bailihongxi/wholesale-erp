@@ -170,4 +170,8 @@ function handleLogout(): void {
 .is-mobile .content {
   padding: 12px;
 }
+/* 移动端内容底部要留出底部 Tab 的高度，否则页面底部操作按钮（保存/提交）会被 Tab 盖住点不到 */
+.is-mobile .content.with-tabbar {
+  padding-bottom: 76px;
+}
 </style>

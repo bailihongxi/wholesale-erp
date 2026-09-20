@@ -28,7 +28,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
   async function createOrder(data: {
     supplierId: number
     purchaserId: number
-    items: Array<{ product: Product; quantity: number; price?: number }>
+    items: Array<{ product: Product; quantity: number; price?: number; isGift?: boolean }>
     remark: string
   }): Promise<{ ok: boolean; orderId?: number; message: string }> {
     if (data.items.length === 0) return { ok: false, message: '请选择商品' }
@@ -48,16 +48,18 @@ export const usePurchaseStore = defineStore('purchase', () => {
     }) as number
 
     for (const item of data.items) {
-      // 允许开单人临时改价（改价后以表单传入的 price 为准）
-      const price = item.price ?? item.product.purchasePrice
+      // 赠品行：金额计 0、不参与合计（厂家随货送的赠品，验货照常入库）
+      const isGift = item.isGift === true
+      const price = isGift ? 0 : (item.price ?? item.product.purchasePrice)
       const subtotal = price * item.quantity
-      totalAmount += subtotal
+      if (!isGift) totalAmount += subtotal
       await db.purchaseOrderItems.add({
         purchaseOrderId: orderId,
         productId: item.product.id!,
         quantity: item.quantity,
         price,
-        subtotal
+        subtotal,
+        isGift
       })
     }
     await db.purchaseOrders.update(orderId, { totalAmount })
@@ -137,7 +139,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
         }
         // 同时维护所选库房的库存分布（入库一律进用户选定的库房）
         await inv.applyLocationDelta(item.productId, locId, actual)
-        // 记流水（带批次号，便于按单查询 / 撤回）
+        // 记流水（带批次号，便于按单查询 / 撤回）；赠品行备注附加「赠品」标记
         await db.stockRecords.add({
           type: 'purchase_in',
           refOrderId: orderId,
@@ -147,7 +149,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
           createdAt: new Date().toISOString(),
           batchNo,
           locationId: locId,
-          remark
+          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark
         })
       }
     }
