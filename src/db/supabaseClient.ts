@@ -19,5 +19,5 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 /** 当前是否启用云端数据源（false = 仍用本地 IndexedDB，即 V1.0-12 保底模式） */
 // 测试环境（vitest）强制 false，单元测试仍用本地 Dexie；浏览器运行时由这里控制
-const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test'
+const isTest = import.meta.env.MODE === 'test'
 export const USE_CLOUD = true && !isTest
