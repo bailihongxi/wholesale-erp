@@ -248,6 +248,11 @@
     <section class="block">
       <button class="danger-btn full" type="button" @click="logout">退出登录</button>
     </section>
+
+    <!-- 版本号：移动端 PageHeader 被整体隐藏，固定在页尾保证任何屏幕都看得到 -->
+    <p class="version-footer">
+      {{ APP_NAME }} · <b>{{ APP_VERSION }}</b> · 发布 {{ APP_RELEASE_DATE }}
+    </p>
   </div>
 </template>
 
@@ -275,7 +280,7 @@ import CollapseCard from '../../components/ui/CollapseCard.vue'
 import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import AppIconPanel from '../../components/AppIconPanel.vue'
 import AuditLogPanel from '../../components/AuditLogPanel.vue'
-import { APP_VERSION } from '../../version'
+import { APP_VERSION, APP_RELEASE_DATE, APP_NAME } from '../../version'
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
 } from '../../utils/priceRule'
@@ -570,6 +575,13 @@ function logout(): void {
 </script>
 
 <style scoped>
+.version-footer {
+  margin: 20px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--c-muted, #94a3b8);
+}
+.version-footer b { color: var(--c-accent, #2f6bff); font-weight: 600; }
 .settings-page { max-width: 1100px; margin: 0 auto; }
 .collapse-bar { display: flex; gap: 8px; }
 .collapse-bar .ghost-btn { height: 34px; padding: 0 14px; font-size: 13px; border-radius: var(--r-sm); }

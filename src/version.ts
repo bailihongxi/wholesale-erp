@@ -11,6 +11,6 @@
 export const APP_VERSION = 'V1.0-12'
 
 /** 版本发布基线日期 */
-export const APP_RELEASE_DATE = '2026-09-20'
+export const APP_RELEASE_DATE = '2026-09-21'
 
 export const APP_NAME = '家电批发进销存 ERP'
