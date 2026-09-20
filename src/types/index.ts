@@ -410,6 +410,8 @@ export interface QuoteOrder {
   validDays?: number
   remark: string
   salesId: number
+  /** sale=销售报价 / purchase=预采询价（默认 sale） */
+  kind?: 'sale' | 'purchase'
   /** 转销售单后回填：销售单 ID 与单号，双向可查 */
   convertedSaleOrderId?: number
   convertedSaleNo?: string

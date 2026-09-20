@@ -31,6 +31,7 @@ const routes = [
   // ===== 采购端 =====
   { path: '/purchase/home', component: () => import('../views/purchase/PurchaseHomeView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购工作台' } },
   { path: '/purchase/orders', component: () => import('../views/purchase/PurchaseOrdersView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购单' } },
+  { path: '/purchase/quotes', component: () => import('../views/purchase/PurchaseQuotesView.vue'), meta: { role: ['purchaser', 'boss'], title: '预采询价' } },
   { path: '/purchase/orders/new', component: () => import('../views/purchase/PurchaseCreateView.vue'), meta: { role: ['purchaser', 'boss'], title: '新建采购单' } },
   { path: '/purchase/orders/:id', component: () => import('../views/purchase/PurchaseOrderDetailView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购单详情' } },
   { path: '/purchase/suppliers', component: () => import('../views/purchase/SuppliersView.vue'), meta: { role: ['purchaser', 'boss'], title: '供应商管理' } },

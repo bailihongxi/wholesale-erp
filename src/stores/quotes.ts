@@ -18,6 +18,7 @@ export const useQuotesStore = defineStore('quotes', () => {
     remark: string
     validDays?: number
     salesId: number
+    kind?: 'sale' | 'purchase'
   }): Promise<{ ok: boolean; orderId?: number; message: string }> {
     if (data.items.length === 0) return { ok: false, message: '请选择商品' }
     const name = data.customerName.trim()
@@ -38,6 +39,7 @@ export const useQuotesStore = defineStore('quotes', () => {
       validDays: data.validDays && data.validDays > 0 ? data.validDays : undefined,
       remark: data.remark.trim(),
       salesId: data.salesId,
+      kind: data.kind || 'sale',
       createdAt: now
     }) as number
 
@@ -62,8 +64,9 @@ export const useQuotesStore = defineStore('quotes', () => {
     return { ok: true, orderId, message: '报价单创建成功' }
   }
 
-  async function listQuotes(): Promise<QuoteOrder[]> {
-    return await db.quoteOrders.orderBy('quoteDate').reverse().toArray()
+  async function listQuotes(kind: 'sale' | 'purchase' = 'sale'): Promise<QuoteOrder[]> {
+    const all = await db.quoteOrders.orderBy('quoteDate').reverse().toArray()
+    return all.filter(q => (q as any).kind === kind || ((q as any).kind == null && kind === 'sale'))
   }
 
   async function getQuote(id: number): Promise<QuoteOrder | undefined> {
@@ -152,7 +155,62 @@ export const useQuotesStore = defineStore('quotes', () => {
     return { ok: true, message: `已转成销售单 ${sale?.orderNo ?? ''}`, saleOrderNo: sale?.orderNo }
   }
 
+  /** 预采询价 → 采购单：供应商自动建档，明细与报价带过去 */
+  async function convertToPurchase(quoteId: number, purchaserId: number): Promise<{ ok: boolean; message: string; purchaseOrderNo?: string }> {
+    const q = await db.quoteOrders.get(quoteId)
+    if (!q) return { ok: false, message: '询价单不存在' }
+    if (q.status === 'converted') return { ok: false, message: '该询价单已转成采购单，不能重复转换' }
+
+    const items = await db.quoteOrderItems.where('quoteOrderId').equals(quoteId).toArray()
+    if (!items.length) return { ok: false, message: '询价单没有明细，无法转换' }
+
+    // 供应商自动建档
+    let supplierId = q.customerId
+    if (supplierId <= 0 && q.customerName.trim()) {
+      const s = await db.suppliers.add({
+        name: q.customerName.trim(),
+        contact: '',
+        phone: '',
+        address: '',
+        paymentTerm: '',
+        remark: '由预采询价单自动建档'
+      }) as number
+      supplierId = s
+    }
+
+    const productIds = items.map(it => it.productId)
+    const products = await db.products.bulkGet(productIds)
+    const pMap = new Map<number, Product | undefined>(productIds.map((id, i) => [id, products[i]]))
+    const orderItems = items.map(it => {
+      const p = pMap.get(it.productId)
+      return { product: p ?? ({ id: it.productId } as Product), quantity: it.quantity, price: it.price }
+    })
+
+    const { usePurchaseStore } = await import('./purchase')
+    const purchaseStore = usePurchaseStore()
+    const res = await purchaseStore.createOrder({
+      supplierId,
+      purchaserId,
+      items: orderItems,
+      remark: q.remark ? `${q.remark}（来源预采询价单 ${q.orderNo}）` : `来源预采询价单 ${q.orderNo}`
+    })
+    if (!res.ok || res.orderId == null) return { ok: false, message: res.message }
+
+    const po = await db.purchaseOrders.get(res.orderId)
+    await db.quoteOrders.update(quoteId, {
+      status: 'converted',
+      convertedSaleOrderId: res.orderId,
+      convertedSaleNo: po?.orderNo ?? ''
+    })
+    await writeLog(
+      purchaserId,
+      AUDIT_ACTIONS.QUOTE_CONVERT,
+      `预采询价单 ${q.orderNo} → 采购单 ${po?.orderNo ?? ''}（金额 ¥${q.totalAmount}）`
+    )
+    return { ok: true, message: `已转成采购单 ${po?.orderNo ?? ''}`, purchaseOrderNo: po?.orderNo }
+  }
+
   return {
-    createQuote, listQuotes, getQuote, getQuoteItems, removeQuote, convertToSale
+    createQuote, listQuotes, getQuote, getQuoteItems, removeQuote, convertToSale, convertToPurchase
   }
 })
