@@ -148,12 +148,15 @@ export async function initDefaultAdmin(): Promise<void> {
   // 任何页面与 store 层都不允许修改/停用/删除（见 stores/user.ts 各写操作）。
   // 每次登录都会走这里，老库自动补上，无需迁移。
   const sys = await db.users.where('username').equals('hawsystem').first()
+  if (sys && (sys as any).phone !== '1000000000') {
+    await db.users.update(sys.id!, { phone: '1000000000' })
+  }
   if (!sys) {
     await db.users.add({
       name: '系统管理员',
       username: 'hawsystem',
       employeeNo: 'E000',
-      phone: '13800000001',
+      phone: '1000000000',
       password: await hashPassword('admina1b22c333'),
       role: 'boss',
       status: 'active',

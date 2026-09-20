@@ -858,6 +858,12 @@ body {
   .app-layout.is-mobile .ui-page-head:not(:has(.ui-page-actions)) { display: none; }
 }
 
+/* 全端：顶部 AppLayout/MobileTopNav 已显示模块名，页面内标题/副标题全部藏掉，
+   只保留右侧操作按钮；没有操作按钮的空页头直接收起。 */
+.app-layout .ui-page-main { display: none; }
+.app-layout .ui-page-head { align-items: center; }
+.app-layout .ui-page-head:not(:has(.ui-page-actions)) { display: none; }
+
 /* 首屏骨架：页面首次拉数据期间占位，避免「先闪一下空态、再出现列表」 */
 .ui-skeleton {
   padding: 10px 14px;
