@@ -51,7 +51,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="u in filteredStaff" :key="u.id">
+            <tr v-for="u in pager.paged.value" :key="u.id">
               <td class="name-cell">
                 <span class="avatar">{{ (u.name || '?').slice(0, 1) }}</span>
                 {{ u.name }}
@@ -93,6 +93,15 @@
           </tbody>
         </table>
         <EmptyState v-else icon="👤" text="没有匹配的员工" hint="换个关键词，或点右上角新建员工" />
+
+        <TablePager
+          v-if="pager.total.value"
+          v-model:page="page"
+          :page-count="pager.pageCount.value"
+          :total="pager.total.value"
+          :size="pager.size.value"
+          show-jump
+        />
       </SectionCard>
     </div>
 
@@ -204,6 +213,8 @@ import {
   type NavItem
 } from '../../router/navConfig'
 import type { Role, User } from '../../types'
+import TablePager from '../../components/TablePager.vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SectionCard from '../../components/ui/SectionCard.vue'
 import StatCard from '../../components/ui/StatCard.vue'
@@ -294,6 +305,12 @@ const filteredStaff = computed(() => staff.value.filter(u => {
 }))
 const activeCount = computed(() => staff.value.filter(u => u.status === 'active').length)
 const roleCount = computed(() => new Set(staff.value.map(u => u.role)).size)
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(filteredStaff, PAGE_SIZE_LIST)
+watch([keyword, roleFilter], () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 function roleTone(r: string): string {
   return { boss: 'info', purchaser: 'muted', sales: 'success', finance: 'warning', warehouse: 'danger' }[r] ?? 'muted'

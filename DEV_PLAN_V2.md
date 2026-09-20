@@ -5,9 +5,9 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-4（2026-09-19 当前基线）**
-> 本文档为开发执行计划，产品对外版本统一为 **V1.0-4**（`src/version.ts` / `package.json` 同步）。
-> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**。
+> **产品版本：V1.0-5（2026-09-20 当前基线）**
+> 本文档为开发执行计划，产品对外版本统一为 **V1.0-5**（`src/version.ts` / `package.json` 同步）。
+> 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**，第十四轮见 **「十九、V1.0-4 · 第十四轮」**，第十五 / 十六轮见 **「二十、V1.0-5 · 第十五轮」「二十一、V1.0-5 · 第十六轮」**。
 
 ---
 
@@ -972,6 +972,122 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | 版本 | `src/version.ts` → **V1.0-3**；`package.json` → `1.0.0-3` |
 | 文档 | `PRD.md` V1.8（新增第 20 节）、`DEV_PLAN_V2.md`（第十八章）、`MENU_SPEC.md` 同步 |
 | 仓库 | 提交 + tag `v1.0-3` 推送 `main`；GitHub Pages 重新部署 |
+
+---
+
+## 二十、V1.0-5 · 第十五轮（2026-09-20）：全站列表统一 20 条/页 + 斑马纹
+
+### 20.1 需求与确认
+
+- 需求：**系统中所有列表统一 20 条/页分页 + 斑马纹**；点名清单：商品档案、采购单、销售单、首付款（收付款）列表、
+  操作日志、员工管理、客户管理、供应商列表。
+- 确认（用户选择）：**全部统一 20 条**（商品档案 100 → 20、库存预警 50 → 20，不留例外）。
+
+### 20.2 改动明细
+
+| 文件 | 改动 |
+|---|---|
+| `composables/usePagination.ts` | `PAGE_SIZE_PRODUCT / PAGE_SIZE_LIST / PAGE_SIZE_ALERT` 三者统一 20；文件头注释同步 |
+| `views/purchase/PurchaseOrdersView.vue` | 接入 `usePagination` + `TablePager`；表格改 `data-table`；手机端卡片加 `zebra-list` |
+| `views/sales/SalesOrdersView.vue` | 同上 |
+| `views/sales/CustomersView.vue` | 客户列表接入分页；卡片补 `zebra-list` |
+| `views/purchase/SuppliersView.vue` | 供应商卡片列表接入分页 + 斑马纹 |
+| `views/boss/AuditLogView.vue` | 操作日志接入分页；去私有 `border-collapse`；卡片补斑马纹 |
+| `views/boss/UsersManageView.vue` | 员工列表接入分页 |
+| `views/finance/FinanceOpsView.vue` | 资金流水接入分页；**合计仍按全部数据**汇总 |
+| `views/finance/LedgerView.vue` | 「记一笔」明细接入分页 |
+| `views/finance/ReconcileView.vue` | 应收应付 / 收付款各一个独立 pager（切 Tab 各记各的页码）；卡片补斑马纹 |
+| `views/warehouse/LocationsView.vue` | 库房列表接入分页；序号改 `startIndex + i`；「默认」徽标只在第 1 页首行 |
+| `views/stock/StockFlowView.vue` | 出入库流水接入分页；取数上限改 `FLOW_FETCH_LIMIT` |
+| `views/warehouse/{Inbound,Outbound,Count,Returns,Transfer}View.vue` | 手机端卡片列表补 `zebra-list` |
+| `styles/theme.css` | `.zebra-list` 错行色由 `--c-surface-alt(#fafbfd)` 提升为 `#eef2f9`（与表格同档，肉眼可辨） |
+
+### 20.3 测试
+
+- 新增 `tests/app-icon-install.test.ts` 中的分页章节：12 类列表的接线校验、卡片斑马纹校验、分页切页（50 条 → 3 页）。
+- 校准过期断言：`tests/product-batch.test.ts`（100 → 20）、`tests/stock-hub.test.ts`（50 → 20，翻页行数 50/10 → 20/20/20）。
+- 全量：**462 通过 / 42 文件 / 0 error**；`npm run build` 0 错误。
+
+### 20.4 实机验证（agent-browser，1440 视口）
+
+| 页面 | 实测结果 |
+|---|---|
+| 商品档案 | 20 行 · 共 51 条 第 1/3 页 · 斑马纹 `#fff | #eef2f9` |
+| 采购单 / 销售单 | 20 行 · 共 29 条 第 1/2 页 · 斑马纹 OK |
+| 客户 / 供应商 | 20 条 · 共 29 条 第 1/2 页（供应商为卡片列表，斑马纹 OK） |
+| 操作日志 / 员工 | 20 行 · 共 27 条 第 1/2 页 · 斑马纹 OK |
+| 财务·资金流水 / 记一笔 / 收付款 | 20 行 · 共 56 / 26 / 30 条 · 斑马纹 OK |
+| 库存·出入库流水 / 库存预警 | 20 行 · 共 42 / 50 条 · 斑马纹 OK |
+| 手机端（390 视口）销售单 | 20 张卡片 · 共 29 条 第 1/2 页 · 卡片斑马纹 OK |
+
+### 20.5 交付
+
+| 项 | 结果 |
+|---|---|
+| 版本 | `src/version.ts` → **V1.0-5**（与第十六轮同批发布）；`package.json` → `1.0.0-5` |
+| 文档 | `PRD.md` V2.0（第 21 节）、本文件第二十章、`MENU_SPEC.md` 同步 |
+
+---
+
+## 二十一、V1.0-5 · 第十六轮（2026-09-20）：应用图标自定义 + 发送到桌面
+
+### 21.1 需求与确认
+
+- 需求：**可以更改 icon，并把改好的图标发送到桌面做快捷方式**。
+- 确认（用户选择）：**完整方案** —— 自定义图标 + PWA 安装到桌面 + 离线可用。
+
+### 21.2 改动明细
+
+| 文件 | 职责 |
+|---|---|
+| `src/utils/appIcon.ts`（新增） | canvas 渲染 32/180/192/512 PNG；替换 `link[rel=icon]`、`apple-touch-icon`；重建 manifest（Blob） |
+| `src/utils/installApp.ts`（新增） | `beforeinstallprompt` 捕获与 `promptInstall()`；平台判定 `platformOf` + 分平台步骤 `installSteps`；生产环境注册 SW |
+| `src/components/AppIconPanel.vue`（新增） | 设置页面板：预览（含标签页模拟）、emoji/文字/图片三种来源、6 种底色、应用/恢复默认、发送到桌面 + 手动步骤 |
+| `src/utils/brand.ts` | 新增 `appIcon`（builtin/text/image）与 `appIconBg`，含旧配置兼容 |
+| `public/manifest.webmanifest`（新增） | PWA 清单：standalone、192/512/maskable、三个快捷入口 |
+| `public/sw.js`（新增） | Service Worker：导航 network-first、静态资源 stale-while-revalidate、缓存名 `erp-shell-v5` |
+| `public/icons/*.png`（新增 5 张） | 默认图标；由 `scripts/gen-icons.py` 纯标准库（zlib）生成 |
+| `index.html` | 补 favicon / apple-touch-icon / manifest / theme-color / 可添加到主屏幕 meta |
+| `src/main.ts` | 启动即套用已保存图标；`initInstall()`；生产注册 SW |
+| `src/views/boss/SettingsView.vue` | 新增第 9 个折叠模块「应用图标与桌面快捷方式」 |
+| `src/vite-env.d.ts`（新增） | 补 `vite/client` 类型（`import.meta.env`） |
+| `tests/setup.ts` | 统一把 canvas `getContext` 桩为 `null`（jsdom 缺 canvas，会污染「渲染无报错」断言） |
+
+### 21.3 测试
+
+新增 `tests/app-icon-install.test.ts`（33 例）：分页章节 + 图标工具 + 安装能力 + PWA 静态资源 + 面板渲染。
+全量 **462 通过 / 42 文件 / 0 error**；`npm run build` 0 错误。
+
+### 21.4 实机验证（agent-browser）
+
+| 项 | 实测结果 |
+|---|---|
+| 标签页图标 | 选 🏪 后 `32×32` / `192×192` 的 `link[rel=icon]` href 变为 `data:image/png;base64,…` |
+| 苹果主屏图标 | `apple-touch-icon` 同步变为 dataURL |
+| manifest | `link[rel=manifest]` 变为 `blob:`；`start_url / scope` 已绝对化 |
+| 恢复默认 | 三个 link 全部回到 `public/icons/*.png` |
+| 安装状态 | Chrome 显示「可一键安装」（说明 manifest + SW 满足安装条件） |
+| Service Worker | `registered:true, scope=http://localhost:4173/, active:true, controller:true`；缓存 `erp-shell-v5` 命中 110 项 |
+| 断网打开 | 拦截全部请求后刷新，登录页仍完整渲染（缓存兜底） |
+
+### 21.5 踩坑
+
+1. **页面 scoped 类名不能跨组件用**：面板初版用了 `SettingsView` 的 `.primary-btn / .ghost-btn / .btn-row`，
+   独立组件里完全没有样式 → 按钮文字挤在一起。改用全局 `ui-btn / ui-btn-primary / ui-toolbar / ui-hint`。
+   > **新组件只能用 `theme.css` 的全局类。**
+2. **图标要启动即套用**：只在设置页替换 favicon，用户刷新后会掉回默认图（像没保存）。
+3. **动态 manifest 必须绝对化 URL**：Blob manifest 的相对路径解析不了。
+4. **无 canvas 要降级**：拿不到上下文时保持原图标，别把图标弄空白。
+5. **SW 只在生产注册**：开发期与 HMR 冲突。
+6. **jsdom 无 canvas**：会往虚拟控制台抛 "Not implemented"，干扰「页面渲染无报错」类断言。
+
+### 21.6 交付
+
+| 项 | 结果 |
+|---|---|
+| 版本 | `src/version.ts` → **V1.0-5**；`package.json` → `1.0.0-5` |
+| 文档 | `PRD.md` V2.0（第 22 节）、本文件第二十一章、`MENU_SPEC.md` 同步 |
+| 仓库 | 提交 + tag `v1.0-5` 推送 `main`；GitHub Pages 重新部署 |
 
 ---
 

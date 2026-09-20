@@ -25,8 +25,8 @@
 
     <LoadingBlock v-if="loading" :rows="6" />
 
-    <ul v-else-if="isMobile" class="card-list">
-      <li v-for="o in orders" :key="o.id" class="order-card" @click="go(`/sales/orders/${o.id}`)">
+    <ul v-else-if="isMobile" class="card-list zebra-list">
+      <li v-for="o in pager.paged.value" :key="o.id" class="order-card" @click="go(`/sales/orders/${o.id}`)">
         <div class="oc-head">
           <span class="oc-no">{{ o.orderNo }}</span>
           <span class="oc-status" :class="o.status">{{ statusText(o.status) }}</span>
@@ -37,15 +37,15 @@
         </div>
         <div class="oc-date">{{ o.orderDate.slice(0, 10) }}</div>
       </li>
-      <li v-if="!orders.length" class="empty">没有符合条件的销售单</li>
+      <li v-if="!pager.total.value" class="empty">没有符合条件的销售单</li>
     </ul>
 
-    <table v-else class="order-table">
+    <table v-else class="data-table order-table">
       <thead>
         <tr><th>单号</th><th>客户</th><th>日期</th><th>金额</th><th>状态</th><th>操作</th></tr>
       </thead>
       <tbody>
-        <tr v-for="o in orders" :key="o.id">
+        <tr v-for="o in pager.paged.value" :key="o.id">
           <td>{{ o.orderNo }}</td>
           <td>{{ customerName(o.customerId) }}</td>
           <td>{{ o.orderDate.slice(0, 10) }}</td>
@@ -53,16 +53,27 @@
           <td :class="o.status">{{ statusText(o.status) }}</td>
           <td><button class="link-btn" type="button" @click="go(`/sales/orders/${o.id}`)">查看</button></td>
         </tr>
-        <tr v-if="!orders.length"><td colspan="6" class="empty">没有符合条件的销售单</td></tr>
+        <tr v-if="!pager.total.value"><td colspan="6" class="empty">没有符合条件的销售单</td></tr>
       </tbody>
     </table>
+
+    <TablePager
+      v-if="pager.total.value"
+      v-model:page="page"
+      :page-count="pager.pageCount.value"
+      :total="pager.total.value"
+      :size="pager.size.value"
+      show-jump
+    />
 
     <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/sales/orders/new')">＋</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import TablePager from '../../components/TablePager.vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesStore } from '../../stores/sales'
 import { useResponsive } from '../../composables/useResponsive'
@@ -87,6 +98,12 @@ const loading = ref(true)
 const hasFilter = computed(
   () => !!keyword.value || !!statusFilter.value || !!dateFrom.value || !!dateTo.value
 )
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(orders, PAGE_SIZE_LIST)
+watch(orders, () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 async function reload(): Promise<void> {
   let data = await salesStore.listOrders()
@@ -160,9 +177,8 @@ onMounted(async () => {
 .oc-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: var(--c-muted); }
 .oc-amt { color: var(--c-text); font-weight: 600; }
 .oc-date { font-size: 12px; color: var(--c-muted); margin-top: 4px; }
-.order-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
-.order-table th, .order-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--c-border); font-size: 14px; }
-.order-table th { background: #f1f5f9; color: var(--c-primary); }
+/* 表格外观交给全站 .data-table（含斑马纹），这里只留状态色等业务样式 */
+.order-table th, .order-table td { font-size: 14px; }
 .order-table td.completed { color: var(--c-success); }
 .order-table td.pending { color: var(--c-warning); }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; }

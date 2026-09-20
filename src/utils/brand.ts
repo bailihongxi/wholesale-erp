@@ -22,6 +22,32 @@ export interface BrandIcon {
   value: string
 }
 
+/** 应用图标（桌面快捷方式 / 浏览器标签 / 添加到主屏幕 用的那张图） */
+export type AppIconSource = 'builtin' | 'text' | 'image'
+
+export interface AppIconSetting {
+  /** builtin = 用内置的品牌图标（public/icons 里的默认图） */
+  type: AppIconSource
+  /** text 时是 emoji/文字；image 时是 dataURL 图片；builtin 时留空 */
+  value: string
+}
+
+/** 应用图标默认值：内置图，未做任何自定义 */
+export const DEFAULT_APP_ICON: AppIconSetting = { type: 'builtin', value: '' }
+
+/** 图标底色预设：gradient 为品牌蓝渐变，其余为纯色 */
+export const APP_ICON_BG_PRESETS: { key: string; label: string }[] = [
+  { key: 'gradient', label: '品牌蓝渐变' },
+  { key: '#16325c', label: '深海蓝' },
+  { key: '#2f6bff', label: '亮蓝' },
+  { key: '#1f2937', label: '墨黑' },
+  { key: '#f97316', label: '橘红' },
+  { key: '#10b981', label: '翡翠绿' },
+  { key: '#ffffff', label: '纯白' }
+]
+
+export const DEFAULT_APP_ICON_BG = 'gradient'
+
 export interface BrandConfig {
   /** 登录页左侧品牌区的标志 */
   loginLogo: BrandIcon
@@ -35,6 +61,10 @@ export interface BrandConfig {
   roleAvatars: Record<string, BrandIcon>
   /** 模块快捷图标：route -> emoji（缺省用 navConfig 默认值） */
   moduleIcons: Record<string, string>
+  /** 应用图标：桌面快捷方式 / 浏览器标签 / 添加到主屏幕（第十六轮） */
+  appIcon: AppIconSetting
+  /** 应用图标底色：gradient 或 #rrggbb */
+  appIconBg: string
 }
 
 /** 各角色头像的默认值（emoji），可被用户覆盖 */
@@ -65,7 +95,9 @@ function defaultConfig(): BrandConfig {
     loginSub: '进货 · 库存 · 销售 · 对账 全流程管理',
     sideLogo: { type: 'text', value: 'ERP' },
     roleAvatars,
-    moduleIcons: {}
+    moduleIcons: {},
+    appIcon: { ...DEFAULT_APP_ICON },
+    appIconBg: DEFAULT_APP_ICON_BG
   }
 }
 
@@ -81,7 +113,10 @@ function read(): BrandConfig {
       loginLogo: { ...base.loginLogo, ...(saved.loginLogo ?? {}) },
       sideLogo: { ...base.sideLogo, ...(saved.sideLogo ?? {}) },
       roleAvatars: { ...base.roleAvatars, ...(saved.roleAvatars ?? {}) },
-      moduleIcons: { ...base.moduleIcons, ...(saved.moduleIcons ?? {}) }
+      moduleIcons: { ...base.moduleIcons, ...(saved.moduleIcons ?? {}) },
+      // 老版本 localStorage 里没有 appIcon，缺省即内置图，升级不会变成空白图标
+      appIcon: { ...base.appIcon, ...(saved.appIcon ?? {}) },
+      appIconBg: saved.appIconBg ?? base.appIconBg
     }
   } catch {
     // 配置损坏时静默回落默认值，绝不让页面因为一段脏 localStorage 打不开
@@ -136,6 +171,18 @@ export function useBrand() {
         ...config.value,
         moduleIcons: { ...config.value.moduleIcons, [route]: icon }
       }
+      persist()
+    },
+    setAppIcon(v: AppIconSetting): void {
+      config.value = { ...config.value, appIcon: { ...v } }
+      persist()
+    },
+    setAppIconBg(bg: string): void {
+      config.value = { ...config.value, appIconBg: bg }
+      persist()
+    },
+    resetAppIcon(): void {
+      config.value = { ...config.value, appIcon: { ...DEFAULT_APP_ICON }, appIconBg: DEFAULT_APP_ICON_BG }
       persist()
     },
     setRoleAvatar(role: string, v: BrandIcon): void {

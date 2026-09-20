@@ -2,7 +2,7 @@
   <div class="settings-page">
     <PageHeader
       title="系统设置"
-      sub="公司信息、员工与权限、数据备份与云同步"
+      sub="公司信息、品牌图标、桌面快捷方式、数据备份与云同步"
       :badge="APP_VERSION"
       badge-tone="muted"
     >
@@ -27,6 +27,9 @@
 
     <!-- 品牌与图标：登录页标志 / 各角色头像 / 网页版快捷图标 -->
     <BrandSettingsPanel v-model:open="panels.brand" />
+
+    <!-- 应用图标与桌面快捷方式：换图标 + 发送到桌面（第十六轮） -->
+    <AppIconPanel v-model:open="panels.appicon" />
 
     <!-- 数据备份与恢复 -->
     <CollapseCard v-model="panels.backup" title="数据备份与恢复">
@@ -262,6 +265,7 @@ import {
 import PageHeader from '../../components/ui/PageHeader.vue'
 import CollapseCard from '../../components/ui/CollapseCard.vue'
 import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
+import AppIconPanel from '../../components/AppIconPanel.vue'
 import { APP_VERSION } from '../../version'
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
@@ -285,13 +289,15 @@ const previewRetail = computed(() => calcRetail(sampleCost.value, rule.value))
  * 默认只展开「公司信息」，其余收成一行标题，页面不再被表单撑得很长；
  * 展开状态记在 localStorage，下次进来保持原来的样子。
  */
-const PANEL_KEYS = ['company', 'brand', 'backup', 'demo', 'price', 'print', 'warehouse', 'sync'] as const
+const PANEL_KEYS = [
+  'company', 'brand', 'appicon', 'backup', 'demo', 'price', 'print', 'warehouse', 'sync'
+] as const
 type PanelKey = typeof PANEL_KEYS[number]
 const PANEL_STORAGE_KEY = 'erp_settings_panels'
 
 function defaultPanels(): Record<PanelKey, boolean> {
   return {
-    company: true, brand: false, backup: false, demo: false,
+    company: true, brand: false, appicon: false, backup: false, demo: false,
     price: false, print: false, warehouse: false, sync: false
   }
 }

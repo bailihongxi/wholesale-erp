@@ -4,7 +4,7 @@
 
     <!-- ============ 待发货 ============ -->
     <template v-if="tab === 'pending'">
-      <ul v-if="isMobile" class="card-list">
+      <ul v-if="isMobile" class="card-list zebra-list">
         <li v-for="o in orders" :key="o.id" class="order-card" @click="go(`/warehouse/outbound/${o.id}`)">
           <div class="oc-head">
             <span class="oc-no">{{ o.orderNo }}</span>

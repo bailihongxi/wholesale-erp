@@ -18,7 +18,7 @@
     <section class="block">
       <LoadingBlock v-if="loading" :rows="7" />
 
-      <table v-else-if="!isMobile" class="log-table">
+      <table v-else-if="!isMobile" class="data-table log-table">
         <thead>
           <tr>
             <th>时间</th>
@@ -28,13 +28,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="l in list" :key="l.id">
+          <tr v-for="l in pager.paged.value" :key="l.id">
             <td class="c-time">{{ fmt(l.createdAt) }}</td>
             <td>{{ operatorName(l.operatorId) }}</td>
             <td><span class="a-badge">{{ l.action }}</span></td>
             <td class="c-detail">{{ l.detail }}</td>
           </tr>
-          <tr v-if="!list.length">
+          <tr v-if="!pager.total.value">
             <td colspan="4" class="empty">
               {{ hasFilter ? '没有匹配的日志，试试清除筛选' : '暂无操作日志' }}
             </td>
@@ -42,8 +42,8 @@
         </tbody>
       </table>
 
-      <ul v-else class="log-cards">
-        <li v-for="l in list" :key="l.id" class="log-card">
+      <ul v-else class="zebra-list log-cards">
+        <li v-for="l in pager.paged.value" :key="l.id" class="log-card">
           <div class="lc-head">
             <span class="a-badge">{{ l.action }}</span>
             <span class="lc-time">{{ fmt(l.createdAt) }}</span>
@@ -51,16 +51,27 @@
           <div class="lc-detail">{{ l.detail }}</div>
           <div class="lc-op">操作人：{{ operatorName(l.operatorId) }}</div>
         </li>
-        <li v-if="!list.length" class="empty">
+        <li v-if="!pager.total.value" class="empty">
           {{ hasFilter ? '没有匹配的日志，试试清除筛选' : '暂无操作日志' }}
         </li>
       </ul>
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import TablePager from '../../components/TablePager.vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import SearchInput from '../../components/SearchInput.vue'
 import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
@@ -94,6 +105,12 @@ const list = computed(() => {
   return [...data].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
 })
 
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(list, PAGE_SIZE_LIST)
+// 关键字 / 动作筛选变了就回第一页
+watch([keyword, actionFilter], () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
+
 function operatorName(id: number): string {
   return users.value.find(u => u.id === id)?.name ?? `#${id}`
 }
@@ -123,7 +140,8 @@ onMounted(reload)
 }
 .tb-tip { font-size: 12px; color: var(--c-muted, #64748b); }
 
-.log-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+/* 表格外观交给全站 .data-table（含斑马纹与圆角），这里只留字号 */
+.log-table { font-size: 14px; }
 .log-table th, .log-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--c-border, #e2e8f0); }
 .log-table th { background: #f1f5f9; color: var(--c-primary, #1a365d); }
 .c-time { color: var(--c-muted, #64748b); font-size: 13px; white-space: nowrap; }

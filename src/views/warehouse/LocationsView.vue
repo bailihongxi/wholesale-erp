@@ -46,15 +46,16 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(l, i) in locations" :key="l.id">
-            <td class="center">{{ i + 1 }}</td>
+          <tr v-for="(l, i) in pager.paged.value" :key="l.id">
+            <td class="center">{{ pager.startIndex.value + i }}</td>
             <td>
               <template v-if="editingId === l.id">
                 <input v-model="editName" class="txt-input inline" type="text" maxlength="20" />
               </template>
               <template v-else>
                 <span class="loc-name">{{ l.name }}</span>
-                <span v-if="i === 0" class="badge default-badge">默认</span>
+                <!-- 「默认」只给真正的第一条，翻页后不能再按 i===0 兜 -->
+                <span v-if="i === 0 && pager.page.value === 1" class="badge default-badge">默认</span>
               </template>
             </td>
             <td>
@@ -85,11 +86,20 @@
               </span>
             </td>
           </tr>
-          <tr v-if="!locations.length">
+          <tr v-if="!pager.total.value">
             <td colspan="6" class="empty">还没有库房，请先新增一个</td>
           </tr>
         </tbody>
       </table>
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
 
       <p class="foot-tip">
         「{{ locations[0]?.name || '默认库房' }}」是默认库房：入库、出库未另行选择时货物落在这里。
@@ -99,10 +109,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { showToast, showConfirmDialog } from 'vant'
 import { useInventoryStore } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import TablePager from '../../components/TablePager.vue'
 import type { Location } from '../../types'
 
 const inventoryStore = useInventoryStore()
@@ -121,6 +133,12 @@ const busy = ref(false)
 function operatorId(): number {
   return userStore.currentUser?.id ?? 1
 }
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(locations, PAGE_SIZE_LIST)
+watch(locations, () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 async function load(): Promise<void> {
   await inventoryStore.ensureLocations()
@@ -213,7 +231,7 @@ onMounted(load)
 .btn.primary { border: none; background: var(--c-accent); color: #fff; }
 .btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.data-table { width: 100%; border-collapse: collapse; }
+/* 宽度与边框交给全站 .data-table，避免 collapse 把圆角与斑马纹底色挤掉 */
 .data-table th, .data-table td {
   padding: 11px 12px; border-bottom: 1px solid var(--c-border);
   font-size: 14px; text-align: left; color: var(--c-text);

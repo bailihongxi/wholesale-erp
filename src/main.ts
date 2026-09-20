@@ -6,12 +6,40 @@ import 'vant/lib/index.css'
 import './styles/theme.css'
 import App from './App.vue'
 import router from './router'
+import { useBrand } from './utils/brand'
+import { applyAppIcon } from './utils/appIcon'
+import { initInstall, registerServiceWorker } from './utils/installApp'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(Vant)
 app.mount('#app')
+
+/**
+ * 启动即套用「已保存的应用图标」（第十六轮）。
+ *
+ * 不做这一步的话：用户换过图标 → 刷新页面 → 标签页又变回默认图，
+ * 只有再进一次设置页才会变回来，看起来像没保存成功。
+ * 放在挂载之后异步做，不拖慢首屏。
+ */
+function bootAppIcon(): void {
+  try {
+    const { config } = useBrand()
+    applyAppIcon(config.value.appIcon, config.value.appIconBg).catch(() => undefined)
+  } catch {
+    /* 图标应用失败不影响系统使用 */
+  }
+}
+
+/**
+ * 安装能力与离线缓存（第十六轮）。
+ *  - initInstall：监听 beforeinstallprompt / appinstalled，供设置页的「发送到桌面」使用；
+ *  - registerServiceWorker：仅生产环境注册，断网后仍能打开界面。
+ */
+initInstall()
+registerServiceWorker(import.meta.env.PROD)
+bootAppIcon()
 
 /**
  * 路由分包预取。

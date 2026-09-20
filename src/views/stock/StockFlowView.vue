@@ -7,7 +7,7 @@
 
     <template v-else>
       <ul v-if="isMobile" class="zebra-list">
-        <li v-for="r in records" :key="r.id" class="flow-card">
+        <li v-for="r in pager.paged.value" :key="r.id" class="flow-card">
           <div class="fc-head">
             <span class="r-type" :class="r.type">{{ typeLabel(r.type) }}</span>
             <span class="r-qty" :class="r.quantity > 0 ? 'in' : 'out'">
@@ -32,8 +32,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(r, i) in records" :key="r.id">
-            <td class="center c-muted">{{ i + 1 }}</td>
+          <tr v-for="(r, i) in pager.paged.value" :key="r.id">
+            <td class="center c-muted">{{ pager.startIndex.value + i }}</td>
             <td class="c-muted">{{ fmtDate(r.createdAt) }}</td>
             <td><span class="ui-badge" :class="r.quantity > 0 ? 'success' : 'muted'">{{ typeLabel(r.type) }}</span></td>
             <td>{{ r.productName }}</td>
@@ -45,15 +45,29 @@
           <tr v-if="!records.length"><td colspan="6" class="empty">暂无流水</td></tr>
         </tbody>
       </table>
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
+import TablePager from '../../components/TablePager.vue'
 import { useResponsive } from '../../composables/useResponsive'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import { db } from '../../db'
+
+/** 一次性取回的上限：分页只负责显示，这里防止极端数据量把整表拉进内存 */
+const FLOW_FETCH_LIMIT = 500
 
 interface FlowRow {
   id?: number
@@ -69,9 +83,14 @@ const { isMobile } = useResponsive()
 const records = ref<FlowRow[]>([])
 const loading = ref(true)
 
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(records, PAGE_SIZE_LIST)
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
+
 async function load(): Promise<void> {
   try {
-    const rows = await db.stockRecords.orderBy('createdAt').reverse().limit(50).toArray()
+    const rows = await db.stockRecords.orderBy('createdAt').reverse().limit(FLOW_FETCH_LIMIT).toArray()
     // 商品名一次性查全，避免逐条查库
     const ids = Array.from(new Set(rows.map(r => r.productId)))
     const products = await db.products.bulkGet(ids)

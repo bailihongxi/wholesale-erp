@@ -31,8 +31,8 @@
         <b>¥{{ balanceTotal.toLocaleString() }}</b>
       </div>
 
-      <ul class="card-list">
-        <li v-for="r in filteredCurrent" :key="r.orderId" class="recon-card">
+      <ul class="card-list zebra-list">
+        <li v-for="r in reconPager.paged.value" :key="r.orderId" class="recon-card">
           <div class="rc-head">
             <span class="rc-no">{{ r.orderNo }}</span>
             <span class="rc-bal" :class="{ settled: r.balance <= 0 }">
@@ -58,10 +58,19 @@
             <button class="cancel-btn" type="button" @click="editingId = null">取消</button>
           </div>
         </li>
-        <li v-if="!filteredCurrent.length" class="empty">
+        <li v-if="!reconPager.total.value" class="empty">
           {{ mode === 'receivable' ? '没有符合条件的应收' : '没有符合条件的应付' }}
         </li>
       </ul>
+
+      <TablePager
+        v-if="reconPager.total.value"
+        v-model:page="reconPage"
+        :page-count="reconPager.pageCount.value"
+        :total="reconPager.total.value"
+        :size="reconPager.size.value"
+        show-jump
+      />
     </template>
 
     <!-- ============ 收付款流水 ============ -->
@@ -90,8 +99,8 @@
         付款 <b class="out">¥{{ payTotal.toLocaleString() }}</b>
       </div>
 
-      <ul v-if="isMobile" class="card-list">
-        <li v-for="p in filteredPayments" :key="p.id" class="pay-card">
+      <ul v-if="isMobile" class="card-list zebra-list">
+        <li v-for="p in payPager.paged.value" :key="p.id" class="pay-card">
           <div class="rc-head">
             <span class="rc-no">{{ p.orderNo }}</span>
             <span class="rc-bal" :class="p.type">{{ p.type === 'receive' ? '+' : '-' }}¥{{ p.amount.toLocaleString() }}</span>
@@ -99,7 +108,7 @@
           <div class="rc-sub">{{ p.counterpartyName }} · {{ p.type === 'receive' ? '收款' : '付款' }}</div>
           <div class="rc-sub">{{ fmtTime(p.payDate) }} · {{ p.operatorName }}{{ p.remark ? ` · ${p.remark}` : '' }}</div>
         </li>
-        <li v-if="!filteredPayments.length" class="empty">没有符合条件的收付款记录</li>
+        <li v-if="!payPager.total.value" class="empty">没有符合条件的收付款记录</li>
       </ul>
 
       <table v-else class="pay-table data-table">
@@ -110,7 +119,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in filteredPayments" :key="p.id">
+          <tr v-for="p in payPager.paged.value" :key="p.id">
             <td>{{ fmtTime(p.payDate) }}</td>
             <td :class="p.type">{{ p.type === 'receive' ? '收款' : '付款' }}</td>
             <td>{{ p.orderNo }}</td>
@@ -119,9 +128,18 @@
             <td>{{ p.operatorName }}</td>
             <td>{{ p.remark || '-' }}</td>
           </tr>
-          <tr v-if="!filteredPayments.length"><td colspan="7" class="empty">没有符合条件的收付款记录</td></tr>
+          <tr v-if="!payPager.total.value"><td colspan="7" class="empty">没有符合条件的收付款记录</td></tr>
         </tbody>
       </table>
+
+      <TablePager
+        v-if="payPager.total.value"
+        v-model:page="payPage"
+        :page-count="payPager.pageCount.value"
+        :total="payPager.total.value"
+        :size="payPager.size.value"
+        show-jump
+      />
     </template>
   </div>
 </template>
@@ -132,6 +150,8 @@ import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
+import TablePager from '../../components/TablePager.vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import type { PaymentHistoryRow } from '../../types'
@@ -296,6 +316,16 @@ function fmtTime(s: string): string {
 watch(mode, () => { keyword.value = '' })
 
 onMounted(reload)
+
+// 全站统一：两张列表各自 20 条/页 + 斑马纹（表格已挂 data-table）
+// 上方「共 N 笔 / 余额合计 / 收款·付款合计」仍按全部数据汇总，不随翻页变化
+const reconPager = usePagination(filteredCurrent, PAGE_SIZE_LIST)
+const reconPage = computed({ get: () => reconPager.page.value, set: v => reconPager.go(v) })
+watch([keyword, settleFilter], () => reconPager.reset())
+
+const payPager = usePagination(filteredPayments, PAGE_SIZE_LIST)
+const payPage = computed({ get: () => payPager.page.value, set: v => payPager.go(v) })
+watch([keyword, payType, dateFrom, dateTo], () => payPager.reset())
 </script>
 
 <style scoped>
@@ -332,9 +362,8 @@ onMounted(reload)
 .cancel-btn:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); }
 .link-btn { margin-top: 8px; border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 14px; }
 
-.pay-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
-.pay-table th, .pay-table td { padding: 11px 13px; text-align: left; border-bottom: 1px solid var(--c-border); font-size: 14px; }
-.pay-table th { background: #f1f5f9; color: var(--c-primary); }
+/* 表格外观交给全站 .data-table（含斑马纹），这里只留业务排版 */
+.pay-table th, .pay-table td { font-size: 14px; }
 .pay-table .num { text-align: right; }
 .pay-table td.receive { color: var(--c-success); }
 .pay-table td.pay { color: var(--c-danger, #dc2626); }

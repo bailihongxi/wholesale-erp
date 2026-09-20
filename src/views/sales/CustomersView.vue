@@ -23,8 +23,8 @@
 
       <LoadingBlock v-if="loading" :rows="6" />
 
-      <ul v-else-if="isMobile" class="card-list">
-        <li v-for="c in list" :key="c.id" class="cust-card" @click="openEdit(c)">
+      <ul v-else-if="isMobile" class="zebra-list card-list">
+        <li v-for="c in pager.paged.value" :key="c.id" class="cust-card" @click="openEdit(c)">
           <div class="c-head">
             <span class="c-name">{{ c.name }}</span>
             <span v-if="c.loginPhone" class="badge dealer">经销商</span>
@@ -38,12 +38,12 @@
             <span v-if="invoiceSummary(c)" class="c-inv-txt">{{ invoiceSummary(c) }}</span>
           </div>
         </li>
-        <li v-if="!list.length" class="empty">
+        <li v-if="!pager.total.value" class="empty">
           {{ hasKeyword ? '没有匹配的客户，试试清除搜索' : '暂无客户，点击右上角新增' }}
         </li>
       </ul>
 
-      <table v-else class="cust-table">
+      <table v-else class="data-table cust-table">
         <thead>
           <tr>
             <th>客户名称</th>
@@ -57,7 +57,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in list" :key="c.id">
+          <tr v-for="c in pager.paged.value" :key="c.id">
             <td>
               <span class="c-name">{{ c.name }}</span>
               <span v-if="c.loginPhone" class="badge dealer">经销商</span>
@@ -78,13 +78,22 @@
             </td>
             <td><button class="link-btn" type="button" @click="openEdit(c)">编辑</button></td>
           </tr>
-          <tr v-if="!list.length">
+          <tr v-if="!pager.total.value">
             <td colspan="8" class="empty">
               {{ hasKeyword ? '没有匹配的客户，试试清除搜索' : '暂无客户，点击右上角新增' }}
             </td>
           </tr>
         </tbody>
       </table>
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
     </div>
 
     <!-- 新增 / 编辑表单 -->
@@ -125,7 +134,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import TablePager from '../../components/TablePager.vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { ref, computed, onMounted, watch } from 'vue'
 import { showToast } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
 import { useSalesStore } from '../../stores/sales'
@@ -173,6 +184,12 @@ const list = computed(() => {
   if (filterType.value === 'wholesale') data = data.filter(c => !c.loginPhone)
   return data
 })
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(list, PAGE_SIZE_LIST)
+watch([keyword, filterType], () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 const loading = ref(true)
 
@@ -294,10 +311,8 @@ onMounted(reload)
 }
 .f-area:focus { border-color: var(--c-accent, #2563eb); }
 
-.cust-table { width: 100%; border-collapse: collapse; }
-.cust-table th, .cust-table td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--c-border, #e2e8f0); font-size: 14px; }
-.cust-table th { background: #f1f5f9; color: var(--c-primary, #1a365d); }
-.cust-table tbody tr:hover { background: #f8fafc; }
+/* 表格外观交给全站 .data-table（含斑马纹），这里只留业务排版 */
+.cust-table th, .cust-table td { font-size: 14px; }
 .link-btn { border: none; background: none; color: var(--c-accent, #2563eb); cursor: pointer; font-size: 14px; }
 
 .form-card { display: block; }

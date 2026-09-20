@@ -87,7 +87,7 @@
 
     <!-- ============ 调拨历史 ============ -->
     <template v-else>
-      <ul v-if="isMobile" class="card-list">
+      <ul v-if="isMobile" class="card-list zebra-list">
         <li v-for="d in history" :key="d.orderNo" class="doc-card">
           <div class="oc-head">
             <span class="oc-no">{{ d.orderNo }}</span>

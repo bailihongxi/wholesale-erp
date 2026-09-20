@@ -13,7 +13,7 @@ import {
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, applyRounding, round2
 } from '../src/utils/priceRule'
-import { PAGE_SIZE_PRODUCT, PAGE_SIZE_LIST } from '../src/composables/usePagination'
+import { PAGE_SIZE_PRODUCT, PAGE_SIZE_LIST, PAGE_SIZE_ALERT } from '../src/composables/usePagination'
 
 async function seedProduct(over: Record<string, unknown> = {}) {
   const ps = useProductStore()
@@ -226,9 +226,11 @@ describe('商品档案导入导出与去重', () => {
 // ============================================================ 分页粒度
 
 describe('分页粒度约定', () => {
-  it('商品档案 100 条/页，其余商品列表 20 条/页', () => {
-    expect(PAGE_SIZE_PRODUCT).toBe(100)
+  // 第十五轮起全站统一：商品档案不再单独 100 条/页
+  it('所有列表统一 20 条/页（商品档案 / 预警 / 通用列表三者一致）', () => {
     expect(PAGE_SIZE_LIST).toBe(20)
+    expect(PAGE_SIZE_PRODUCT).toBe(20)
+    expect(PAGE_SIZE_ALERT).toBe(20)
   })
 })
 

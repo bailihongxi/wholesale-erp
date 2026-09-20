@@ -159,7 +159,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in rows" :key="r.id">
+          <tr v-for="r in pager.paged.value" :key="r.id">
             <td class="mono">{{ r.orderNo }}</td>
             <td>{{ r.entryDate }}</td>
             <td>
@@ -188,11 +188,22 @@
         </tfoot>
       </table>
       <EmptyState v-else icon="🧾" text="还没有记一笔" hint="左边填好金额与分类，点「保存这一笔」" />
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
     </SectionCard>
   </div>
 </template>
 
 <script setup lang="ts">
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import TablePager from '../../components/TablePager.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
 import { useFinanceStore } from '../../stores/finance'
@@ -337,6 +348,12 @@ async function loadParties(): Promise<void> {
 }
 
 watch(filter, reload)
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+// 合计仍按全部 rows 汇总，翻页不影响
+const pager = usePagination(rows, PAGE_SIZE_LIST)
+watch(rows, () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 onMounted(async () => {
   await loadParties()

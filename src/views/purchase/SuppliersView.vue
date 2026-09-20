@@ -17,8 +17,8 @@
 
       <LoadingBlock v-if="loading" :rows="5" />
 
-      <ul v-else class="list">
-        <li v-for="s in list" :key="s.id" class="item" @click="openEdit(s)">
+      <ul v-else class="zebra-list list">
+        <li v-for="s in pager.paged.value" :key="s.id" class="item" @click="openEdit(s)">
           <div class="i-row">
             <span class="i-name">{{ s.name }}</span>
             <span
@@ -33,10 +33,19 @@
           <div v-if="s.address" class="i-addr">地址：{{ s.address }}</div>
           <div v-if="s.remark" class="i-remark">备注：{{ s.remark }}</div>
         </li>
-        <li v-if="!list.length" class="empty">
+        <li v-if="!pager.total.value" class="empty">
           {{ hasKeyword ? '没有匹配的供应商，试试清除搜索' : '暂无供应商，点击右上角新增' }}
         </li>
       </ul>
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
     </div>
 
     <div v-if="showForm" class="form-card">
@@ -66,7 +75,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import TablePager from '../../components/TablePager.vue'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { ref, computed, onMounted, watch } from 'vue'
 import { showToast } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
 import { db } from '../../db'
@@ -99,6 +110,12 @@ const list = computed(() => {
     (s.taxNo ?? '').toLowerCase().includes(kw)
   )
 })
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(list, PAGE_SIZE_LIST)
+watch(keyword, () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 async function reload(): Promise<void> {
   try {
@@ -177,6 +194,8 @@ onMounted(reload)
   background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
   box-shadow: 0 2px 10px rgba(26,54,93,0.06); cursor: pointer;
 }
+/* 卡片列表斑马纹：与表格视觉规则一致，防止长列表看串行 */
+.list > li.item:nth-child(even) { background: var(--c-surface-alt, #eef2f9); }
 .i-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .i-name { font-weight: 600; color: var(--c-primary); }
 .i-sub { font-size: 13px; color: var(--c-muted); margin-top: 4px; }

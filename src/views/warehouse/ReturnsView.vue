@@ -108,7 +108,7 @@
           <tr v-if="!history.length"><td colspan="8" class="empty">暂无退换货记录</td></tr>
         </tbody>
       </table>
-      <ul v-else class="card-list">
+      <ul v-else class="card-list zebra-list">
         <li v-for="d in history" :key="d.orderNo" class="doc-card" @click="showDetail(d)">
           <div class="oc-head">
             <span class="oc-no">{{ d.orderNo }}</span>

@@ -1,7 +1,7 @@
 /**
  * 第十二轮回归测试：
  *  - 库存作业并入库存管理（Hub 页四个 Tab）
- *  - 库存预警：每页固定 50 条 + 斑马纹表格 + 分页
+ *  - 库存预警：每页 20 条（全站统一）+ 斑马纹表格 + 分页
  *  - 首屏骨架（避免"先闪空态再出数据"）
  *  - 电脑端筛选条紧凑化（仅 min-width:768px 生效，手机端不受影响）
  *  - 品牌与图标可自定义（快捷图标 / 登录页头像 / 各角色头像）
@@ -16,7 +16,7 @@ import 'fake-indexeddb/auto'
 import StockManageView from '../src/views/stock/StockManageView.vue'
 import StockAlertView from '../src/views/stock/StockAlertView.vue'
 import LoadingBlock from '../src/components/ui/LoadingBlock.vue'
-import { PAGE_SIZE_ALERT, PAGE_SIZE } from '../src/composables/usePagination'
+import { PAGE_SIZE_ALERT, PAGE_SIZE_LIST } from '../src/composables/usePagination'
 import { useBrand, DEFAULT_ROLE_AVATARS } from '../src/utils/brand'
 import { ALL_MODULES } from '../src/router/navConfig'
 import type { Product } from '../src/types'
@@ -53,19 +53,19 @@ const testRouter = createRouter({
   ]
 })
 
-describe('库存预警：每页 50 条 + 斑马纹', () => {
+describe('库存预警：每页 20 条（全站统一）+ 斑马纹', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     // jsdom 默认 1024 宽，走电脑端表格分支
     window.innerWidth = 1024
   })
 
-  it('预警模块每页固定 50 条（与商品列表的 20 条区分开）', () => {
-    expect(PAGE_SIZE_ALERT).toBe(50)
-    expect(PAGE_SIZE_ALERT).not.toBe(PAGE_SIZE)
+  it('预警模块与全站一致，每页 20 条（不再单独用 50）', () => {
+    expect(PAGE_SIZE_ALERT).toBe(20)
+    expect(PAGE_SIZE_ALERT).toBe(PAGE_SIZE_LIST)
   })
 
-  it('60 条预警数据：首页只渲染 50 行，翻到第 2 页剩 10 行', async () => {
+  it('60 条预警数据：每页 20 行，共 3 页且翻页行数正确', async () => {
     const products = makeProducts(60)
     const stock: Record<number, number> = {}
     products.forEach(p => { stock[p.id!] = 2 }) // 全部低于预警值 10
@@ -79,19 +79,25 @@ describe('库存预警：每页 50 条 + 斑马纹', () => {
     // 表格用全站统一的 .data-table（自带斑马纹）+ 预警专用类
     const table = w.find('table.data-table.alert-table')
     expect(table.exists()).toBe(true)
-    expect(w.findAll('table.alert-table tbody tr.is-warn').length).toBe(50)
+    expect(w.findAll('table.alert-table tbody tr.is-warn').length).toBe(20)
 
-    // 分页条：共 60 条，两页
+    // 分页条：共 60 条，三页
     const info = w.find('.pager-info').text()
     expect(info).toContain('共')
     expect(info).toContain('60')
-    expect(info).toContain('第 1 / 2 页')
+    expect(info).toContain('第 1 / 3 页')
 
     // 翻到第 2 页
     await w.find('.pager-btn[aria-label="下一页"]').trigger('click')
     await flushPromises()
-    expect(w.findAll('table.alert-table tbody tr.is-warn').length).toBe(10)
-    expect(w.find('.pager-info').text()).toContain('第 2 / 2 页')
+    expect(w.findAll('table.alert-table tbody tr.is-warn').length).toBe(20)
+    expect(w.find('.pager-info').text()).toContain('第 2 / 3 页')
+
+    // 翻到末页（第 3 页）
+    await w.find('.pager-btn[aria-label="下一页"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('table.alert-table tbody tr.is-warn').length).toBe(20)
+    expect(w.find('.pager-info').text()).toContain('第 3 / 3 页')
   })
 
   it('表格斑马纹由全站 .data-table 统一提供（奇偶行底色不同）', () => {

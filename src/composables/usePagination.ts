@@ -1,6 +1,7 @@
 /**
  * 通用分页组合式。
- * 全站商品类列表统一走这里：商品档案 100 条/页，其余商品明细列表 20 条/页。
+ * 全站所有列表统一走这里，每页固定 20 条（第十五轮起无例外，
+ * 含商品档案、库存预警、经营报表预警，以及全部业务单据与档案列表）。
  */
 import { computed, ref, watch, type Ref } from 'vue'
 
@@ -27,10 +28,18 @@ export interface Pagination {
   reset(): void
 }
 
-/** 约定的分页粒度：商品档案 100 条，其余商品列表 20 条，库存预警 50 条 */
-export const PAGE_SIZE_PRODUCT = 100
+/** 约定的分页粒度：全站所有列表一律 20 条/页（第十五轮起无例外） */
 export const PAGE_SIZE_LIST = 20
-export const PAGE_SIZE_ALERT = 50
+
+/**
+ * 历史专用粒度，现已与 PAGE_SIZE_LIST 统一。
+ *
+ * 这两个名字曾经分别代表「商品档案 100 条」与「库存预警 50 条」，
+ * 第十五轮按「所有列表都 20 条/页」的要求合并为同一个值。
+ * 保留导出是为了让既有调用点与测试不必改动，新增列表请直接用 PAGE_SIZE_LIST。
+ */
+export const PAGE_SIZE_PRODUCT = PAGE_SIZE_LIST
+export const PAGE_SIZE_ALERT = PAGE_SIZE_LIST
 
 export function usePagination<T>(source: Ref<T[]>, size = PAGE_SIZE_LIST): Pagination {
   const page = ref(1)

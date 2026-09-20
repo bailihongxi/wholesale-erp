@@ -26,3 +26,11 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     dispatchEvent: () => false
   })
 }
+
+// jsdom 未安装 canvas 包，HTMLCanvasElement.getContext 会把
+// "Not implemented" 当错误抛给虚拟控制台，导致「页面渲染无报错」类断言被噪声打挂。
+// 应用里 canvas 只用于把应用图标渲染成 PNG，这里统一桩成 null，
+// 正好覆盖「环境不支持 canvas 时优雅降级」这条分支。
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = (() => null) as never
+}

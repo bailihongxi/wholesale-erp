@@ -55,7 +55,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in filtered" :key="r.key">
+              <tr v-for="r in pager.paged.value" :key="r.key">
                 <td>{{ r.date }}</td>
                 <td>
                   <span class="ui-badge" :class="r.badge">{{ r.kindLabel }}</span>
@@ -74,6 +74,15 @@
             </tfoot>
           </table>
           <EmptyState v-else icon="💸" text="该区间没有资金流水" hint="收款、付款或记一笔后会出现在这里" />
+
+      <TablePager
+        v-if="pager.total.value"
+        v-model:page="page"
+        :page-count="pager.pageCount.value"
+        :total="pager.total.value"
+        :size="pager.size.value"
+        show-jump
+      />
         </SectionCard>
       </template>
     </div>
@@ -85,8 +94,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { db } from '../../db'
 import { useFinanceStore } from '../../stores/finance'
+import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import { categoryLabel } from '../../utils/ledger'
 import type { LedgerEntry } from '../../types'
+import TablePager from '../../components/TablePager.vue'
 import ReconcileView from './ReconcileView.vue'
 import BossReportsView from '../boss/BossReportsView.vue'
 import LedgerView from './LedgerView.vue'
@@ -162,6 +173,12 @@ const inRows = computed(() => filtered.value.filter(r => r.in > 0))
 const outRows = computed(() => filtered.value.filter(r => r.out > 0))
 const inTotal = computed(() => inRows.value.reduce((s, r) => s + r.in, 0))
 const outTotal = computed(() => outRows.value.reduce((s, r) => s + r.out, 0))
+
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(filtered, PAGE_SIZE_LIST)
+watch([kind, from, to], () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 function money(n: number): string {
   return (Number.isFinite(n) ? n : 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })

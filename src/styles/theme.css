@@ -745,9 +745,11 @@ body {
 }
 .data-table tfoot td.num { text-align: right; }
 
-/* 卡片列表（手机端）斑马交替 */
+/* 卡片列表（手机端）斑马交替。
+   与表格斑马纹用同一档颜色（#eef2f9）—— 之前用 --c-surface-alt(#fafbfd)
+   在手机屏上几乎看不出差别，长列表照样会看串行。 */
 .zebra-list { list-style: none; }
-.zebra-list > li:nth-child(even) { background: var(--c-surface-alt); }
+.zebra-list > li:nth-child(even) { background: #eef2f9; }
 
 /* 列表工具条 */
 .data-toolbar {
