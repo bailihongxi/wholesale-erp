@@ -36,6 +36,9 @@
       <div class="btn-row">
         <button class="primary-btn" type="button" @click="exportBackup">⬇️ 导出备份</button>
         <button class="ghost-btn" type="button" @click="triggerImport">⬆️ 导入恢复</button>
+        <button class="primary-btn" type="button" @click="migrateCloud" :disabled="migrating">
+          {{ migrating ? '迁移中…' : '☁️ 迁移到云端' }}
+        </button>
         <input ref="fileInput" type="file" accept="application/json" style="display:none" @change="onImport" />
       </div>
       <p class="tip">备份文件命名：erp-backup-YYYYMMDD.json</p>
@@ -281,6 +284,9 @@ import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import AppIconPanel from '../../components/AppIconPanel.vue'
 import AuditLogPanel from '../../components/AuditLogPanel.vue'
 import { APP_VERSION, APP_RELEASE_DATE, APP_NAME } from '../../version'
+import { migrateToCloud } from '../../utils/cloudMigrate'
+
+const migrating = ref(false)
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
 } from '../../utils/priceRule'
@@ -511,6 +517,23 @@ async function exportBackup(): Promise<void> {
   a.click()
   URL.revokeObjectURL(url)
   showToast('备份已导出')
+}
+
+async function migrateCloud() {
+  migrating.value = true
+  try {
+    await showConfirmDialog({
+      title: '迁移到云端',
+      message: '将把本机所有业务数据上传到 Supabase 云数据库（可重复执行，按 id 覆盖）。继续？',
+    })
+    const r = await migrateToCloud(() => {})
+    const total = r.reduce((a, b) => a + b.rows, 0)
+    showToast(`迁移完成，共 ${total} 行`)
+  } catch (e: any) {
+    showToast('迁移失败：' + (e?.message || e))
+  } finally {
+    migrating.value = false
+  }
 }
 
 function triggerImport(): void {

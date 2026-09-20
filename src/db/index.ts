@@ -113,7 +113,16 @@ class ERPDatabase extends Dexie {
   }
 }
 
-export const db = new ERPDatabase()
+import { USE_CLOUD } from './supabaseClient'
+import { createCloudDb } from './cloudDb'
+
+const _localDb = new ERPDatabase()
+/**
+ * 数据源开关：USE_CLOUD=true 走 Supabase 云数据库（V2.0），否则走本地 IndexedDB（V1.0 保底）。
+ * cloudDb 的 API 与 Dexie Table 对齐，业务代码无感知。
+ */
+export const db = (USE_CLOUD ? createCloudDb() : _localDb) as unknown as ERPDatabase
+export const localDb = _localDb
 
 // 初始化默认管理员账号与默认库位
 export async function initDefaultAdmin(): Promise<void> {

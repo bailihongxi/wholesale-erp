@@ -1,7 +1,7 @@
 {
   "name": "wholesale-erp",
   "private": true,
-  "version": "1.0.0-12",
+  "version": "2.0.0-1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "deploy": "bash scripts/deploy-gh-pages.sh"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "dexie": "^4.0.10",
     "pinia": "^2.3.1",
     "vant": "^4.9.15",
