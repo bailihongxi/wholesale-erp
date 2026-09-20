@@ -17,16 +17,24 @@
         <span class="e-arrow">›</span>
       </li>
     </ul>
+
+    <button class="pwd-btn" type="button" @click="pwdOpen = true">🔑 修改密码</button>
+    <button class="logout-btn" type="button" @click="handleLogout">退出登录</button>
+
+    <ChangePasswordModal v-model:open="pwdOpen" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
+import ChangePasswordModal from '../../components/ChangePasswordModal.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+const pwdOpen = ref(false)
 
 /** 手机端「我的」：管理与分析类入口 */
 const entries = [
@@ -46,6 +54,11 @@ const roleLabel = computed(() => ROLE_LABELS[userStore.role ?? ''] ?? '-')
 
 function go(p: string): void {
   router.push(p)
+}
+
+function handleLogout(): void {
+  userStore.logout()
+  router.push('/login')
 }
 </script>
 
@@ -101,4 +114,24 @@ function go(p: string): void {
 }
 .e-name { flex: 1; color: var(--c-primary); font-size: 15px; font-weight: 500; }
 .e-arrow { color: var(--c-muted); font-size: 20px; }
+
+/* 自助改密 + 退出登录：老板手机端原来没有任何账号级操作入口 */
+.pwd-btn {
+  width: 100%; margin-top: var(--sp-4); height: 46px;
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-surface); color: var(--c-primary);
+  border-radius: var(--r-md);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background .15s ease;
+}
+.pwd-btn:active { background: var(--c-primary-soft); }
+.logout-btn {
+  width: 100%; margin-top: var(--sp-3); height: 46px;
+  border: 1px solid #fca5a5;
+  background: #fff; color: #dc2626;
+  border-radius: var(--r-md);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background .15s ease;
+}
+.logout-btn:active { background: #fef2f2; }
 </style>

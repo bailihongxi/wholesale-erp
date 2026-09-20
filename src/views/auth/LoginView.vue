@@ -36,31 +36,57 @@
         </template>
 
         <div class="field">
-          <span class="field-icon">📱</span>
-          <input v-model="phone" class="field-input" type="tel" placeholder="请输入手机号" />
+          <span class="field-icon">👤</span>
+          <input
+            v-model="account"
+            class="field-input"
+            type="text"
+            autocomplete="username"
+            placeholder="请输入用户名或手机号"
+            @keyup.enter="handleLogin"
+          />
         </div>
         <div class="field">
           <span class="field-icon">🔒</span>
-          <input v-model="password" class="field-input" type="password" placeholder="请输入密码" />
+          <input
+            v-model="password"
+            class="field-input"
+            :type="showPwd ? 'text' : 'password'"
+            autocomplete="current-password"
+            placeholder="请输入密码"
+            @keyup.enter="handleLogin"
+          />
+          <button class="pwd-toggle" type="button" @click="showPwd = !showPwd">
+            {{ showPwd ? '隐藏' : '显示' }}
+          </button>
+        </div>
+
+        <div class="login-row">
+          <label class="remember">
+            <input v-model="remember" type="checkbox" />
+            <span>记住账号</span>
+          </label>
+          <span class="forget" @click="tipForget">忘记密码？</span>
         </div>
 
         <button class="login-btn" type="button" :disabled="loading" @click="handleLogin">
           {{ loading ? '登录中…' : '登 录' }}
         </button>
 
-        <p class="hint">默认账号：13800000000 / admin123</p>
+        <p class="hint" :class="{ expired: userStore.sessionExpired }">{{ footerHint }}</p>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { useBrand } from '../../utils/brand'
+import { readRememberedAccount, saveRememberedAccount, clearRememberedAccount } from '../../utils/loginGuard'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -70,24 +96,52 @@ const { isMobile } = useResponsive()
 const { config } = useBrand()
 const logo = computed(() => config.value.loginLogo)
 
-const phone = ref('')
+const account = ref('')
 const password = ref('')
+const remember = ref(false)
+const showPwd = ref(false)
 const loading = ref(false)
 
+/**
+ * 第十八轮起登录页**不再显示任何账号密码**：
+ * 内置账号写在《使用说明》里，员工账号由老板在「员工管理」中创建。
+ * 这里只给一句不含凭证的引导。
+ */
+const footerHint = computed(() =>
+  userStore.sessionExpired
+    ? '登录状态已过期，请重新登录'
+    : '员工账号由管理员在「员工管理」中创建'
+)
+
+onMounted(() => {
+  const saved = readRememberedAccount()
+  if (saved) {
+    account.value = saved
+    remember.value = true
+  }
+})
+
 async function handleLogin(): Promise<void> {
-  if (!phone.value || !password.value) {
-    showToast('请输入手机号和密码')
+  const name = account.value.trim()
+  if (!name || !password.value) {
+    showToast('请输入账号和密码')
     return
   }
   loading.value = true
-  const res = await userStore.login(phone.value, password.value)
+  const res = await userStore.login(name, password.value)
   loading.value = false
   if (res.ok) {
+    if (remember.value) saveRememberedAccount(name)
+    else clearRememberedAccount()
     showToast('登录成功')
     router.push(userStore.homeRouteForRole(userStore.role))
   } else {
     showToast(res.message)
   }
+}
+
+function tipForget(): void {
+  showToast('忘记密码请联系老板，在「员工管理」里重置')
 }
 </script>
 
@@ -272,12 +326,41 @@ async function handleLogin(): Promise<void> {
   transform: none;
   box-shadow: none;
 }
+/* 显示 / 隐藏密码：纯文字按钮，别用图标抢视线 */
+.pwd-toggle {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 13px;
+  color: var(--c-accent);
+  cursor: pointer;
+  flex: none;
+}
+.login-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 0 14px;
+}
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+.remember input[type='checkbox'] { width: 14px; height: 14px; cursor: pointer; }
+.forget { font-size: 13px; color: var(--c-muted); cursor: pointer; }
+.forget:hover { color: var(--c-accent); }
+
 .hint {
   margin-top: 16px;
   text-align: center;
   font-size: 12px;
   color: var(--c-muted);
 }
+.hint.expired { color: #d97706; }
 /* 手机端上下布局 */
 .login-page.is-mobile {
   flex-direction: column;

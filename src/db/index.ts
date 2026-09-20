@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import { hashPassword } from '../utils/password'
 import type {
   User, Customer, Supplier, Product, Stock,
   PurchaseOrder, PurchaseOrderItem,
@@ -82,6 +83,23 @@ class ERPDatabase extends Dexie {
       rolePerms: '++id, role',
       ledgerEntries: '++id, orderNo, direction, category, entryDate, operatorId'
     })
+    // v7：员工档案扩展 + 登录名（第十八轮）。
+    // users 增加 username（登录主通道）与 employeeNo（工号）索引；
+    // upgrade 里给老数据补 username = phone、employeeNo = E001…，
+    // 用户不需要手工重建任何账号，升级后照原样登录。
+    this.version(7).stores({
+      users: '++id, phone, role, status, username, employeeNo'
+    }).upgrade(async tx => {
+      const rows = (await tx.table('users').toArray()) as Array<Record<string, any>>
+      let seq = 0
+      for (const u of rows) {
+        seq += 1
+        const patch: Record<string, string> = {}
+        if (!u.username) patch.username = String(u.phone ?? '')
+        if (!u.employeeNo) patch.employeeNo = `E${String(seq).padStart(3, '0')}`
+        if (Object.keys(patch).length) await tx.table('users').update(u.id, patch)
+      }
+    })
   }
 }
 
@@ -93,10 +111,17 @@ export async function initDefaultAdmin(): Promise<void> {
   if (count === 0) {
     await db.users.add({
       name: '老板',
+      username: 'admin',
+      employeeNo: 'E001',
       phone: '13800000000',
-      password: 'admin123',
+      password: await hashPassword('admin123'),
       role: 'boss',
       status: 'active',
+      dept: '管理部',
+      position: '负责人',
+      joinDate: '',
+      remark: '',
+      avatar: '',
       createdAt: new Date().toISOString()
     })
   }
@@ -109,4 +134,18 @@ export async function initDefaultAdmin(): Promise<void> {
       { id: 2, name: '门店', createdAt: new Date().toISOString() }
     ])
   }
+}
+
+/**
+ * 生成下一个工号 E001 / E002 …
+ * 取现有最大号 +1，删掉的号不复用——工号一旦印在单据上就不该被别人顶替。
+ */
+export async function nextEmployeeNo(): Promise<string> {
+  const rows = await db.users.toArray()
+  let max = 0
+  for (const u of rows) {
+    const m = /^E(\d+)$/.exec(u.employeeNo ?? '')
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return `E${String(max + 1).padStart(3, '0')}`
 }

@@ -19,7 +19,9 @@ describe('阶段1：数据层 + 登录', () => {
     const admin = await db.users.where('phone').equals('13800000000').first()
     expect(admin).toBeDefined()
     expect(admin?.role).toBe('boss')
-    expect(admin?.password).toBe('admin123')
+    // 第十八轮起默认管理员密码存加盐哈希（pbkdf2$…），不再是明文，避免 F12 抓取
+    expect(admin?.password).not.toBe('admin123')
+    expect(admin?.password.startsWith('pbkdf2$')).toBe(true)
   })
 
   it('正确密码登录成功', async () => {
@@ -51,7 +53,7 @@ describe('阶段1：数据层 + 登录', () => {
     const store = useUserStore()
     await store.login('13800000000', 'admin123')
     const res = await store.createUser({
-      name: '张三', phone: '13900000001', password: '123456',
+      name: '张三', username: 'zhangsan', phone: '13900000001', password: '123456',
       role: 'purchaser', status: 'active'
     })
     expect(res.ok).toBe(true)
@@ -62,8 +64,8 @@ describe('阶段1：数据层 + 登录', () => {
   it('重复手机号创建失败', async () => {
     const { useUserStore } = await import('../src/stores/user')
     const store = useUserStore()
-    await store.createUser({ name: '张三', phone: '13900000001', password: '123', role: 'purchaser', status: 'active' })
-    const res = await store.createUser({ name: '李四', phone: '13900000001', password: '456', role: 'sales', status: 'active' })
+    await store.createUser({ name: '张三', username: 'zhangsan', phone: '13900000001', password: '123', role: 'purchaser', status: 'active' })
+    const res = await store.createUser({ name: '李四', username: 'lisi', phone: '13900000001', password: '456', role: 'sales', status: 'active' })
     expect(res.ok).toBe(false)
   })
 

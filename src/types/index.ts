@@ -4,12 +4,42 @@ export type Role = 'boss' | 'purchaser' | 'sales' | 'finance' | 'warehouse' | 'd
 // 员工账号
 export interface User {
   id?: number
+  /**
+   * 登录名（第十八轮新增）：唯一，登录主通道。
+   * 老数据没有这个字段，读取时用 `usernameOf(user)` 兜底成手机号，免迁移。
+   */
+  username?: string
+  /** 工号（第十八轮新增）：唯一，形如 E001；老数据由 v7 迁移自动补齐 */
+  employeeNo?: string
   name: string
   phone: string
+  /** 密码：第十八轮起存加盐哈希（见 utils/password.ts），老数据仍是明文，登录成功后自动升级 */
   password: string
   role: Role
   status: 'active' | 'disabled'
+  /** 部门（可选，自由填写，带建议值） */
+  dept?: string
+  /** 职位（可选） */
+  position?: string
+  /** 入职日期 YYYY-MM-DD（可选） */
+  joinDate?: string
+  /** 备注（可选） */
+  remark?: string
+  /** 头像：emoji 或图片 dataURL；为空则用姓名首字兜底 */
+  avatar?: string
+  /** 最近一次登录时间 ISO（可选） */
+  lastLoginAt?: string
   createdAt: string
+}
+
+/** 员工登录名：新数据取 username，老数据回落手机号 */
+export function usernameOf(user: Pick<User, 'username' | 'phone'>): string {
+  return (user.username ?? '').trim() || user.phone
+}
+
+/** 员工显示名：优先工号，便于管理页与打印单据对照 */
+export function displayNoOf(user: Pick<User, 'employeeNo' | 'phone'>): string {
+  return user.employeeNo || user.phone
 }
 
 /**

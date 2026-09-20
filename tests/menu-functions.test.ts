@@ -162,7 +162,7 @@ describe('逐菜单功能验证', () => {
   it('员工管理：新增员工账号后出现在列表', async () => {
     const userStore = useUserStore()
     const res = await userStore.createUser({
-      name: '小王', phone: '13700000001', password: '123456', role: 'sales', status: 'active'
+      name: '小王', username: 'xiaowang', phone: '13700000001', password: '123456', role: 'sales', status: 'active'
     })
     expect(res.ok).toBe(true)
     const list = await userStore.listUsers()

@@ -21,22 +21,28 @@
       </li>
     </ul>
 
+    <button class="pwd-btn" type="button" @click="pwdOpen = true">🔑 修改密码</button>
     <button class="logout-btn" type="button" @click="handleLogout">退出登录</button>
+
+    <ChangePasswordModal v-model:open="pwdOpen" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { usePermissionStore } from '../stores/permission'
 import type { NavItem } from '../router/navConfig'
 import { ROLE_LABELS } from '../router/navConfig'
 import { useBrand } from '../utils/brand'
+import ChangePasswordModal from '../components/ChangePasswordModal.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const permStore = usePermissionStore()
+
+const pwdOpen = ref(false)
 
 // 角色头像与快捷图标都可以在系统设置里自定义
 const { iconOf, roleAvatar } = useBrand()
@@ -123,7 +129,7 @@ function handleLogout(): void {
 .e-arrow { color: var(--c-muted); font-size: 20px; }
 
 .logout-btn {
-  width: 100%; margin-top: var(--sp-5); height: 46px;
+  width: 100%; margin-top: var(--sp-4); height: 46px;
   border: 1px solid #fca5a5;
   background: #fff; color: #dc2626;
   border-radius: var(--r-md);
@@ -131,4 +137,15 @@ function handleLogout(): void {
   transition: background .15s ease;
 }
 .logout-btn:active { background: #fef2f2; }
+
+/* 自助改密入口：员工过去只能找老板改密码，这里补上 */
+.pwd-btn {
+  width: 100%; margin-top: var(--sp-5); height: 46px;
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-surface); color: var(--c-primary);
+  border-radius: var(--r-md);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background .15s ease;
+}
+.pwd-btn:active { background: var(--c-primary-soft); }
 </style>

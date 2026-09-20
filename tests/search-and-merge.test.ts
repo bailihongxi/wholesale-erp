@@ -119,7 +119,8 @@ describe('库存管理页（合并后统一页面 /stock）', () => {
     productStore = useProductStore()
     setWidth(1280)
     setRole('boss')
-    await testRouter.push('/stock')
+    // 库存管理默认打开「库存作业」，本组用例针对「库存明细」子模块，故显式带入 tab
+    await testRouter.push('/stock?tab=detail')
     await testRouter.isReady()
   })
 

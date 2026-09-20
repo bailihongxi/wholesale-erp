@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { usePermissionStore } from '../stores/permission'
+import { touchSession } from '../utils/loginGuard'
 
 // 老板为最高权限角色，可进入全部业务页面；下面绝大多数路由都把 'boss' 放进允许列表，
 // 以保证老板侧边栏里的每一项点进去都能真正停留（此前只写了单一角色，
@@ -91,6 +92,9 @@ router.beforeEach(async (to) => {
   const userStore = useUserStore()
   if (!userStore.isLoggedIn) {
     await userStore.restoreSession()
+  } else {
+    // 活跃使用期间滑动续期：每次导航都顺延 7 天，闲置满 7 天才需重新登录
+    touchSession()
   }
   if (to.path === '/login') return true
   if (!userStore.isLoggedIn) return '/login'

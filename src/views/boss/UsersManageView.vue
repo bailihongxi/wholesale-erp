@@ -25,16 +25,25 @@
         <StatCard label="员工总数" :value="staff.length" icon="👥" tone="primary" />
         <StatCard label="在职" :value="activeCount" icon="✅" tone="success" />
         <StatCard label="已停用" :value="staff.length - activeCount" icon="⛔" tone="neutral" />
-        <StatCard label="角色数" :value="roleCount" icon="🎭" tone="warning" />
+        <StatCard label="部门数" :value="deptCount" icon="🏢" tone="warning" />
       </div>
 
       <SectionCard title="员工账号" :desc="`共 ${staff.length} 人`" tight>
         <template #extra>
           <div class="ui-toolbar">
-            <input v-model="keyword" class="ui-input f-search" placeholder="搜索姓名 / 手机号" />
+            <input v-model="keyword" class="ui-input f-search" placeholder="搜索姓名 / 工号 / 登录名 / 手机" />
+            <select v-model="deptFilter" class="ui-select f-dept" aria-label="部门筛选">
+              <option value="">全部部门</option>
+              <option v-for="d in deptOptions" :key="d" :value="d">{{ d }}</option>
+            </select>
             <select v-model="roleFilter" class="ui-select f-role" aria-label="角色筛选">
               <option value="">全部角色</option>
               <option v-for="r in ROLE_KEYS" :key="r" :value="r">{{ ROLE_LABELS[r] }}</option>
+            </select>
+            <select v-model="statusFilter" class="ui-select f-status" aria-label="状态筛选">
+              <option value="">全部状态</option>
+              <option value="active">在职</option>
+              <option value="disabled">停用</option>
             </select>
           </div>
         </template>
@@ -42,33 +51,49 @@
         <table v-if="filteredStaff.length" class="data-table">
           <thead>
             <tr>
+              <th class="col-no">工号</th>
               <th>姓名</th>
-              <th>登录手机号</th>
+              <th>登录账号</th>
+              <th>部门 / 职位</th>
               <th>角色</th>
-              <th>可见模块</th>
+              <th class="col-mod">可见模块</th>
               <th class="center">状态</th>
               <th class="center">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="u in pager.paged.value" :key="u.id">
+              <td class="col-no mono">{{ u.employeeNo || '—' }}</td>
               <td class="name-cell">
-                <span class="avatar">{{ (u.name || '?').slice(0, 1) }}</span>
-                {{ u.name }}
+                <span class="avatar" :class="{ 'is-emoji': !!u.avatar }">
+                  {{ u.avatar || (u.name || '?').slice(0, 1) }}
+                </span>
+                <span class="nm">{{ u.name }}</span>
               </td>
-              <td class="mono">{{ u.phone }}</td>
+              <td>
+                <div class="stack">
+                  <span class="stack-main mono">{{ usernameOf(u) }}</span>
+                  <span class="stack-sub mono">{{ u.phone }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="stack">
+                  <span class="stack-main">{{ u.dept || '未分配' }}</span>
+                  <span class="stack-sub">{{ u.position || '—' }}</span>
+                </div>
+              </td>
               <td>
                 <span class="ui-badge" :class="roleTone(u.role)">{{ ROLE_LABELS[u.role] ?? u.role }}</span>
               </td>
-              <td>
+              <td class="col-mod">
                 <div class="mod-cell">
                   <span
-                    v-for="m in modulesOfRole(u.role).slice(0, 4)"
+                    v-for="m in modulesOfRole(u.role).slice(0, 3)"
                     :key="m.route"
                     class="mod-chip"
                   >{{ m.icon }} {{ m.label }}</span>
-                  <span v-if="modulesOfRole(u.role).length > 4" class="mod-more">
-                    +{{ modulesOfRole(u.role).length - 4 }}
+                  <span v-if="modulesOfRole(u.role).length > 3" class="mod-more">
+                    +{{ modulesOfRole(u.role).length - 3 }}
                   </span>
                   <span v-if="!modulesOfRole(u.role).length" class="ui-hint">未分配</span>
                 </div>
@@ -81,6 +106,12 @@
               <td class="center">
                 <span class="op-cell">
                   <button class="ui-link" type="button" @click="openEdit(u)">编辑</button>
+                  <button
+                    v-if="u.role !== 'boss'"
+                    class="ui-link"
+                    type="button"
+                    @click="doReset(u)"
+                  >重置密码</button>
                   <button
                     v-if="u.role !== 'boss'"
                     class="ui-link danger"
@@ -169,34 +200,132 @@
           <button class="modal-x" type="button" @click="editing = false">✕</button>
         </div>
         <div class="modal-body">
-          <div class="ui-form-grid">
+          <!-- ① 账号信息：能不能登、以什么身份登 -->
+          <div class="grp">
+            <div class="grp-head">
+              <span class="grp-title">账号信息</span>
+              <span class="grp-line"></span>
+            </div>
+            <div class="ui-form-grid">
+              <label class="ui-field">
+                <span class="ui-label">姓名<span class="req">*</span></span>
+                <input v-model="form.name" class="ui-input" placeholder="如：张三" />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">工号</span>
+                <input class="ui-input" :value="form.employeeNo || '保存时自动生成'" disabled />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">登录名<span class="req">*</span></span>
+                <input v-model="form.username" class="ui-input" placeholder="3-20 位字母 / 数字 / 下划线" />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">手机号<span class="req">*</span></span>
+                <input v-model="form.phone" class="ui-input" placeholder="11 位手机号，同样可以登录" />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">
+                  {{ form.id ? '重置密码（留空不改）' : '初始密码' }}<span v-if="!form.id" class="req">*</span>
+                </span>
+                <input
+                  v-model="form.password"
+                  class="ui-input"
+                  :placeholder="form.id ? '留空表示不修改' : `至少 ${PWD_MIN} 位`"
+                />
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">角色<span class="req">*</span></span>
+                <select v-model="form.role" class="ui-select">
+                  <option v-for="r in ROLE_KEYS" :key="r" :value="r">{{ ROLE_LABELS[r] }}</option>
+                </select>
+              </label>
+            </div>
+            <p class="ui-hint role-hint">
+              登录名与手机号任填其一即可登录；该角色可见模块：{{ modulesOfRole(form.role).map(m => m.label).join('、') || '未分配' }}
+              <span class="to-perm" @click="gotoPerm(form.role)">去配置 →</span>
+            </p>
+          </div>
+
+          <!-- ② 任职信息 -->
+          <div class="grp">
+            <div class="grp-head">
+              <span class="grp-title">任职信息</span>
+              <span class="grp-line"></span>
+            </div>
+            <div class="ui-form-grid">
+              <label class="ui-field">
+                <span class="ui-label">部门</span>
+                <input v-model="form.dept" class="ui-input" list="staff-dept" placeholder="如：采购部" />
+                <datalist id="staff-dept">
+                  <option v-for="d in DEPT_SUGGESTIONS" :key="d" :value="d" />
+                </datalist>
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">职位</span>
+                <input v-model="form.position" class="ui-input" list="staff-position" placeholder="如：采购员" />
+                <datalist id="staff-position">
+                  <option v-for="p in POSITION_SUGGESTIONS" :key="p" :value="p" />
+                </datalist>
+              </label>
+              <label class="ui-field">
+                <span class="ui-label">入职日期</span>
+                <input v-model="form.joinDate" class="ui-input" type="date" />
+              </label>
+            </div>
+          </div>
+
+          <!-- ③ 补充信息 -->
+          <div class="grp">
+            <div class="grp-head">
+              <span class="grp-title">补充信息</span>
+              <span class="grp-line"></span>
+            </div>
+            <div class="ui-field">
+              <span class="ui-label">头像</span>
+              <div class="av-pick">
+                <button
+                  v-for="a in AVATAR_CHOICES"
+                  :key="a"
+                  class="av-item"
+                  :class="{ on: form.avatar === a }"
+                  type="button"
+                  @click="form.avatar = form.avatar === a ? '' : a"
+                >{{ a }}</button>
+                <span class="av-hint">不选则显示姓名首字</span>
+              </div>
+            </div>
             <label class="ui-field">
-              <span class="ui-label">姓名<span class="req">*</span></span>
-              <input v-model="form.name" class="ui-input" placeholder="如：张三" />
-            </label>
-            <label class="ui-field">
-              <span class="ui-label">登录手机号<span class="req">*</span></span>
-              <input v-model="form.phone" class="ui-input" placeholder="11 位手机号" :disabled="!!form.id" />
-            </label>
-            <label class="ui-field">
-              <span class="ui-label">{{ form.id ? '重置密码（留空不改）' : '初始密码' }}<span class="req" v-if="!form.id">*</span></span>
-              <input v-model="form.password" class="ui-input" placeholder="如：123456" />
-            </label>
-            <label class="ui-field">
-              <span class="ui-label">角色<span class="req">*</span></span>
-              <select v-model="form.role" class="ui-select">
-                <option v-for="r in ROLE_KEYS" :key="r" :value="r">{{ ROLE_LABELS[r] }}</option>
-              </select>
+              <span class="ui-label">备注</span>
+              <textarea v-model="form.remark" class="ui-textarea" rows="2" placeholder="如：负责市区配送"></textarea>
             </label>
           </div>
-          <p class="ui-hint role-hint">
-            该角色可见模块：{{ modulesOfRole(form.role).map(m => m.label).join('、') || '未分配' }}
-            <span class="to-perm" @click="gotoPerm(form.role)">去配置 →</span>
-          </p>
         </div>
         <div class="modal-foot">
           <button class="ui-btn ui-btn-cancel" type="button" @click="editing = false">取消</button>
           <button class="ui-btn ui-btn-primary" type="button" @click="saveStaff">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 重置密码结果 ==================== -->
+    <div v-if="resetResult" class="modal-mask" @click.self="resetResult = null">
+      <div class="modal modal-sm">
+        <div class="modal-head">
+          <b>密码已重置</b>
+          <button class="modal-x" type="button" @click="resetResult = null">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="ui-hint reset-tip">
+            请把下面的临时密码告知「{{ resetResult.name }}」，并提醒他登录后在「我的 → 修改密码」里改成自己的。
+            密码以不可逆哈希保存，关闭本窗口后无法再次查看。
+          </p>
+          <div class="temp-pwd">
+            <code>{{ resetResult.password }}</code>
+            <button class="ui-btn ui-btn-sm" type="button" @click="copyTemp">复制</button>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="ui-btn ui-btn-primary" type="button" @click="resetResult = null">我知道了</button>
         </div>
       </div>
     </div>
@@ -212,7 +341,9 @@ import {
   ALL_MODULES, ROLE_LABELS, CONFIGURABLE_ROLES, DEFAULT_ROLE_PERMS, modulesOf,
   type NavItem
 } from '../../router/navConfig'
-import type { Role, User } from '../../types'
+import { usernameOf, type Role, type User } from '../../types'
+import { DEPT_SUGGESTIONS, POSITION_SUGGESTIONS } from '../../utils/account'
+import { PASSWORD_MIN_LEN as PWD_MIN } from '../../utils/password'
 import TablePager from '../../components/TablePager.vue'
 import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -235,6 +366,8 @@ const tab = ref<'staff' | 'perm'>('staff')
 const staff = ref<User[]>([])
 const keyword = ref('')
 const roleFilter = ref('')
+const deptFilter = ref('')
+const statusFilter = ref('')
 const saving = ref(false)
 
 // ===== 权限配置 =====
@@ -299,17 +432,26 @@ function gotoPerm(role: string): void {
 // ===== 员工列表 =====
 const filteredStaff = computed(() => staff.value.filter(u => {
   if (roleFilter.value && u.role !== roleFilter.value) return false
-  const k = keyword.value.trim()
+  if (deptFilter.value && (u.dept ?? '') !== deptFilter.value) return false
+  if (statusFilter.value && u.status !== statusFilter.value) return false
+  const k = keyword.value.trim().toLowerCase()
   if (!k) return true
-  return (u.name ?? '').includes(k) || (u.phone ?? '').includes(k)
+  return [u.name, u.employeeNo, usernameOf(u), u.phone]
+    .some(v => (v ?? '').toLowerCase().includes(k))
 }))
 const activeCount = computed(() => staff.value.filter(u => u.status === 'active').length)
-const roleCount = computed(() => new Set(staff.value.map(u => u.role)).size)
+// 部门去重（空串 / 未分配不计），供「部门数」统计卡与部门筛选下拉
+const deptOptions = computed(() => {
+  const set = new Set<string>()
+  for (const u of staff.value) if ((u.dept ?? '').trim()) set.add(u.dept!.trim())
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+const deptCount = computed(() => deptOptions.value.length)
 
 
 // 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
 const pager = usePagination(filteredStaff, PAGE_SIZE_LIST)
-watch([keyword, roleFilter], () => pager.reset())
+watch([keyword, roleFilter, deptFilter, statusFilter], () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 function roleTone(r: string): string {
@@ -318,33 +460,81 @@ function roleTone(r: string): string {
 
 // ===== 新建 / 编辑 =====
 const editing = ref(false)
-const form = reactive<{ id?: number; name: string; phone: string; password: string; role: Role }>({
-  id: undefined, name: '', phone: '', password: '', role: 'warehouse'
+interface StaffForm {
+  id?: number
+  name: string
+  employeeNo: string
+  username: string
+  phone: string
+  password: string
+  role: Role
+  dept: string
+  position: string
+  joinDate: string
+  remark: string
+  avatar: string
+}
+const form = reactive<StaffForm>({
+  id: undefined, name: '', employeeNo: '', username: '', phone: '', password: '',
+  role: 'warehouse', dept: '', position: '', joinDate: '', remark: '', avatar: ''
 })
 
-function openCreate(): void {
+// 头像候选：emoji 选一个，留空则显示姓名首字
+const AVATAR_CHOICES = ['😀', '🧑', '👩', '🧔', '👨', '👩‍💼', '🧑‍💼', '👨‍💼', '🐱', '🌟', '🍀', '⚡']
+
+function resetForm(): void {
   form.id = undefined
   form.name = ''
+  form.employeeNo = ''
+  form.username = ''
   form.phone = ''
   form.password = ''
   form.role = 'warehouse'
+  form.dept = ''
+  form.position = ''
+  form.joinDate = ''
+  form.remark = ''
+  form.avatar = ''
+}
+
+function openCreate(): void {
+  resetForm()
   editing.value = true
 }
 
 function openEdit(u: User): void {
   form.id = u.id
   form.name = u.name
+  form.employeeNo = u.employeeNo ?? ''
+  form.username = u.username ?? ''
   form.phone = u.phone
   form.password = ''
   form.role = u.role
+  form.dept = u.dept ?? ''
+  form.position = u.position ?? ''
+  form.joinDate = u.joinDate ?? ''
+  form.remark = u.remark ?? ''
+  form.avatar = u.avatar ?? ''
   editing.value = true
 }
 
 async function saveStaff(): Promise<void> {
   if (!form.name.trim()) { showToast('请填写姓名'); return }
-  if (!/^\d{6,}$/.test(form.phone.trim())) { showToast('请填写正确的登录手机号'); return }
+  if (!form.username.trim()) { showToast('请填写登录名'); return }
+  if (!/^1\d{10}$/.test(form.phone.trim())) { showToast('请填写正确的 11 位手机号'); return }
+
   if (form.id) {
-    const patch: Partial<User> = { name: form.name.trim(), role: form.role }
+    const patch: Partial<User> = {
+      name: form.name.trim(),
+      username: form.username.trim(),
+      phone: form.phone.trim(),
+      role: form.role,
+      dept: form.dept.trim(),
+      position: form.position.trim(),
+      joinDate: form.joinDate,
+      remark: form.remark.trim(),
+      avatar: form.avatar
+    }
     if (form.password.trim()) patch.password = form.password.trim()
     const res = await userStore.updateUser(form.id, patch)
     showToast(res.message)
@@ -353,16 +543,40 @@ async function saveStaff(): Promise<void> {
     if (!form.password.trim()) { showToast('请设置初始密码'); return }
     const res = await userStore.createUser({
       name: form.name.trim(),
+      username: form.username.trim(),
       phone: form.phone.trim(),
       password: form.password.trim(),
       role: form.role,
-      status: 'active'
+      dept: form.dept.trim(),
+      position: form.position.trim(),
+      joinDate: form.joinDate,
+      remark: form.remark.trim(),
+      avatar: form.avatar
     })
     showToast(res.message)
     if (!res.ok) return
   }
   editing.value = false
   await load()
+}
+
+// 老板重置员工密码：临时密码只在这次的弹窗里出现一次
+const resetResult = ref<{ name: string; password: string } | null>(null)
+async function doReset(u: User): Promise<void> {
+  if (!u.id) return
+  const res = await userStore.resetPassword(u.id)
+  showToast(res.message)
+  if (res.ok && res.password) resetResult.value = { name: u.name, password: res.password }
+}
+
+async function copyTemp(): Promise<void> {
+  const pwd = resetResult.value?.password ?? ''
+  try {
+    await navigator.clipboard.writeText(pwd)
+    showToast('已复制临时密码')
+  } catch {
+    showToast('复制失败，请手动选择文本')
+  }
 }
 
 async function toggleStatus(u: User): Promise<void> {
@@ -396,6 +610,55 @@ onMounted(async () => {
   font-size: 12px; font-weight: 700; flex: none;
 }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+/* 表格列：工号窄、可见模块宽 */
+.col-no { width: 96px; }
+.col-mod { width: 240px; }
+
+/* 堆叠单元格（登录账号 / 部门职位 上下两行） */
+.stack { display: flex; flex-direction: column; gap: 2px; }
+.stack-main { font-weight: 600; color: var(--c-text); line-height: 1.4; }
+.stack-sub { font-size: 12px; color: var(--c-muted); }
+
+/* 操作列 */
+.op-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* 头像：emoji 头像用强调色浅底，与首字头像区分 */
+.avatar.is-emoji { background: var(--c-accent-soft); color: var(--c-accent); }
+
+/* 弹窗内分组（账号 / 任职 / 补充） */
+.grp { margin-bottom: var(--sp-4); }
+.grp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.grp-title { font-size: 13px; font-weight: 700; color: var(--c-primary); }
+.grp-line { flex: 1; height: 1px; background: var(--c-border); }
+
+/* 头像选择 */
+.av-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.av-item {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: 18px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.av-item:hover { border-color: #c3cede; }
+.av-item.on { border-color: var(--c-accent); box-shadow: 0 0 0 2px var(--c-accent-soft); }
+.av-hint { font-size: 12px; color: var(--c-muted); }
+
+/* 重置密码结果：临时密码 + 复制 */
+.modal-sm { max-width: 400px; }
+.temp-pwd {
+  display: flex; align-items: center; gap: 10px;
+  margin: 12px 0 4px; padding: 10px 12px;
+  background: var(--c-surface-alt); border: 1px dashed var(--c-border-strong);
+  border-radius: var(--r-md);
+}
+.temp-pwd code {
+  flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px; font-weight: 700; letter-spacing: 1px; color: var(--c-primary);
+  word-break: break-all;
+}
+.reset-tip { line-height: 1.6; }
 
 .mod-cell { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .mod-chip {
@@ -485,7 +748,7 @@ onMounted(async () => {
 .to-perm { color: var(--c-accent); cursor: pointer; margin-left: 6px; }
 
 @media (max-width: 767px) {
-  .f-search, .f-role { width: 100%; }
+  .f-search, .f-role, .f-dept, .f-status { width: 100%; }
   .pg-grid { grid-template-columns: 1fr; }
 }
 </style>

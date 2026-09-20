@@ -128,6 +128,9 @@ describe('阶段6：库房+财务模块重写', () => {
     // 电脑端宽度，验证表头列的控制逻辑
     setWidth(1280); setRole('warehouse')
     await seedProduct()
+    // 库存管理默认打开「库存作业」，价格列在「库存明细」子模块里
+    await testRouter.push('/stock?tab=detail')
+    await testRouter.isReady()
     // 前一个用例遗留的异步任务可能覆盖登录态，mount 前再明确一次角色
     setRole('warehouse')
     const whWrapper = mount(StockManageView, { global: { plugins: [testRouter] } })

@@ -10,27 +10,7 @@
     /warehouse 及其子路由全部保留，收藏夹与外部链接不失效。
   -->
   <div class="ui-page">
-    <PageHeader title="库存管理" sub="库存明细、预警与出入库作业，统一在这里处理" />
-
-    <!-- 总览卡片：反映全库现状，不随页内搜索变化 -->
-    <div class="stat-row">
-      <div class="stat-card">
-        <span class="s-label">商品 SKU</span>
-        <b class="s-value">{{ stats.skuCount }}</b>
-      </div>
-      <div class="stat-card">
-        <span class="s-label">库存总量</span>
-        <b class="s-value">{{ stats.totalQty }}</b>
-      </div>
-      <div v-if="canSeeAnyPrice" class="stat-card">
-        <span class="s-label">库存金额（进价）</span>
-        <b class="s-value">¥{{ money(stats.totalCost) }}</b>
-      </div>
-      <div class="stat-card" :class="{ danger: stats.warnCount > 0 }">
-        <span class="s-label">库存预警</span>
-        <b class="s-value">{{ stats.warnCount }}</b>
-      </div>
-    </div>
+    <PageHeader title="库存管理" sub="库存作业、明细、预警与流水，统一在这里处理" />
 
     <!-- 页内模块导航（库存作业整页并入本页） -->
     <SegmentedTabs v-model="tab" :options="tabOptions" />
@@ -58,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
@@ -68,7 +48,6 @@ import StockFlowView from './StockFlowView.vue'
 import WarehouseOpsView from '../warehouse/WarehouseOpsView.vue'
 import { useProductStore } from '../../stores/product'
 import { useInventoryStore } from '../../stores/inventory'
-import { usePermission } from '../../composables/usePermission'
 import type { Product, Location } from '../../types'
 
 type StockTab = 'detail' | 'alert' | 'flow' | 'ops'
@@ -76,7 +55,6 @@ type StockTab = 'detail' | 'alert' | 'flow' | 'ops'
 const route = useRoute()
 const productStore = useProductStore()
 const inventoryStore = useInventoryStore()
-const { canSeeAnyPrice } = usePermission()
 
 // 用户要求：库存作业（入库/出库/调拨/盘点/退换货/库房管理）放到 Tab 第一位
 const TAB_KEYS: StockTab[] = ['ops', 'detail', 'alert', 'flow']
@@ -90,8 +68,13 @@ const tabOptions = [
 
 const tab = ref<StockTab>(normalize(route.query.tab))
 
+// 同一路径再次进入（如点侧边栏「库存管理」）时组件不会重建，
+// 靠监听 query 把 Tab 拉回 URL 指定的模块（没带 query → 默认库存作业）。
+watch(() => route.query.tab, v => { tab.value = normalize(v) })
+
+/** 默认落在「库存作业」：进入库存管理先看到日常收发货入口 */
 function normalize(v: unknown): StockTab {
-  return TAB_KEYS.includes(v as StockTab) ? (v as StockTab) : 'detail'
+  return TAB_KEYS.includes(v as StockTab) ? (v as StockTab) : 'ops'
 }
 
 /**
@@ -103,27 +86,6 @@ const stockMap = ref<Record<number, number>>({})
 const locations = ref<Location[]>([])
 const distByProduct = ref<Record<number, Record<number, number>>>({})
 const loadingDetail = ref(true)
-
-const stats = computed(() => {
-  const data = products.value
-  const totalCost = data.reduce((s, p) => s + stockOf(p.id) * p.purchasePrice, 0)
-  return {
-    skuCount: data.length,
-    totalQty: data.reduce((s, p) => s + stockOf(p.id), 0),
-    totalCost,
-    warnCount: data.filter(isLow).length
-  }
-})
-
-function stockOf(id?: number): number {
-  return id ? (stockMap.value[id] ?? 0) : 0
-}
-function isLow(p: Product): boolean {
-  return stockOf(p.id) <= p.warnStock
-}
-function money(n: number): string {
-  return Number.isFinite(n) ? n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) : '0'
-}
 
 async function load(): Promise<void> {
   try {
@@ -155,19 +117,6 @@ onMounted(load)
 </script>
 
 <style scoped>
-.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: var(--sp-3); }
-.stat-card {
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg);
-  padding: 14px 16px; box-shadow: var(--sh-sm);
-}
-.stat-card.danger { border-left: 3px solid var(--c-danger); }
-.s-label { display: block; font-size: 12px; color: var(--c-muted); }
-.s-value { display: block; font-size: 20px; color: var(--c-primary); margin-top: 4px; font-variant-numeric: tabular-nums; }
-
+/* 统计卡已下移到「库存明细」子模块（搜索框上方），本页只留 Tab 与内容区 */
 .tab-pane { margin-top: var(--sp-3); }
-
-@media (max-width: 767px) {
-  .stat-row { grid-template-columns: repeat(2, 1fr); }
-  .s-value { font-size: 18px; }
-}
 </style>

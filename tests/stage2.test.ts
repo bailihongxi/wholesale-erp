@@ -33,11 +33,12 @@ describe('阶段2：登录页重写', () => {
     const wrapper = mount(LoginView, { global: { plugins: [testRouter] } })
     const text = wrapper.text()
     expect(text).toContain('家电批发ERP')
-    expect(wrapper.find('input[type="tel"]').exists()).toBe(true)
+    expect(wrapper.find('input[type="text"]').exists()).toBe(true)
     expect(wrapper.find('input[type="password"]').exists()).toBe(true)
     expect(wrapper.find('.login-btn').text()).toContain('登')
-    expect(text).toContain('13800000000')
-    expect(text).toContain('admin123')
+    // 第十八轮：登录页不再暴露任何账号密码（防共用电脑冒用），断言「不含凭证」
+    expect(text).not.toContain('13800000000')
+    expect(text).not.toContain('admin123')
   })
 
   it('2.2 电脑端为左右分栏，含左侧品牌介绍区', () => {
@@ -78,7 +79,7 @@ describe('阶段2：登录页重写', () => {
     }
     setWidth(1280)
     const wrapper = mount(LoginView, { global: { plugins: [testRouter] } })
-    await wrapper.find('input[type="tel"]').setValue('13800000000')
+    await wrapper.find('input[type="text"]').setValue('13800000000')
     await wrapper.find('input[type="password"]').setValue('admin123')
     await wrapper.find('.login-btn').trigger('click')
     await flushPromises()
@@ -91,7 +92,7 @@ describe('阶段2：登录页重写', () => {
     userStore.currentUser = null
     setWidth(1280)
     const wrapper = mount(LoginView, { global: { plugins: [testRouter] } })
-    await wrapper.find('input[type="tel"]').setValue('13800000000')
+    await wrapper.find('input[type="text"]').setValue('13800000000')
     await wrapper.find('input[type="password"]').setValue('wrong')
     await wrapper.find('.login-btn').trigger('click')
     await flushPromises()

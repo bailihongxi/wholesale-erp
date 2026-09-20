@@ -2,6 +2,15 @@
   <div class="ui-page">
     <PageHeader :title="`欢迎，${userName} 👋`" sub="今天也要好好做生意～" />
 
+    <!-- 内置密码提醒：老板仍用初始密码时给一条温和提示，可关闭、不阻断操作 -->
+    <div v-if="showPwdTip" class="pwd-tip">
+      <span class="pt-text">🔐 您当前仍在使用系统初始密码，建议尽快在「我的 → 修改密码」中修改，避免账号被冒用。</span>
+      <span class="pt-acts">
+        <button class="ui-btn ui-btn-sm" type="button" @click="pwdOpen = true">去修改</button>
+        <button class="pt-x" type="button" @click="showPwdTip = false">✕</button>
+      </span>
+    </div>
+
     <!-- 空数据引导：新装系统 IndexedDB 为空时，各列表页都会显示「暂无数据」，
          这里给出明确指引，避免误以为功能没有开发。 -->
     <SectionCard v-if="isEmpty" class="guide" title="👋 开始使用" desc="首次使用请先载入示例数据或直接录入商品">
@@ -54,6 +63,8 @@
         <div class="quick-item" @click="go('/finance?tab=reports')"><span class="qi-ico">📊</span><span>经营报表</span></div>
       </div>
     </SectionCard>
+
+    <ChangePasswordModal v-model:open="pwdOpen" @changed="onPwdChanged" />
   </div>
 </template>
 
@@ -68,12 +79,17 @@ import { useDashboardStore } from '../../stores/dashboard'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SectionCard from '../../components/ui/SectionCard.vue'
 import StatCard from '../../components/ui/StatCard.vue'
+import ChangePasswordModal from '../../components/ChangePasswordModal.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const dashboardStore = useDashboardStore()
 
 const userName = userStore.currentUser?.name ?? '老板'
+
+// 「我的 → 修改密码」弹窗与内置密码提醒条
+const pwdOpen = ref(false)
+const showPwdTip = ref(false)
 
 const isEmpty = ref(false)
 const seeding = ref(false)
@@ -118,10 +134,16 @@ onMounted(async () => {
   try {
     await refreshDashboard()
     await refreshEmpty()
+    showPwdTip.value = await userStore.usesDefaultPassword()
   } catch (e) {
     console.debug('[工作台] 统计加载失败，页面保持空态：', e)
   }
 })
+
+/** 改完密码后重新判定，提醒条应立刻消失 */
+async function onPwdChanged(): Promise<void> {
+  showPwdTip.value = await userStore.usesDefaultPassword()
+}
 
 function yuan(n: number): string {
   return '¥' + Math.round(n).toLocaleString('zh-CN')
@@ -133,6 +155,30 @@ function go(path: string): void {
 </script>
 
 <style scoped>
+/* 内置密码提醒：琥珀色提示条，可关闭，不阻断任何操作 */
+.pwd-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  margin-bottom: var(--sp-3);
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--r-md);
+}
+.pt-text { font-size: 13px; color: #92400e; line-height: 1.55; }
+.pt-acts { display: flex; align-items: center; gap: 10px; flex: none; }
+.pt-x {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #b45309;
+  padding: 0 2px;
+}
+
 .guide-text {
   font-size: 13px;
   line-height: 1.8;

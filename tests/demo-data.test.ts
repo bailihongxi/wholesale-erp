@@ -106,10 +106,11 @@ describe('示例数据生成', () => {
     await vi.waitFor(() => expect(spw.text()).toContain('海尔华南总代'), { timeout: 5000 })
     spw.unmount()
 
+    // 库存管理默认打开「库存作业」，商品明细在「库存明细」子模块里
+    await testRouter.push('/stock?tab=detail')
     const stw = mountView(StockManageView)
     await vi.waitFor(() => expect(stw.text()).toContain('KFR-35GW'), { timeout: 5000 })
-    stw.unmount()
-  })
+    stw.unmount()  })
 
   it('生成后财务应收应付有数据', async () => {
     await seedDemoData()
@@ -148,7 +149,12 @@ describe('示例数据生成', () => {
     const staff = await db.users.where('phone').startsWith('1370000000').toArray()
     expect(staff.length).toBe(4)
     expect(staff.map(s => s.role).sort()).toEqual(['finance', 'purchaser', 'sales', 'warehouse'])
-    expect(staff.every(s => s.password === '123456')).toBe(true)
+    // 第十八轮起密码统一哈希存储，不再落明文
+    expect(staff.every(s => /^pbkdf2\$/.test(s.password) || /^weak\$/.test(s.password))).toBe(true)
+    // 哈希后仍可按原始密码登录（加盐哈希可校验）
+    const { useUserStore } = await import('../src/stores/user')
+    const loginRes = await useUserStore().login('13700000001', '123456')
+    expect(loginRes.ok).toBe(true)
   })
 
   it('重复生成不会产生脏数据（幂等保护）', async () => {

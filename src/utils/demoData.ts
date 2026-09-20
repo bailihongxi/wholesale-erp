@@ -6,7 +6,8 @@
 // 所有数据均通过各业务 store 写入，与真实操作走同一套逻辑，
 // 因此会同步产生库存、出入库流水、应收应付与操作日志，数据一致。
 
-import { db } from '../db'
+import { db, nextEmployeeNo } from '../db'
+import { hashPassword } from './password'
 import { useProductStore } from '../stores/product'
 import { usePurchaseStore } from '../stores/purchase'
 import { useSalesStore } from '../stores/sales'
@@ -233,17 +234,31 @@ export async function seedDemoData(): Promise<DemoResult> {
   }
 
   // ===== 7. 员工账号（方便用各角色登录后查看各自菜单） =====
-  // 登录号：13700000001~13700000004，密码统一 123456
+  // 登录名 / 手机号都能登：用户名用角色英文名、手机号 13700000001~4，密码统一 123456（哈希存储）
   const staffSeeds = [
-    { name: '采购小李', phone: '13700000001', password: '123456', role: 'purchaser' as const },
-    { name: '销售小王', phone: '13700000002', password: '123456', role: 'sales' as const },
-    { name: '财务小张', phone: '13700000003', password: '123456', role: 'finance' as const },
-    { name: '库房老陈', phone: '13700000004', password: '123456', role: 'warehouse' as const }
+    { name: '采购小李', username: 'purchaser', phone: '13700000001', password: '123456', role: 'purchaser' as const, dept: '采购部', position: '采购员', joinDate: '2025-03-01' },
+    { name: '销售小王', username: 'sales', phone: '13700000002', password: '123456', role: 'sales' as const, dept: '销售部', position: '销售员', joinDate: '2025-03-01' },
+    { name: '财务小张', username: 'finance', phone: '13700000003', password: '123456', role: 'finance' as const, dept: '财务部', position: '会计', joinDate: '2025-03-01' },
+    { name: '库房老陈', username: 'warehouse', phone: '13700000004', password: '123456', role: 'warehouse' as const, dept: '仓储部', position: '库管', joinDate: '2025-03-01' }
   ]
   for (const s of staffSeeds) {
     const dup = await db.users.where('phone').equals(s.phone).first()
     if (!dup) {
-      await db.users.add({ ...s, status: 'active', createdAt: new Date().toISOString() })
+      await db.users.add({
+        name: s.name,
+        username: s.username,
+        phone: s.phone,
+        employeeNo: await nextEmployeeNo(),
+        password: await hashPassword(s.password),
+        role: s.role,
+        status: 'active',
+        dept: s.dept,
+        position: s.position,
+        joinDate: s.joinDate,
+        remark: '',
+        avatar: '',
+        createdAt: new Date().toISOString()
+      })
     }
   }
 

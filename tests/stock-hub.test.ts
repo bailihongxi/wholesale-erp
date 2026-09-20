@@ -18,11 +18,21 @@ import StockAlertView from '../src/views/stock/StockAlertView.vue'
 import LoadingBlock from '../src/components/ui/LoadingBlock.vue'
 import { PAGE_SIZE_ALERT, PAGE_SIZE_LIST } from '../src/composables/usePagination'
 import { useBrand, DEFAULT_ROLE_AVATARS } from '../src/utils/brand'
+import { useUserStore } from '../src/stores/user'
 import { ALL_MODULES } from '../src/router/navConfig'
 import type { Product } from '../src/types'
 
 function src(rel: string): string {
   return readFileSync(resolve(__dirname, '..', rel), 'utf-8')
+}
+
+/** 设定当前登录角色（权限断言用） */
+function setRole(role: string): void {
+  const u = useUserStore()
+  u.currentUser = {
+    id: 1, name: 'tester', phone: '1', password: '',
+    role: role as any, status: 'active', createdAt: ''
+  }
 }
 
 /** 造 n 个库存低于预警线的商品 */
@@ -138,6 +148,7 @@ describe('库存管理 Hub 页：库存作业已并入', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     window.innerWidth = 1024
+    setRole('boss')
     await testRouter.push('/stock')
     await testRouter.isReady()
   })
@@ -152,10 +163,53 @@ describe('库存管理 Hub 页：库存作业已并入', () => {
     expect(tabs).toContain('库存预警')
     expect(tabs).toContain('出入库流水')
     expect(tabs).toContain('库存作业')
+  })
 
-    // 默认落在「库存明细」
-    expect(w.text()).toContain('库存明细')
-    expect(w.findComponent({ name: 'StockDetailView' }).exists()).toBe(true)
+  it('不带参数直接进「库存管理」时默认打开「库存作业」', async () => {
+    await testRouter.push('/stock')
+    const w = mount(StockManageView, {
+      global: { plugins: [testRouter] }
+    })
+    await flushPromises()
+    // 默认落在库存作业（入库/出库/调拨… 日常收发货入口）
+    expect(w.findComponent({ name: 'WarehouseOpsView' }).exists()).toBe(true)
+    expect(w.findComponent({ name: 'StockDetailView' }).exists()).toBe(false)
+    // 统计卡已下移到「库存明细」模块内，Hub 页头不再显示
+    expect(w.findAll('.stat-card').length).toBe(0)
+  })
+
+  it('?tab=detail 落到库存明细子页，且统计卡在搜索框上方', async () => {
+    setRole('boss')
+    await testRouter.push('/stock?tab=detail')
+    const w = mount(StockManageView, {
+      global: { plugins: [testRouter] }
+    })
+    await flushPromises()
+    const detail = w.findComponent({ name: 'StockDetailView' })
+    expect(detail.exists()).toBe(true)
+
+    // 四张概况卡片随明细模块一起出现，并且排在搜索框之前
+    const cards = w.findAll('.ui-stat-grid .stat-card')
+    expect(cards.length).toBe(4)
+    expect(cards.map(c => c.find('.s-label').text())).toEqual([
+      '商品 SKU', '库存总量', '库存金额（进价）', '库存预警'
+    ])
+    expect(w.find('.search-field').exists()).toBe(true)
+    const html = w.html()
+    expect(html.indexOf('ui-stat-grid')).toBeLessThan(html.indexOf('toolbar'))
+  })
+
+  it('库存金额卡按进价汇总，销售/库房都看不到', async () => {
+    for (const role of ['sales', 'warehouse']) {
+      setRole(role)
+      await testRouter.push('/stock?tab=detail')
+      const w = mount(StockManageView, { global: { plugins: [testRouter] } })
+      await flushPromises()
+      expect(w.findAll('.ui-stat-grid .stat-card').length, role).toBe(3)
+      expect(w.text(), role).not.toContain('库存金额')
+      expect(w.text(), role).not.toContain('进价')
+      w.unmount()
+    }
   })
 
   it('?tab=ops 直接落到库存作业（库房管理）子页', async () => {

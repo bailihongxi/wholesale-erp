@@ -1,6 +1,22 @@
 <template>
   <!-- 库存明细：按库房查看商品存放分布（数据由父级「库存管理」统一加载后传入） -->
   <div class="page">
+    <!--
+      全库概况卡片（第十五轮起从 Hub 页头下移到本模块，位于搜索框上方）：
+      反映全库现状，不随页内搜索变化，方便对着明细核对。
+    -->
+    <div class="ui-stat-grid">
+      <StatCard label="商品 SKU" :value="stats.skuCount" />
+      <StatCard label="库存总量" :value="stats.totalQty" />
+      <!-- 金额按进价汇总，故与「进价」同权限：销售/库房都不应看到 -->
+      <StatCard v-if="canSeePurchasePrice" label="库存金额（进价）" :value="`¥${money(stats.totalCost)}`" />
+      <StatCard
+        label="库存预警"
+        :value="stats.warnCount"
+        :tone="stats.warnCount > 0 ? 'danger' : 'neutral'"
+      />
+    </div>
+
     <!-- 工具栏：搜索 + 分类 + 库房 + 仅看低库存 -->
     <div class="toolbar">
       <SearchInput
@@ -123,6 +139,7 @@ import { ref, computed, watch } from 'vue'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
+import StatCard from '../../components/ui/StatCard.vue'
 import { useProductStore } from '../../stores/product'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
@@ -186,6 +203,17 @@ const pageProxy = computed({
 const hasFilter = computed(
   () => !!keyword.value.trim() || !!category.value || onlyLow.value || !!locFilter.value
 )
+
+/** 全库概况：始终基于全量商品，不受页内搜索/筛选影响（与明细表可对照） */
+const stats = computed(() => {
+  const data = props.products
+  return {
+    skuCount: data.length,
+    totalQty: data.reduce((s, p) => s + stockOf(p.id), 0),
+    totalCost: data.reduce((s, p) => s + stockOf(p.id) * p.purchasePrice, 0),
+    warnCount: data.filter(isLow).length
+  }
+})
 
 // 商品、分类、[各库房列]、合计库存、单位、预警值、状态 + 价格列
 const colspan = computed(
