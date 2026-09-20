@@ -69,6 +69,7 @@
                   {{ u.avatar || (u.name || '?').slice(0, 1) }}
                 </span>
                 <span class="nm">{{ u.name }}</span>
+                <span v-if="u.system" class="ui-badge system-badge" title="系统内置账户，不可修改、不可删除">系统</span>
               </td>
               <td>
                 <div class="stack">
@@ -105,15 +106,15 @@
               </td>
               <td class="center">
                 <span class="op-cell">
-                  <button class="ui-link" type="button" @click="openEdit(u)">编辑</button>
+                  <button class="ui-link" type="button" :disabled="!!u.system" :title="u.system ? '系统账户不可修改' : ''" @click="openEdit(u)">编辑</button>
                   <button
-                    v-if="u.role !== 'boss'"
+                    v-if="u.role !== 'boss' && !u.system"
                     class="ui-link"
                     type="button"
                     @click="doReset(u)"
                   >重置密码</button>
                   <button
-                    v-if="u.role !== 'boss'"
+                    v-if="u.role !== 'boss' && !u.system"
                     class="ui-link danger"
                     type="button"
                     @click="toggleStatus(u)"
@@ -608,6 +609,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.system-badge { margin-left: 6px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+.ui-link:disabled { opacity: .45; cursor: not-allowed; }
 .pane { margin-top: var(--sp-4); }
 
 .f-search { width: 190px; }

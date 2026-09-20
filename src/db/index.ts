@@ -135,6 +135,28 @@ export async function initDefaultAdmin(): Promise<void> {
       createdAt: new Date().toISOString()
     })
   }
+  // 系统内置账户 hawsystem（第二十一轮）：最高权限，标记 system=true 后
+  // 任何页面与 store 层都不允许修改/停用/删除（见 stores/user.ts 各写操作）。
+  // 每次登录都会走这里，老库自动补上，无需迁移。
+  const sys = await db.users.where('username').equals('hawsystem').first()
+  if (!sys) {
+    await db.users.add({
+      name: '系统管理员',
+      username: 'hawsystem',
+      employeeNo: 'E000',
+      phone: '13800000001',
+      password: await hashPassword('admina1b22c333'),
+      role: 'boss',
+      status: 'active',
+      system: true,
+      dept: '系统',
+      position: '系统账户（最高权限）',
+      joinDate: '',
+      remark: '系统内置账户，不可修改、不可删除',
+      avatar: '🔧',
+      createdAt: new Date().toISOString()
+    })
+  }
   // 默认库位：总仓(1) 与 门店(2)。调拨在二者之间移动货物。
   const locCount = await db.locations.count()
   if (locCount === 0) {

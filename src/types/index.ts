@@ -29,6 +29,11 @@ export interface User {
   avatar?: string
   /** 最近一次登录时间 ISO（可选） */
   lastLoginAt?: string
+  /**
+   * 系统内置账户（第二十一轮新增）：如 hawsystem。
+   * 标记后任何界面与 store 都不允许修改资料/重置密码/停用/删除，密码固定为初始值。
+   */
+  system?: boolean
   createdAt: string
 }
 

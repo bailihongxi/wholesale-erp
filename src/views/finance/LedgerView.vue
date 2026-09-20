@@ -85,7 +85,7 @@
               <option v-for="n in partyNames" :key="n" :value="n"></option>
             </datalist>
           </label>
-          <label class="ui-field">
+          <label class="ui-field link-field">
             <span class="ui-label">关联单据<span class="ui-hint">（选填）</span></span>
             <div class="link-row">
               <select v-model="form.linkDocType" class="ui-select link-type" aria-label="单据类型">
@@ -500,9 +500,11 @@ onMounted(async () => {
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--c-text-2); }
 .remark-cell { max-width: 220px; color: var(--c-text-2); font-size: 13px; }
 .link-cell { color: var(--c-primary); font-size: 12.5px; white-space: nowrap; }
-.link-row { display: grid; grid-template-columns: 132px 1fr; gap: 8px; }
+.link-field { grid-column: 1 / -1; }
+.link-row { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 8px; }
 .link-type { width: 100%; }
 @media (max-width: 767px) {
+  .link-field { grid-column: auto; }
   .link-row { grid-template-columns: 1fr; }
 }
 

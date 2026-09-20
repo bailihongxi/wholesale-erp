@@ -58,7 +58,8 @@ describe('阶段1：数据层 + 登录', () => {
     })
     expect(res.ok).toBe(true)
     const users = await store.listUsers()
-    expect(users.length).toBe(2)
+    // 第二十一轮起：admin + 系统账户 hawsystem + 新建张三 = 3
+    expect(users.length).toBe(3)
   })
 
   it('重复手机号创建失败', async () => {

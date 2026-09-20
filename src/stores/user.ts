@@ -217,6 +217,7 @@ export const useUserStore = defineStore('user', () => {
   async function updateUser(id: number, patch: Partial<User>): Promise<{ ok: boolean; message: string }> {
     const user = await db.users.get(id)
     if (!user) return { ok: false, message: '员工不存在' }
+    if (user.system) return { ok: false, message: '系统内置账户不可修改' }
 
     const next: Partial<User> = { ...patch }
 
@@ -257,6 +258,7 @@ export const useUserStore = defineStore('user', () => {
   async function setUserStatus(id: number, status: 'active' | 'disabled'): Promise<{ ok: boolean; message: string }> {
     const user = await db.users.get(id)
     if (!user) return { ok: false, message: '员工不存在' }
+    if (user.system) return { ok: false, message: '系统内置账户不可停用' }
     if (user.role === 'boss') return { ok: false, message: '老板账号不可停用' }
     if (user.id === currentUser.value?.id) return { ok: false, message: '不能停用当前登录的账号' }
     if (status === 'disabled') {
@@ -273,6 +275,7 @@ export const useUserStore = defineStore('user', () => {
   ): Promise<{ ok: boolean; message: string }> {
     const user = await db.users.get(id)
     if (!user) return { ok: false, message: '账号不存在' }
+    if (user.system) return { ok: false, message: '系统内置账户密码不可修改' }
     if (newPassword.length < PASSWORD_MIN_LEN) {
       return { ok: false, message: `新密码不能少于 ${PASSWORD_MIN_LEN} 位` }
     }
@@ -295,6 +298,7 @@ export const useUserStore = defineStore('user', () => {
   ): Promise<{ ok: boolean; message: string; password?: string }> {
     const user = await db.users.get(id)
     if (!user) return { ok: false, message: '员工不存在' }
+    if (user.system) return { ok: false, message: '系统内置账户密码不可重置' }
     const pwd = (tempPassword ?? '').trim() || generateTempPassword()
     if (pwd.length < PASSWORD_MIN_LEN) {
       return { ok: false, message: `临时密码不能少于 ${PASSWORD_MIN_LEN} 位` }
