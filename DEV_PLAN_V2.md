@@ -5,7 +5,7 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V1.0-11（2026-09-20 当前基线）**
+> **产品版本：V1.0-12（2026-09-20 当前基线）**
 > 本文档为开发执行计划，产品对外版本统一为 **V1.0-11**（`src/version.ts` / `package.json` 同步）。
 > 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**，第十四轮见 **「十九、V1.0-4 · 第十四轮」**，第十五 / 十六轮见 **「二十、V1.0-5 · 第十五轮」「二十一、V1.0-5 · 第十六轮」**，第十七轮见 **「二十二、V1.0-6 · 第十七轮」**，第十八轮见 **「二十三、V1.0-7 · 第十八轮」**，第十九轮见 **「二十四、V1.0-8 · 第十九轮」**，第二十轮见 **「二十五、V1.0-9 · 第二十轮」**，第二十一轮见 **「二十六、V1.0-10 · 第二十一轮」**，第二十二轮见 **「二十七、V1.0-11 · 第二十二轮」**。
 
@@ -1322,10 +1322,28 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 | `src/stores/product.ts` | `stockMap()` 多库位库存汇总（旧实现互相覆盖） |
 | `src/views/boss/UsersManageView.vue` | 表外包 `.table-scroll` 横向滚动；手机端 min-width 660、隐藏 col-mod 列；v-if 移到容器上保持 v-else 相邻 |
 | `tests/stage4.test.ts` | 搜索用例补 sleep(350)；预警断言改「警」 |
-| `tests/stock-cards-v17.test.ts` | 版本断言 V1.0-11 |
+| `tests/stock-cards-v17.test.ts` | 版本断言 V1.0-12 |
 
 ### 27.2 验收
 | 项 | 结果 |
 |---|---|
 | 测试 | 全量 **517 通过 / 47 文件** |
 | 版本 | V1.0-11 / 1.0.0-11 |
+
+## 二十八、第二十三/二十四轮（V1.0-12）：手机端体验 + 库存深度优化
+
+| 文件 | 改动 |
+|---|---|
+| `src/components/ProductPicker.vue` | 型号/规格列加 `col-spec`，手机端隐藏；空行 `colspan` 改用 `colCount` |
+| `src/styles/theme.css` | 新增 `@media (max-width:767px)`：筛选条换行 + 搜索独占一行；`.ui-page-main` 隐藏（页头去重） |
+| `src/views/boss/UsersManageView.vue` | `.modal` 限高 90vh + `.modal-body` 滚动，修复手机端长表单溢出 |
+| `src/views/sales/QuotesView.vue` | 加批发/零售价切换（`priceMode` / `switchMode`），picker 跟随 |
+| `src/stores/inventory.ts` | `syncLocationStock()` N+1 → 批量读（2 次 `toArray`） |
+| `tests/round24-mobile.test.ts` | 新增 5 例回归 |
+
+### 28.1 验收
+| 项 | 结果 |
+|---|---|
+| 测试 | 全量 **522 通过 / 48 文件** |
+| 版本 | V1.0-12 / 1.0.0-12 |
+| 实测（390×844） | 调拨首屏 245ms、盘点 46ms（原 5 秒+）；员工弹窗 759px 高可滚动 |

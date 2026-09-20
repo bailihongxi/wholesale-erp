@@ -99,10 +99,25 @@
           <label>备注</label>
           <input v-model="form.remark" class="f-input" placeholder="选填" />
         </div>
+        <!-- 批发 / 零售：同一个客户可能拿不同价，按单切换 -->
+        <div class="row">
+          <label>本单价格类型</label>
+          <div class="mode-switch">
+            <button class="mode-btn" :class="{ active: priceMode === 'wholesale' }" type="button" @click="switchMode('wholesale')">
+              批发价<span class="mode-hint">经销商拿货</span>
+            </button>
+            <button class="mode-btn" :class="{ active: priceMode === 'retail' }" type="button" @click="switchMode('retail')">
+              零售价<span class="mode-hint">散客零售</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <section class="items">
-        <h4 class="sec-title">报价商品明细</h4>
+        <h4 class="sec-title">
+          报价商品明细
+          <span class="tag" :class="priceMode === 'retail' ? 'tag-warn' : 'tag-info'">{{ priceMode === 'retail' ? '按零售价' : '按批发价' }}</span>
+        </h4>
         <div class="tb-scroll">
           <table class="data-table">
             <thead>
@@ -156,7 +171,7 @@
       <ProductPicker
         :rows="rows"
         :selected="selectedMap"
-        price-mode="wholesale"
+        :price-mode="priceMode"
         :show-price="true"
         :block-no-stock="false"
         title="选择商品（报价不占库存）"
@@ -327,10 +342,24 @@ const selectedMap = computed<Record<number, number>>(() => {
 function productName(p: Product): string { return productStore.productName(p) }
 function money(n: number): string { return Number(n ?? 0).toLocaleString() }
 
+/** 报价单的批发 / 零售切换（与销售开单一致）：切换时整单单价随之切换 */
+type PriceMode = 'wholesale' | 'retail'
+const priceMode = ref<PriceMode>('wholesale')
+function priceByMode(p: Product): number {
+  return priceMode.value === 'retail' ? Number(p.retailPrice) : Number(p.wholesalePrice)
+}
+function switchMode(mode: PriceMode): void {
+  if (priceMode.value === mode) return
+  priceMode.value = mode
+  // 切换后整单单价跟随新模式（个别行仍可手工改价）
+  for (const it of form.items) it.price = priceByMode(it.product)
+  showToast(mode === 'retail' ? '已切换到零售价' : '已切换到批发价')
+}
+
 function addItem(p: Product): void {
   const existing = form.items.find(it => it.product.id === p.id)
   if (existing) { existing.quantity += 1; return }
-  form.items.push({ product: p, quantity: 1, price: Number(p.wholesalePrice) || 0 })
+  form.items.push({ product: p, quantity: 1, price: priceByMode(p) })
 }
 
 async function handleCreate(): Promise<void> {
@@ -509,6 +538,17 @@ onMounted(async () => {
 .muted { color: var(--c-muted); font-weight: 400; }
 .f-input { height: 44px; border: 1px solid var(--c-border); border-radius: 10px; padding: 0 14px; font-size: 14px; outline: none; background: #fff; width: 100%; }
 .f-input:disabled { background: #f7f9fc; color: var(--c-muted); }
+/* 批发 / 零售价切换（与销售开单一致） */
+.mode-switch { display: flex; gap: 10px; }
+.mode-btn {
+  flex: 1 1 0; min-width: 120px; height: 48px; border-radius: 10px;
+  border: 1px solid var(--c-border-strong); background: #fff; color: var(--c-muted);
+  font-size: 14px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.mode-btn.active { border-color: var(--c-accent); background: var(--c-accent-soft); color: var(--c-primary); font-weight: 600; }
+.mode-hint { font-size: 11px; font-weight: 400; color: var(--c-muted); }
+.mode-btn.active .mode-hint { color: var(--c-accent); }
 .items { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(26,54,93,.06); }
 .sec-title { font-size: 15px; color: var(--c-primary); margin-bottom: 10px; }
 .tb-scroll { overflow-x: auto; }

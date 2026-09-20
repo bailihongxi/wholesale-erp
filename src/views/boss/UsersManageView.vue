@@ -742,6 +742,11 @@ onMounted(async () => {
   border-radius: var(--r-lg);
   box-shadow: var(--sh-lg);
   overflow: hidden;
+  /* 手机端长表单（如新建员工）可滚动：整体限高，头部/底部固定、主体滚动，
+     避免内容超出视口被裁切、确定按钮点不到（用户反馈） */
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -753,7 +758,7 @@ onMounted(async () => {
   border: none; background: none; cursor: pointer;
   font-size: 15px; color: var(--c-muted);
 }
-.modal-body { padding: 18px; }
+.modal-body { padding: 18px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-foot {
   display: flex; justify-content: flex-end; gap: 10px;
   padding: 12px 18px;

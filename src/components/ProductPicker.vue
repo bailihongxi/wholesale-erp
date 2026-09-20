@@ -37,7 +37,7 @@
             <th class="center" style="width:48px">序号</th>
             <th>商品名称</th>
             <th>类别</th>
-            <th>型号 / 规格</th>
+            <th class="col-spec">型号 / 规格</th>
             <th class="center" style="width:56px">单位</th>
             <th class="num" style="width:90px">可用库存</th>
             <th v-if="showPrice" class="num" style="width:100px">{{ priceHeader }}</th>
@@ -56,7 +56,7 @@
             <td class="center">{{ pager.startIndex.value + i }}</td>
             <td>{{ nameOf(p.product) }}</td>
             <td>{{ p.product.category || '-' }}</td>
-            <td class="pk-sub">{{ p.product.spec || p.product.model || '-' }}</td>
+            <td class="pk-sub col-spec">{{ p.product.spec || p.product.model || '-' }}</td>
             <td class="center">{{ p.product.unit }}</td>
             <td class="num">
               <span :class="stockClass(p)">{{ p.stock }}</span>
@@ -76,7 +76,7 @@
             </td>
           </tr>
           <tr v-if="!pager.paged.value.length">
-            <td :colspan="showPrice ? 8 : 7" class="empty">
+            <td :colspan="colCount" class="empty">
               {{ products.length ? '没有匹配的商品，换个关键词试试' : '暂无商品，请先在商品档案中添加' }}
             </td>
           </tr>
@@ -98,6 +98,7 @@ import { ref, computed, watch } from 'vue'
 import SearchInput from './SearchInput.vue'
 import TablePager from './TablePager.vue'
 import { usePagination, PAGE_SIZE_LIST } from '../composables/usePagination'
+import { useResponsive } from '../composables/useResponsive'
 import type { Product } from '../types'
 
 /** 带库存的商品行，调用方一次性算好传入，避免逐条查询拖慢列表 */
@@ -130,6 +131,10 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{ (e: 'pick', p: Product): void }>()
+
+const { isMobile } = useResponsive()
+/** 表格列数：手机端隐藏「型号/规格」列（与商品名重复），空行 colspan 要跟着减 */
+const colCount = computed(() => (isMobile.value ? 6 : 7) + (props.showPrice ? 1 : 0))
 
 const kw = ref('')
 const cat = ref('')
@@ -227,4 +232,8 @@ function stockClass(r: PickerRow): string {
 }
 .pk-add.pk-added:hover { background: #f06a06; border-color: #f06a06; }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
+/* 手机端：商品名已是「品牌+型号」，型号/规格列信息重复，藏掉让本行更宽松 */
+@media (max-width: 767px) {
+  .col-spec { display: none; }
+}
 </style>

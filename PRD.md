@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.6　|　**产品版本：V1.0-11（发布基线）**
+> 文档版本：V2.6　|　**产品版本：V1.0-12（发布基线）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V1.0-11'`，`package.json` → `version: "1.0.0-11"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V1.0-12'`，`package.json` → `version: "1.0.0-12"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -1758,3 +1758,48 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 
 ### 28.4 验收
 - 全量 **517 通过 / 47 文件**；`npm run build` 0 错误。
+
+---
+
+## 二十九、第二十三/二十四轮（V1.0-12）：手机端筛选布局 + 标题去重 + 弹窗滚动 + 报价单价格切换 + 库存深度优化
+
+### 29.1 商品选择器：手机端隐藏「型号 / 规格」列
+- `src/components/ProductPicker.vue`：`型号 / 规格` 列加 `col-spec` 钩子，手机端（<768px）隐藏。
+- 该列与商品名（`品牌 + 型号`）重复，隐藏后本行信息更宽松；电脑端保留。
+- 空行 `colspan` 改为 `colCount` 计算值（手机端隐藏一列后要跟着减 1），避免列数错位。
+
+### 29.2 手机端筛选条统一换行
+- `src/styles/theme.css` 新增 `@media (max-width: 767px)`：
+  - 筛选条整体 `flex-wrap: wrap`；
+  - 搜索框 `flex: 1 1 100%` 独占第一行；
+  - 其余控件按内容收缩并排（状态 + 时间、分类 + 状态各占一行）；
+  - 日期控件收窄（`flex: 1 1 120px; max-width: 145px`）腾出并排空间。
+- 钩子用 `.app-layout.is-mobile`，一次性覆盖全部页面（桌面端规则仍在 `@media (min-width: 768px)`）。
+
+### 29.3 手机端页头去重
+- 手机端顶部 `MobileTopNav` 已显示模块名，页面内的 `PageHeader` 标题与之重复。
+- 隐藏 `.ui-page-main`（标题 + 副标题），**保留 `.ui-page-actions`**（工作台页的「新建」等按钮仍在）；
+- 没有操作按钮的页头用 `:has()` 整体收起，不留空行。
+
+### 29.4 员工弹窗手机端可滚动
+- `UsersManageView.vue` 的 `.modal` 补 `display: flex; flex-direction: column; max-height: 90vh`，
+  `.modal-body` 补 `overflow-y: auto`：头部/底部固定、主体滚动，
+  解决「新建员工」长表单溢出屏幕、确定按钮点不到的问题。
+- 实测 390×844：弹窗高 759px（=90vh），主体内容 1179px 在 644px 区域内可滚动。
+
+### 29.5 报价单批发 / 零售价切换
+- `QuotesView.vue` 参照销售开单加 `priceMode` + `switchMode()`：切换时整单单价随之切换，个别行仍可手工改价。
+- `ProductPicker` 的 `price-mode` 跟随 `priceMode`，商品列表直接显示对应价格。
+- 「选择系统中已有客户 + 直接填写客户名称」双通道**原本已支持**（下拉 + 手填），本轮核对确认保留。
+
+### 29.6 库存深度优化（调拨 / 盘点首屏卡顿）
+- 根因：`inventory.ts` 的 `syncLocationStock()` 对**每个商品**发一次 Dexie 查询（N+1），
+  商品上千时首屏卡 5 秒以上，且被 `TransferView` / `CountView` 的 `init()` 排在第一位调用，
+  导致「调拨方向仓位下拉」和「选择商品列表」迟迟出不来。
+- 修复：改为一次 `Promise.all` 把 `stock` / `locationStock` 两张表读进内存再比对，
+  查询次数 N+1 → 2 次 `toArray`；写入语义完全不变（只补缺失行，不覆盖已有分布）。
+- 实测：调拨页首屏就绪 **245ms**、盘点页 **46ms**（原先 5 秒以上）。
+
+### 29.7 验收
+- 新增 `tests/round24-mobile.test.ts`（5 例）：手机端 colspan / col-spec 钩子 / theme.css 规则 / 报价单价格切换。
+- 全量 **522 通过 / 48 文件**；`npm run build` 0 错误。

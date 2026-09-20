@@ -805,6 +805,59 @@ body {
   }
 }
 
+/* ============================================================
+   手机端筛选条 + 页头（本轮新增）
+   ------------------------------------------------------------
+   背景：上一块的桌面压紧规则只在 @media (min-width:768px) 生效，
+   手机端（<768px）各页 scoped .toolbar 多为 display:flex 无 flex-wrap，
+   搜索框、下拉、日期会被挤在一行溢出视口（用户反馈「太挤、选不了」）。
+   这里用 .app-layout.is-mobile 钩子统一处理所有页面：
+   · 筛选条整体换行；
+   · 搜索框独占第一行（flex:1 1 100%）；
+   · 其余控件按内容收缩并排，能挤一行就一行（状态下拉+时间 / 分类+状态）。
+   同时：手机端顶部 MobileTopNav 已显示模块名，页面头只保留操作按钮，
+   把重复的标题（.ui-page-main）藏掉，避免「模块名出现两次」。
+   ============================================================ */
+@media (max-width: 767px) {
+  .app-layout.is-mobile :is(.toolbar, .data-toolbar, .ui-toolbar) {
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* 搜索框：独占第一行 */
+  .app-layout.is-mobile :is(.toolbar, .data-toolbar, .ui-toolbar) > :is(.tb-search, .grow, .search-wrap) {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+    order: -1;
+  }
+
+  /* 其余控件：按内容收缩，自动并排（状态+时间、分类+状态等） */
+  .app-layout.is-mobile :is(.toolbar, .data-toolbar, .ui-toolbar) > :is(input, select, button, label) {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  /* 日期区间控件收窄，给状态/分类选择器挪出并排空间 */
+  .app-layout.is-mobile :is(.toolbar, .data-toolbar, .ui-toolbar) > input[type='date'] {
+    flex: 1 1 120px;
+    max-width: 145px;
+  }
+
+  /* 手机端：顶部模块名已由 MobileTopNav 显示，页面头只保留操作按钮，
+     标题（含副标题）藏掉，消除与顶栏的重复。操作按钮仍在，不丢失功能。 */
+  .app-layout.is-mobile .ui-page-main { display: none; }
+  .app-layout.is-mobile .ui-page-head {
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  /* 没有操作按钮的页面头（只剩被藏掉的标题）直接收起，不占空行 */
+  .app-layout.is-mobile .ui-page-head:not(:has(.ui-page-actions)) { display: none; }
+}
+
 /* 首屏骨架：页面首次拉数据期间占位，避免「先闪一下空态、再出现列表」 */
 .ui-skeleton {
   padding: 10px 14px;

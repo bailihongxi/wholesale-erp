@@ -284,17 +284,25 @@ export const useInventoryStore = defineStore('inventory', () => {
   /**
    * 首次使用调拨/盘点时，把现有「总库存」铺到「默认库房」上，
    * 保证总库存 = 各库位之和 的等式成立。只补缺失行，绝不覆盖已有分布。
+   *
+   * 性能：早先对每个商品发一次 `locationStock.where('productId').equals().first()`
+   * （N+1），商品上千时首屏会卡 5 秒以上。改为一次把两张表读进内存再比对，
+   * 查询次数从 N+1 降到 2 次 `toArray`，调拨/盘点选商品列表的首屏卡顿随之消除。
    */
   async function syncLocationStock(): Promise<void> {
     await ensureLocations()
     const defId = await defaultLocationId()
-    const stockRows = await db.stock.toArray()
+    const [stockRows, locRows] = await Promise.all([
+      db.stock.toArray(),
+      db.locationStock.toArray()
+    ])
+    // 一次性拿到「默认库位上已有分布的商品」集合，避免逐商品发查询
+    const covered = new Set<number>()
+    for (const r of locRows) {
+      if (r.locationId === defId) covered.add(r.productId)
+    }
     for (const s of stockRows) {
-      const exist = await db.locationStock
-        .where('productId').equals(s.productId)
-        .and(r => r.locationId === defId)
-        .first()
-      if (!exist && s.quantity !== 0) {
+      if (!covered.has(s.productId) && s.quantity !== 0) {
         await db.locationStock.add({ productId: s.productId, locationId: defId, quantity: s.quantity })
       }
     }
