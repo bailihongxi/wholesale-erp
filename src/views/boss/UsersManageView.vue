@@ -48,7 +48,8 @@
           </div>
         </template>
 
-        <table v-if="filteredStaff.length" class="data-table">
+        <div v-if="filteredStaff.length" class="table-scroll">
+        <table class="data-table">
           <thead>
             <tr>
               <th class="col-no">工号</th>
@@ -124,6 +125,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
         <EmptyState v-else icon="👤" text="没有匹配的员工" hint="换个关键词，或点右上角新建员工" />
 
         <TablePager
@@ -761,8 +763,15 @@ onMounted(async () => {
 .role-hint { margin-top: 12px; line-height: 1.6; }
 .to-perm { color: var(--c-accent); cursor: pointer; margin-left: 6px; }
 
+/* 员工表手机端：横向滑动代替撑爆屏幕（旧版直接溢出，操作列在屏外点不到） */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 @media (max-width: 767px) {
   .f-search, .f-role, .f-dept, .f-status { width: 100%; }
   .pg-grid { grid-template-columns: 1fr; }
+  /* 手机端表格保持最小宽度，左右滑动即可点到最右的「编辑」操作 */
+  .table-scroll .data-table { min-width: 660px; }
+  /* 「可见模块」列最占宽度，手机端藏起来（模块权限在电脑端配置即可） */
+  th.col-mod, td.col-mod { display: none; }
 }
 </style>

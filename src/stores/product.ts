@@ -15,11 +15,15 @@ export const useProductStore = defineStore('product', () => {
     products.value = await db.products.where('status').equals('active').toArray()
   }
 
-  /** 一次性取出全部商品的库存，避免在列表里逐条查询（商品多时非常慢） */
+  /**
+   * 一次性取出全部商品的库存，避免在列表里逐条查询（商品多时非常慢）。
+   * 一个商品在多个库位（总仓/门店…）各有一行，这里**汇总**成总库存——
+   * 旧实现直接覆盖只保留最后一个库位，多库位时库存数是错的。
+   */
   async function stockMap(): Promise<Record<number, number>> {
     const all = await db.stock.toArray()
     const map: Record<number, number> = {}
-    for (const s of all) map[s.productId] = s.quantity
+    for (const s of all) map[s.productId] = (map[s.productId] ?? 0) + s.quantity
     return map
   }
 

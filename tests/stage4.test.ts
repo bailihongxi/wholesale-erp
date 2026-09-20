@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -81,6 +82,7 @@ describe('阶段4：商品中心页面重写', () => {
     expect(wrapper.findAll('.prod-card').length).toBe(2)
     // 搜索框已统一为 SearchInput 组件（自带清除按钮），输入其内部 .search-field
     await wrapper.find('.search-field').setValue('格力')
+    await sleep(350) // 搜索防抖 250ms
     await flushPromises()
     expect(wrapper.findAll('.prod-card').length).toBe(1)
     expect(wrapper.text()).toContain('格力 KFR-35GW')
@@ -98,12 +100,14 @@ describe('阶段4：商品中心页面重写', () => {
     expect(wrapper.find('.clear-btn').attributes('style')).toContain('display: none')
 
     await wrapper.find('.search-field').setValue('格力')
+    await sleep(350)
     await flushPromises()
     expect(wrapper.findAll('.prod-card').length).toBe(1)
     // 有输入内容时清除按钮出现
     expect(wrapper.find('.clear-btn').attributes('style') ?? '').not.toContain('display: none')
 
     await wrapper.find('.clear-btn').trigger('click')
+    await sleep(350)
     await flushPromises()
     expect(wrapper.find('.search-field').element.value).toBe('')
     expect(wrapper.findAll('.prod-card').length).toBe(2)
@@ -115,7 +119,7 @@ describe('阶段4：商品中心页面重写', () => {
     const wrapper = mount(ProductListView, { global: { plugins: [testRouter] } })
     await flushPromises()
     expect(wrapper.find('.prod-card.is-warn').exists()).toBe(true)
-    expect(wrapper.text()).toContain('预警')
+    expect(wrapper.text()).toContain('警') // 手机端卡片简化为单字「警」
   })
 
   it('4.5 销售角色看不到进价，但可见批发价', async () => {

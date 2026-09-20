@@ -113,11 +113,11 @@
         </div>
         <div class="pc-meta">
           <span>{{ p.category || '未分类' }}</span>
-          <span v-if="canSeePurchasePrice">进价 ¥{{ money(p.purchasePrice) }}</span>
-          <span v-if="canSeeAnyPrice">批发 ¥{{ money(p.wholesalePrice) }}</span>
-          <span v-if="canSeeAnyPrice">零售 ¥{{ money(p.retailPrice) }}</span>
-          <span :class="stockClass(p)">库存 {{ stockOf(p.id!) }}</span>
-          <span v-if="isWarn(p)" class="tag tag-danger">预警</span>
+          <span v-if="canSeePurchasePrice">进 ¥{{ money(p.purchasePrice) }}</span>
+          <span v-if="canSeeAnyPrice">批 ¥{{ money(p.wholesalePrice) }}</span>
+          <span v-if="canSeeAnyPrice">零 ¥{{ money(p.retailPrice) }}</span>
+          <span :class="stockClass(p)">库 {{ stockOf(p.id!) }}</span>
+          <span v-if="isWarn(p)" class="tag tag-danger">警</span>
         </div>
         <div class="pc-actions">
           <button class="link-btn" type="button" @click="go(`/boss/products/edit/${p.id}`)">编辑</button>
@@ -290,6 +290,15 @@ const { canSeeAnyPrice, canSeePurchasePrice } = usePermission()
 const keyword = ref('')
 const category = ref('')
 const status = ref('')
+// 搜索输入防抖：商品上千时每敲一个字全量 filter 在手机上会卡 100~300ms，
+// 这里把实际过滤值延迟 250ms 刷新，边打边出结果但不拖慢输入。
+const kwDebounced = ref('')
+let kwTimer: ReturnType<typeof setTimeout> | undefined
+watch(keyword, v => {
+  clearTimeout(kwTimer)
+  kwTimer = setTimeout(() => { kwDebounced.value = v }, 250)
+})
+onUnmounted(() => clearTimeout(kwTimer))
 
 const all = ref<Product[]>([])
 const stockMap = ref<Record<number, number>>({})
@@ -313,7 +322,7 @@ async function reload(): Promise<void> {
 }
 
 const filtered = computed<Product[]>(() => {
-  const kw = keyword.value.trim().toLowerCase()
+  const kw = kwDebounced.value.trim().toLowerCase()
   return all.value.filter(p => {
     if (status.value && p.status !== status.value) return false
     if (category.value && p.category !== category.value) return false
@@ -330,7 +339,9 @@ const filtered = computed<Product[]>(() => {
 
 const pager = usePagination(filtered, PAGE_SIZE_PRODUCT)
 // 筛选条件变化回到第一页，避免停在越界页码
-watch([keyword, category, status], () => pager.reset())
+watch([category, status], () => pager.reset())
+// 防抖后的关键字变化也回第一页，避免搜索结果变少后停在空白页
+watch(kwDebounced, () => pager.reset())
 
 const pageProxy = computed({
   get: () => pager.page.value,
