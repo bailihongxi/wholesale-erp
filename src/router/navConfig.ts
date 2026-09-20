@@ -58,9 +58,10 @@ export const ALL_MODULES: NavItem[] = [
   { label: '财务管理', icon: '🧾', route: '/finance', group: '财务', desc: '对账 / 经营报表 / 记一笔' },
   { label: '经营报表', icon: '📊', route: '/boss/reports', group: '财务', desc: '销售趋势与毛利分析' },
   // ===== 系统 =====
+  // 第十九轮：操作日志不再单列菜单，归纳进「系统设置」页内（设置页 → 操作日志面板）。
+  // 独立路由 /boss/audit-logs 保留，旧入口与收藏夹仍可访问。
   { label: '员工管理', icon: '👤', route: '/boss/users', group: '系统', desc: '员工账号与角色权限' },
-  { label: '操作日志', icon: '📜', route: '/boss/audit-logs', group: '系统', desc: '全站操作痕迹' },
-  { label: '系统设置', icon: '⚙️', route: '/boss/settings', group: '系统', desc: '公司信息 / 备份 / 云同步' }
+  { label: '系统设置', icon: '⚙️', route: '/boss/settings', group: '系统', desc: '公司信息 / 操作日志 / 备份 / 云同步' }
 ]
 
 /** 路由 -> 模块定义，便于按路由反查图标与名称 */
@@ -79,7 +80,7 @@ export const DEFAULT_ROLE_PERMS: Record<string, string[]> = {
   boss: [
     '/boss/home', '/boss/products', '/stock',
     '/purchase/orders', '/sales/orders', '/customers', '/purchase/suppliers',
-    '/finance', '/boss/users', '/boss/audit-logs', '/boss/settings'
+    '/finance', '/boss/users', '/boss/settings'
   ],
   purchaser: ['/purchase/home', '/purchase/orders', '/purchase/suppliers'],
   sales: ['/sales/home', '/sales/orders', '/customers'],

@@ -252,7 +252,7 @@ describe('首屏骨架：消除"先闪空态再出数据"', () => {
       'src/views/purchase/PurchaseOrdersView.vue',
       'src/views/sales/SalesOrdersView.vue',
       'src/views/boss/ProductListView.vue',
-      'src/views/boss/AuditLogView.vue',
+      'src/components/AuditLogPanel.vue',
       'src/views/sales/CustomersView.vue',
       'src/views/finance/ReconcileView.vue'
     ]

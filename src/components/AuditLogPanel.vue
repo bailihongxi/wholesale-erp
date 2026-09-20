@@ -1,0 +1,162 @@
+<template>
+  <div class="audit-panel">
+    <div class="toolbar">
+      <SearchInput
+        v-model="keyword"
+        class="tb-search"
+        placeholder="搜索操作内容 / 动作"
+        :debounce="0"
+      />
+      <select v-model="actionFilter" class="tb-select">
+        <option value="">全部动作</option>
+        <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
+      </select>
+      <span class="tb-tip">共 {{ list.length }} 条 / 全部 {{ logs.length }}</span>
+    </div>
+
+    <LoadingBlock v-if="loading" :rows="7" />
+
+    <table v-else-if="!isMobile" class="data-table log-table">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>操作人</th>
+          <th>动作</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="l in pager.paged.value" :key="l.id">
+          <td class="c-time">{{ fmt(l.createdAt) }}</td>
+          <td>{{ operatorName(l.operatorId) }}</td>
+          <td><span class="a-badge">{{ l.action }}</span></td>
+          <td class="c-detail">{{ l.detail }}</td>
+        </tr>
+        <tr v-if="!pager.total.value">
+          <td colspan="4" class="empty">
+            {{ hasFilter ? '没有匹配的日志，试试清除筛选' : '暂无操作日志' }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <ul v-else class="zebra-list log-cards">
+      <li v-for="l in pager.paged.value" :key="l.id" class="log-card">
+        <div class="lc-head">
+          <span class="a-badge">{{ l.action }}</span>
+          <span class="lc-time">{{ fmt(l.createdAt) }}</span>
+        </div>
+        <div class="lc-detail">{{ l.detail }}</div>
+        <div class="lc-op">操作人：{{ operatorName(l.operatorId) }}</div>
+      </li>
+      <li v-if="!pager.total.value" class="empty">
+        {{ hasFilter ? '没有匹配的日志，试试清除筛选' : '暂无操作日志' }}
+      </li>
+    </ul>
+
+    <TablePager
+      v-if="pager.total.value"
+      v-model:page="page"
+      :page-count="pager.pageCount.value"
+      :total="pager.total.value"
+      :size="pager.size.value"
+      show-jump
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+/**
+ * 操作日志面板（可复用）。
+ * 独立页 AuditLogView 与系统设置页的「操作日志」折叠卡片共用同一份列表逻辑，
+ * 保证搜索 / 筛选 / 分页行为完全一致。
+ */
+import { ref, computed, onMounted, watch } from 'vue'
+import { usePagination, PAGE_SIZE_LIST } from '../composables/usePagination'
+import TablePager from './TablePager.vue'
+import SearchInput from './SearchInput.vue'
+import { useResponsive } from '../composables/useResponsive'
+import { db } from '../db'
+import { AUDIT_ACTIONS } from '../utils/audit'
+import type { AuditLog, User } from '../types'
+import LoadingBlock from './ui/LoadingBlock.vue'
+
+const { isMobile } = useResponsive()
+
+const logs = ref<AuditLog[]>([])
+/** 首次拉数据期间骨架占位，避免先闪一下「暂无操作日志」 */
+const loading = ref(true)
+const users = ref<User[]>([])
+const keyword = ref('')
+const actionFilter = ref('')
+const actionOptions = Object.values(AUDIT_ACTIONS)
+
+const hasFilter = computed(() => !!keyword.value.trim() || !!actionFilter.value)
+
+const list = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  let data = logs.value
+  if (actionFilter.value) data = data.filter(l => l.action === actionFilter.value)
+  if (kw) {
+    data = data.filter(l =>
+      l.action.toLowerCase().includes(kw) || l.detail.toLowerCase().includes(kw)
+    )
+  }
+  // 最新在前
+  return [...data].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+})
+
+// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const pager = usePagination(list, PAGE_SIZE_LIST)
+// 关键字 / 动作筛选变了就回第一页
+watch([keyword, actionFilter], () => pager.reset())
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
+
+function operatorName(id: number): string {
+  return users.value.find(u => u.id === id)?.name ?? `#${id}`
+}
+
+function fmt(s: string): string {
+  return s ? s.slice(0, 16).replace('T', ' ') : '-'
+}
+
+async function reload(): Promise<void> {
+  try {
+    logs.value = await db.auditLogs.toArray()
+    users.value = await db.users.toArray()
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(reload)
+</script>
+
+<style scoped>
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.tb-search { flex: 1 1 320px; min-width: 200px; }
+.tb-select {
+  height: 40px; border: 1px solid var(--c-border-strong); border-radius: var(--r-sm);
+  padding: 0 14px; font-size: 14px; background: #fff; outline: none; color: var(--c-text);
+}
+.tb-tip { font-size: 12px; color: var(--c-muted, #64748b); }
+
+/* 表格外观交给全站 .data-table（含斑马纹与圆角），这里只留字号 */
+.log-table { font-size: 14px; }
+.log-table th, .log-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--c-border, #e2e8f0); }
+.log-table th { background: #f1f5f9; color: var(--c-primary, #1a365d); }
+.c-time { color: var(--c-muted, #64748b); font-size: 13px; white-space: nowrap; }
+.c-detail { color: var(--c-text, #1a202c); }
+.a-badge {
+  display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px;
+  background: var(--c-bg, #f1f5f9); color: var(--c-primary, #1a365d);
+}
+.log-cards { list-style: none; }
+.log-card { padding: 12px 4px; border-bottom: 1px solid var(--c-border, #e2e8f0); }
+.log-card:last-child { border-bottom: none; }
+.lc-head { display: flex; justify-content: space-between; align-items: center; }
+.lc-time { font-size: 12px; color: var(--c-muted, #64748b); }
+.lc-detail { font-size: 14px; margin-top: 6px; }
+.lc-op { font-size: 12px; color: var(--c-muted, #64748b); margin-top: 4px; }
+.empty { text-align: center; color: var(--c-muted, #64748b); padding: 20px; }
+</style>

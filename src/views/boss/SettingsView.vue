@@ -157,6 +157,14 @@
       </button>
     </CollapseCard>
 
+    <!-- 操作日志（第十九轮起归纳到系统设置） -->
+    <CollapseCard v-model="panels.audit" title="📜 操作日志">
+      <p class="tip block-tip">
+        全站关键操作留痕（建单、入库、出库、收款、改价、权限变更等），可按动作与关键词检索。
+      </p>
+      <AuditLogPanel />
+    </CollapseCard>
+
     <!-- 云同步：数据加密后存进 GitHub 仓库，仓库同时用来托管 Pages 页面 -->
     <CollapseCard v-model="panels.sync" title="☁️ 云同步（GitHub）">
       <div class="sync-stat">
@@ -266,6 +274,7 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import CollapseCard from '../../components/ui/CollapseCard.vue'
 import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import AppIconPanel from '../../components/AppIconPanel.vue'
+import AuditLogPanel from '../../components/AuditLogPanel.vue'
 import { APP_VERSION } from '../../version'
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
@@ -290,7 +299,7 @@ const previewRetail = computed(() => calcRetail(sampleCost.value, rule.value))
  * 展开状态记在 localStorage，下次进来保持原来的样子。
  */
 const PANEL_KEYS = [
-  'company', 'brand', 'appicon', 'backup', 'demo', 'price', 'print', 'warehouse', 'sync'
+  'company', 'brand', 'appicon', 'backup', 'demo', 'price', 'print', 'warehouse', 'audit', 'sync'
 ] as const
 type PanelKey = typeof PANEL_KEYS[number]
 const PANEL_STORAGE_KEY = 'erp_settings_panels'
@@ -298,7 +307,7 @@ const PANEL_STORAGE_KEY = 'erp_settings_panels'
 function defaultPanels(): Record<PanelKey, boolean> {
   return {
     company: true, brand: false, appicon: false, backup: false, demo: false,
-    price: false, print: false, warehouse: false, sync: false
+    price: false, print: false, warehouse: false, audit: false, sync: false
   }
 }
 

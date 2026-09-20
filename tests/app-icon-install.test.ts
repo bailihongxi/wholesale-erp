@@ -53,7 +53,7 @@ describe('需求1：全站列表统一 20 条/页', () => {
     { file: 'src/views/finance/FinanceOpsView.vue', name: '资金流水' },
     { file: 'src/views/finance/LedgerView.vue', name: '记一笔' },
     { file: 'src/views/finance/ReconcileView.vue', name: '应收应付 / 收付款列表' },
-    { file: 'src/views/boss/AuditLogView.vue', name: '操作日志' },
+    { file: 'src/components/AuditLogPanel.vue', name: '操作日志' },
     { file: 'src/views/boss/UsersManageView.vue', name: '员工管理' },
     { file: 'src/views/sales/CustomersView.vue', name: '客户管理' },
     { file: 'src/views/purchase/SuppliersView.vue', name: '供应商列表' },
@@ -67,7 +67,7 @@ describe('需求1：全站列表统一 20 条/页', () => {
       const tpl = s.split('<script setup')[0]
       expect(tpl).toContain('<TablePager')
       expect(tpl).toContain('paged.value')
-      expect(s).toContain('components/TablePager.vue')
+      expect(s).toContain('TablePager.vue') // AuditLogPanel 在 components/ 下用相对路径 './TablePager.vue'
       // 商品档案历史上用 PAGE_SIZE_PRODUCT，第十五轮起两者都等于 20
       expect(s).toMatch(/PAGE_SIZE_(LIST|PRODUCT)/)
     })
@@ -82,7 +82,7 @@ describe('需求1：全站列表统一 20 条/页', () => {
     const tables = [
       'src/views/purchase/PurchaseOrdersView.vue',
       'src/views/sales/SalesOrdersView.vue',
-      'src/views/boss/AuditLogView.vue',
+      'src/components/AuditLogPanel.vue',
       'src/views/sales/CustomersView.vue',
       'src/views/boss/UsersManageView.vue',
       'src/views/finance/FinanceOpsView.vue',

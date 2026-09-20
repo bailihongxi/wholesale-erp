@@ -36,12 +36,11 @@ const userStore = useUserStore()
 
 const pwdOpen = ref(false)
 
-/** 手机端「我的」：管理与分析类入口 */
+/** 手机端「我的」：管理与分析类入口（操作日志已归纳进系统设置） */
 const entries = [
   { route: '/finance', icon: '🧾', label: '财务管理' },
   { route: '/boss/reports', icon: '📊', label: '报表中心（含毛利）' },
   { route: '/boss/users', icon: '👤', label: '人事权限' },
-  { route: '/boss/audit-logs', icon: '📜', label: '操作日志' },
   { route: '/boss/settings', icon: '⚙️', label: '系统设置' }
 ]
 

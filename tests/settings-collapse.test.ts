@@ -18,11 +18,12 @@ import router from '../src/router'
 
 const STORAGE_KEY = 'erp_settings_panels'
 
-// 页面上的九个模块（顺序与 SettingsView 模板一致）
-// 第十六轮新增「应用图标与桌面快捷方式」，插在「品牌与图标」之后
+// 页面上的十个模块（顺序与 SettingsView 模板一致）
+// 第十六轮新增「应用图标与桌面快捷方式」，插在「品牌与图标」之后；
+// 第十九轮新增「操作日志」，插在「库房管理」与「云同步」之间（从侧边栏独立菜单归纳进来）
 const TITLES = [
   '公司信息', '品牌与图标', '应用图标与桌面快捷方式', '数据备份与恢复', '示例数据',
-  '价格规则（加价比例）', '打印设置', '库房管理', '☁️ 云同步（GitHub）'
+  '价格规则（加价比例）', '打印设置', '库房管理', '📜 操作日志', '☁️ 云同步（GitHub）'
 ]
 
 async function mountSettings() {
@@ -98,7 +99,7 @@ describe('CollapseCard 组件本身', () => {
 })
 
 describe('系统设置页：模块可折叠', () => {
-  it('九个模块都包成了折叠卡片', async () => {
+  it('十个模块都包成了折叠卡片', async () => {
     const w = await mountSettings()
     expect(states(w).map(s => s.title)).toEqual(TITLES)
   })

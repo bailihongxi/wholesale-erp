@@ -104,21 +104,24 @@ describe('阶段3：老板工作台重写', () => {
 
   it('3.4 手机端「我的」落地页含管理与分析入口', () => {
     const wrapper = mount(BossMineView, { global: { plugins: [testRouter] } })
-    expect(wrapper.findAll('.entry-list li').length).toBe(5)
+    // 第十九轮：操作日志归纳进系统设置，手机端「我的」不再单列入口
+    expect(wrapper.findAll('.entry-list li').length).toBe(4)
     expect(wrapper.text()).toContain('财务管理')
     expect(wrapper.text()).toContain('人事权限')
     expect(wrapper.text()).toContain('报表中心')
-    expect(wrapper.text()).toContain('操作日志')
+    expect(wrapper.text()).not.toContain('操作日志')
     expect(wrapper.text()).toContain('系统设置')
   })
 
-  it('3.5 侧边栏 11 个菜单路由均可解析（库存已收口到 /stock）', () => {
+  it('3.5 侧边栏 10 个菜单路由均可解析（库存已收口到 /stock，操作日志归纳进系统设置）', () => {
     const paths = getNav('boss').sidebar.map(i => i.route)
-    expect(paths.length).toBe(11)
+    expect(paths.length).toBe(10)
     // 第十二轮：库存作业并入库存管理页内，侧边栏只保留 /stock
     expect(paths).not.toContain('/warehouse')
     expect(paths).toContain('/stock')
-    expect(paths).toContain('/boss/audit-logs')
+    // 第十九轮：操作日志归纳进系统设置，独立菜单路由不再出现在侧边栏
+    expect(paths).not.toContain('/boss/audit-logs')
+    expect(paths).toContain('/boss/settings')
     for (const p of paths) {
       const resolved = router.resolve(p)
       expect(resolved.matched.length, `路由未注册: ${p}`).toBeGreaterThan(0)
