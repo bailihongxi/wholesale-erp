@@ -5,8 +5,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
   // 老板经营看板
   async function getBossSummary() {
     const today = new Date().toDateString()
-    const saleOrders = await db.saleOrders.toArray()
-    const purchaseOrders = await db.purchaseOrders.toArray()
+    const [saleOrders, purchaseOrders] = await Promise.all([
+      db.saleOrders.toArray(),
+      db.purchaseOrders.toArray(),
+    ])
 
     let todaySales = 0
     let todayPurchases = 0
@@ -80,8 +82,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const { useFinanceStore } = await import('./finance')
     const financeStore = useFinanceStore()
 
-    const saleOrders = await db.saleOrders.toArray()
-    const purchaseOrders = await db.purchaseOrders.toArray()
+    const [saleOrders, purchaseOrders] = await Promise.all([
+      db.saleOrders.toArray(),
+      db.purchaseOrders.toArray(),
+    ])
 
     // 本月销售额
     let monthSales = 0

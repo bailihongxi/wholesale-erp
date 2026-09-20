@@ -38,13 +38,40 @@ class CloudQuery {
   }
 }
 
+/** 基础档案表：变化少，启用内存缓存，切页面秒开 */
+const CACHED_TABLES = new Set([
+  'products', 'customers', 'suppliers', 'locations', 'users', 'rolePerms',
+])
+
 export class CloudTable<T = any> {
+  private _cache: T[] | null = null
+  private _cachePromise: Promise<T[]> | null = null
+
   constructor(
     private client: typeof supabase,
     public readonly name: string,
-  ) {}
+  ) {
+    this.useCache = CACHED_TABLES.has(name)
+  }
+  private useCache: boolean
+
+  /** 手动清缓存（新增/删除/改数据后自动清；外部刷新也可调） */
+  invalidate() {
+    this._cache = null
+    this._cachePromise = null
+  }
 
   async toArray(): Promise<T[]> {
+    if (this.useCache) {
+      if (this._cache) return this._cache
+      if (this._cachePromise) return this._cachePromise
+      this._cachePromise = this._fetchAll().then(d => { this._cache = d; this._cachePromise = null; return d })
+      return this._cachePromise
+    }
+    return this._fetchAll()
+  }
+
+  private async _fetchAll(): Promise<T[]> {
     const { data, error } = await this.client.from(this.name).select('*')
     if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
     return (data as T[]) || []
@@ -60,12 +87,14 @@ export class CloudTable<T = any> {
   async put(obj: any): Promise<number> {
     const { data, error } = await this.client.from(this.name).upsert(obj).select('id')
     if (error) throw new Error(`${this.name}.put: ${error.message}`)
+    this.invalidate()
     return (data as any[])[0].id
   }
 
   async add(obj: any): Promise<number> {
     const { data, error } = await this.client.from(this.name).insert(obj).select('id')
     if (error) throw new Error(`${this.name}.add: ${error.message}`)
+    this.invalidate()
     return (data as any[])[0].id
   }
 
@@ -73,28 +102,33 @@ export class CloudTable<T = any> {
     if (!objs.length) return
     const { error } = await this.client.from(this.name).upsert(objs)
     if (error) throw new Error(`${this.name}.bulkPut: ${error.message}`)
+    this.invalidate()
   }
 
   async bulkAdd(objs: any[]): Promise<void> {
     if (!objs.length) return
     const { error } = await this.client.from(this.name).insert(objs)
     if (error) throw new Error(`${this.name}.bulkAdd: ${error.message}`)
+    this.invalidate()
   }
 
   async delete(id: number | string): Promise<void> {
     const { error } = await this.client.from(this.name).delete().eq('id', id)
     if (error) throw new Error(`${this.name}.delete: ${error.message}`)
+    this.invalidate()
   }
 
   async bulkDelete(ids: (number | string)[]): Promise<void> {
     if (!ids.length) return
     const { error } = await this.client.from(this.name).delete().in('id', ids as any)
     if (error) throw new Error(`${this.name}.bulkDelete: ${error.message}`)
+    this.invalidate()
   }
 
   async update(id: number | string, changes: Partial<T>): Promise<number> {
     const { error } = await this.client.from(this.name).update(changes as any).eq('id', id)
     if (error) throw new Error(`${this.name}.update: ${error.message}`)
+    this.invalidate()
     return 1
   }
 
