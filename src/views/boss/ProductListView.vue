@@ -452,8 +452,10 @@ async function doImport(): Promise<void> {
     if (uid) {
       await writeLog(uid, AUDIT_ACTIONS.PRODUCT_CREATE, `导入商品：新增 ${report.created} / 更新 ${report.updated} / 重复跳过 ${report.skipped}`)
     }
-    showToast(`新增 ${report.created}，更新 ${report.updated}，重复 ${report.skipped}`)
+    showToast(`✅ 导入完成：新增 ${report.created}，更新 ${report.updated}，重复 ${report.skipped}`)
     await reload()
+  } catch (e: any) {
+    showToast('❌ 导入失败：' + (e?.message || '未知错误'))
   } finally {
     importing.value = false
   }

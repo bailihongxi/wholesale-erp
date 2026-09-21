@@ -36,6 +36,12 @@ class CloudQuery {
     const arr = await this.toArray<T>()
     return arr[0]
   }
+
+  async count(): Promise<number> {
+    const { count, error } = await this.build().select("*", { count: "exact", head: true })
+    if (error) throw new Error(`CloudQuery.count: ${error.message}`)
+    return count || 0
+  }
 }
 
 /** 基础档案表：变化少，启用内存缓存，切页面秒开 */
