@@ -220,7 +220,7 @@
         <h4 class="block-title">报价明细（{{ detailItems.length }}）</h4>
         <table v-if="detailItems.length" class="data-table">
           <thead>
-            <tr><th>#</th><th>商品</th><th>单位</th><th class="num">数量</th><th class="num">报价</th><th class="num">金额</th></tr>
+            <tr><th>#</th><th>商品名称</th><th>单位</th><th class="num">数量</th><th class="num">报价</th><th class="num">金额</th></tr>
           </thead>
           <tbody>
             <tr v-for="(it, i) in detailItems" :key="i">

@@ -83,7 +83,7 @@
         <thead>
           <tr>
             <th class="center" style="width:76px">序号</th>
-            <th>商品</th>
+            <th>商品名称</th>
             <th>分类</th>
             <th class="num">当前库存</th>
             <th class="num">预警值</th>

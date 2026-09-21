@@ -42,7 +42,7 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>商品</th>
+            <th>商品名称</th>
             <th>单位</th>
             <th class="num">数量</th>
             <th v-if="canSeeAnyPrice" class="num">单价</th>
@@ -93,7 +93,7 @@
     <section class="block">
       <h4 class="block-title">出库流水（{{ outboundRecords.length }}）</h4>
       <table v-if="outboundRecords.length" class="item-table">
-        <thead><tr><th>时间</th><th>商品</th><th class="num">数量</th><th>操作人</th></tr></thead>
+        <thead><tr><th>时间</th><th>商品名称</th><th class="num">数量</th><th>操作人</th></tr></thead>
         <tbody>
           <tr v-for="r in outboundRecords" :key="r.id">
             <td>{{ fmtTime(r.createdAt) }}</td>

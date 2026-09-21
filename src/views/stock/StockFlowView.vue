@@ -26,7 +26,7 @@
             <th class="center" style="width: 92px">序号</th>
             <th>时间</th>
             <th>类型</th>
-            <th>商品</th>
+            <th>商品名称</th>
             <th class="num">数量</th>
             <th>关联单号</th>
           </tr>

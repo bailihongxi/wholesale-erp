@@ -77,7 +77,7 @@
       <table v-else class="stock-table data-table">
         <thead>
           <tr>
-            <th>商品</th>
+            <th>商品名称</th>
             <th>分类</th>
             <!-- 按库房动态生成列：一个商品的数量可以分散在多个库房 -->
             <th v-for="l in locations" :key="l.id" class="num loc-col" :title="l.remark || l.name">

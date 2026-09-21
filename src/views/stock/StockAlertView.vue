@@ -54,7 +54,7 @@
       <thead>
         <tr>
           <th class="center" style="width: 92px">序号</th>
-          <th>商品</th>
+          <th>商品名称</th>
           <th>分类</th>
           <th v-for="l in locations" :key="l.id" class="num">{{ l.name }}</th>
           <th class="num">当前库存</th>

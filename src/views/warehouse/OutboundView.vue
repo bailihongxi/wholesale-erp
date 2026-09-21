@@ -73,7 +73,7 @@
             <th>出库单号</th>
             <th>来源销售单</th>
             <th>客户</th>
-            <th>商品</th>
+            <th>商品名称</th>
             <th class="num">数量</th>
             <th class="num">金额</th>
             <th>发货时间</th>

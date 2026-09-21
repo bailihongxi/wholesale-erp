@@ -122,7 +122,7 @@
           <button class="link-btn" type="button" @click="activeDetail = null">关闭</button>
         </div>
         <table class="data-table">
-          <thead><tr><th>商品</th><th class="num">系统</th><th class="num">实盘</th><th class="num">差异</th></tr></thead>
+          <thead><tr><th>商品名称</th><th class="num">系统</th><th class="num">实盘</th><th class="num">差异</th></tr></thead>
           <tbody>
             <tr v-for="it in activeDetail.items" :key="it.productName">
               <td>{{ it.productName }}</td>
