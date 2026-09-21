@@ -246,22 +246,13 @@ export async function importProducts(
     report.updated = toUpdate.length
   }
 
-  // 批量插入新商品：分批，每批 500 条
+  // 批量插入新商品：分批，每批 500 条，insert 时直接返回 id
   const BATCH = 500
   const insertedIds: number[] = []
   for (let i = 0; i < toInsert.length; i += BATCH) {
     const batch = toInsert.slice(i, i + BATCH)
-    // 云端模式 bulkAdd 不返回 id，所以 insert 后再 select 回来
-    await (db.products as any).bulkAdd(batch)
-    // 从数据库拉最新插入的商品（按 brand+model 匹配）
-    const keys = new Set(batch.map(r => productKeyOf(r)))
-    const allNew = await db.products.toArray()
-    for (const p of allNew) {
-      if (keys.has(productKeyOf(p)) && !byKey.has(p.id!)) {
-        insertedIds.push(p.id!)
-        byKey.set(p.id!, productKeyOf(p))
-      }
-    }
+    const ids = await (db.products as any).bulkAddReturningIds(batch)
+    insertedIds.push(...ids)
   }
   report.created = insertedIds.length
 

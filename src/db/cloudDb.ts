@@ -121,6 +121,15 @@ export class CloudTable<T = any> {
     this.invalidate()
   }
 
+  /** 批量插入并返回新插入行的 id（绕过 Supabase select 1000 行限制） */
+  async bulkAddReturningIds(objs: any[]): Promise<number[]> {
+    if (!objs.length) return []
+    const { data, error } = await this.client.from(this.name).insert(objs).select('id')
+    if (error) throw new Error(`${this.name}.bulkAddReturningIds: ${error.message}`)
+    this.invalidate()
+    return (data as any[]).map(r => r.id)
+  }
+
   async delete(id: number | string): Promise<void> {
     const { error } = await this.client.from(this.name).delete().eq('id', id)
     if (error) throw new Error(`${this.name}.delete: ${error.message}`)
