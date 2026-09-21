@@ -42,9 +42,9 @@ export interface PrintColumn {
 export function defaultColumns(): PrintColumn[] {
   return [
     { key: 'no', label: '序号', on: true },
-    { key: 'name', label: '商品名称', on: true },
-    { key: 'category', label: '类别', on: true },
+    { key: 'name', label: '品牌', on: true },
     { key: 'model', label: '型号', on: true },
+    { key: 'category', label: '类别', on: true },
     { key: 'unit', label: '单位', on: true },
     { key: 'qty', label: '数量', on: true },
     { key: 'price', label: '单价', on: true },
