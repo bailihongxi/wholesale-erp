@@ -27,17 +27,23 @@ class CloudQuery {
   }
 
   async toArray<T = any>(): Promise<T[]> {
-    // Supabase select 默认只返回前 1000 行，自动分页拉完
+    // Supabase select 默认只返回前 1000 行，自动并行分页拉完
     const PAGE = 1000
-    const all: T[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await this.build().range(from, from + PAGE - 1)
-      if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
-      const rows = (data as T[]) || []
-      all.push(...rows)
-      if (rows.length < PAGE) break
-      from += PAGE
+    const { data: firstPage, error, count } = await (this.build() as any).select('*', { count: 'exact' }).range(0, PAGE - 1)
+    if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
+    const rows = (firstPage as T[]) || []
+    const total = count ?? rows.length
+    if (total <= PAGE) return rows
+    const pages = Math.ceil(total / PAGE) - 1
+    const promises = []
+    for (let i = 1; i <= pages; i++) {
+      promises.push(this.build().range(i * PAGE, (i + 1) * PAGE - 1))
+    }
+    const results = await Promise.all(promises)
+    const all = [...rows]
+    for (const r of results) {
+      if (r.error) throw new Error(`CloudQuery.toArray: ${r.error.message}`)
+      all.push(...((r.data as T[]) || []))
     }
     return all
   }
@@ -91,17 +97,26 @@ export class CloudTable<T = any> {
   }
 
   private async _fetchAll(): Promise<T[]> {
-    // Supabase select 默认只返回前 1000 行，自动分页拉完
+    // Supabase select 默认只返回前 1000 行，自动并行分页拉完
     const PAGE = 1000
-    const all: T[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await this.client.from(this.name).select('*').range(from, from + PAGE - 1)
-      if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
-      const rows = (data as T[]) || []
-      all.push(...rows)
-      if (rows.length < PAGE) break
-      from += PAGE
+    // 先拉第1页 + 总数
+    const { data: firstPage, error, count } = await this.client
+      .from(this.name).select('*', { count: 'exact' } as any).range(0, PAGE - 1)
+    if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
+    const rows = (firstPage as T[]) || []
+    const total = count ?? rows.length
+    if (total <= PAGE) return rows
+    // 并行拉剩余页
+    const pages = Math.ceil(total / PAGE) - 1
+    const promises = []
+    for (let i = 1; i <= pages; i++) {
+      promises.push(this.client.from(this.name).select('*').range(i * PAGE, (i + 1) * PAGE - 1))
+    }
+    const results = await Promise.all(promises)
+    const all = [...rows]
+    for (const r of results) {
+      if (r.error) throw new Error(`${this.name}.toArray: ${r.error.message}`)
+      all.push(...((r.data as T[]) || []))
     }
     return all
   }
