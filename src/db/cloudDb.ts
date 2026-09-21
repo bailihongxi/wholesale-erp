@@ -38,7 +38,7 @@ class CloudQuery {
   }
 
   async count(): Promise<number> {
-    const { count, error } = await this.build().select("*", { count: "exact", head: true })
+    const { count, error } = await (this.build() as any).select("*", { count: "exact", head: true })
     if (error) throw new Error(`CloudQuery.count: ${error.message}`)
     return count || 0
   }
