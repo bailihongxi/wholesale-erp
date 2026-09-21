@@ -128,6 +128,12 @@ export class CloudTable<T = any> {
     this.invalidate()
   }
 
+  async clear(): Promise<void> {
+    const { error } = await this.client.from(this.name).delete().neq("id", 0)
+    if (error) throw new Error(`${this.name}.clear: ${error.message}`)
+    this.invalidate()
+  }
+
   async update(id: number | string, changes: Partial<T>): Promise<number> {
     const { error } = await this.client.from(this.name).update(changes as any).eq('id', id)
     if (error) throw new Error(`${this.name}.update: ${error.message}`)
