@@ -47,6 +47,13 @@ export function isSyncKey(key: string): boolean {
 
 type Meta = Record<string, string>
 
+/** 云端 systemSettings 的一行 */
+interface SettingsRow {
+  key?: string
+  value?: unknown
+  updatedAt?: string
+}
+
 function readMeta(): Meta {
   try {
     const raw = localStorage.getItem(META_KEY)
@@ -150,19 +157,19 @@ export function forgetSetting(key: string): void {
 export async function pullSettings(): Promise<number> {
   const sb = await getClient()
   if (!sb) return 0
-  let data: Array<{ key?: string; value?: unknown; updatedAt?: string }> | null = null
+  let rows: SettingsRow[] = []
   try {
     const res = await sb.from(TABLE).select('key,value,updatedAt')
     if (res.error) return 0
-    data = res.data as typeof data
+    rows = (res.data ?? []) as SettingsRow[]
   } catch {
     return 0
   }
-  if (!data || data.length === 0) return 0
+  if (rows.length === 0) return 0
 
   const meta = readMeta()
   let changed = 0
-  for (const row of data) {
+  for (const row of rows) {
     const key = row.key
     if (!key || !isSyncKey(key)) continue
     const remoteAt = String(row.updatedAt ?? '')
@@ -292,20 +299,45 @@ export interface SyncResult {
   error?: string
 }
 
+/** 云端同步表是否可用：表没建、RLS 拒绝、断网都会返回 false */
+async function isTableReady(sb: Awaited<ReturnType<typeof getClient>>): Promise<boolean> {
+  if (!sb) return false
+  try {
+    // head + count 必须写在 from().select() 这一步，链式之后再 select 会被静默忽略
+    const res = await sb.from(TABLE).select('key', { count: 'exact', head: true })
+    return !res.error
+  } catch {
+    return false
+  }
+}
+
+/** 最近一次同步的结果，供设置页展示状态 */
+let lastSync: SyncResult = { pulled: 0, pushed: 0, cloudReady: false }
+
+export function getLastSync(): SyncResult {
+  return { ...lastSync }
+}
+
 /**
  * 应用启动时调用一次：先拉云端最新设置，再把本机独有的补推上去。
  * 建议在 mount 之前 await，这样用户一睁眼看到的就是同步后的样子。
  */
 export async function initSettingSync(): Promise<SyncResult> {
   const empty: SyncResult = { pulled: 0, pushed: 0, cloudReady: false }
+  lastSync = empty
   if (!USE_CLOUD) return empty
+  const sb = await getClient()
+  // 表没建（还没执行迁移 SQL）时不要让用户白等，直接降级为本机模式
+  if (!(await isTableReady(sb))) return empty
   try {
     const pulled = await pullSettings()
     const pushed = await pushPending()
     if (pulled > 0) notifyReloaded()
-    return { pulled, pushed, cloudReady: true }
+    lastSync = { pulled, pushed, cloudReady: true }
+    return lastSync
   } catch (e) {
-    return { ...empty, cloudReady: false, error: e instanceof Error ? e.message : String(e) }
+    lastSync = { ...empty, error: e instanceof Error ? e.message : String(e) }
+    return lastSync
   }
 }
 

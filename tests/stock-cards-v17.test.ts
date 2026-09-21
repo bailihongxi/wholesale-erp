@@ -72,10 +72,10 @@ describe('第十七轮：库存管理默认打开「库存作业」', () => {
 })
 
 describe('版本号一致性（每轮随最新基线刷新）', () => {
-  it('version.ts 与 package.json 同步为 V2.0-5 / 2.0.5', () => {
-    expect(APP_VERSION).toBe('V2.0-5')
+  it('version.ts 与 package.json 同步为 V2.0-8 / 2.0.8', () => {
+    expect(APP_VERSION).toBe('V2.0-8')
     const pkg = JSON.parse(src('package.json')) as { version: string }
-    expect(pkg.version).toBe('2.0.5')
+    expect(pkg.version).toBe('2.0.8')
   })
 
   it('三份文档都记录了当前版本 V2.0-5', () => {

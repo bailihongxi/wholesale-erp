@@ -15,22 +15,42 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// 缓存优先，网络回退；静态资源（JS/CSS/图片）缓存住
+// 缓存静态资源，网络回退
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
+  const req = e.request;
+  const url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (e.request.method !== 'GET') return;
+  if (req.method !== 'GET') return;
   // Supabase API 请求不缓存
   if (url.hostname.includes('supabase.co')) return;
-  
+
+  // 打开页面的导航请求走 network-first。
+  // 之前所有请求一律「缓存优先」，导致发新版后用户拿到的还是缓存里的旧首页，
+  // 新功能看着像没上线。这里让页面本身永远先问网络，断网时才回退到缓存。
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req)
+        .then(resp => {
+          if (resp.ok) {
+            const clone = resp.clone();
+            caches.open(CACHE_NAME).then(c => c.put('/', clone));
+          }
+          return resp;
+        })
+        .catch(() => caches.match('/'))
+    );
+    return;
+  }
+
+  // 其余 GET 请求：缓存优先，网络回退
   e.respondWith(
-    caches.match(e.request).then(cached => {
+    caches.match(req).then(cached => {
       if (cached) return cached;
-      return fetch(e.request).then(resp => {
+      return fetch(req).then(resp => {
         // 只缓存同域静态资源
         if (resp.ok && (url.pathname.match(/\.(js|css|png|svg|ico|woff2?)$/) || url.pathname === '/')) {
           const clone = resp.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+          caches.open(CACHE_NAME).then(c => c.put(req, clone));
         }
         return resp;
       });

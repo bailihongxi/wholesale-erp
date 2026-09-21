@@ -18,13 +18,18 @@ import router from '../src/router'
 
 const STORAGE_KEY = 'erp_settings_panels'
 
-// 页面上的十个模块（顺序与 SettingsView 模板一致）
+// 页面上的模块（顺序与 SettingsView 模板一致）
 // 第十六轮新增「应用图标与桌面快捷方式」，插在「品牌与图标」之后；
-// 第十九轮新增「操作日志」，插在「库房管理」与「云同步」之间（从侧边栏独立菜单归纳进来）
+// 第十九轮新增「操作日志」，插在「库房管理」与「云同步」之间（从侧边栏独立菜单归纳进来）；
+// V2.0-6 新增「设置同步（多设备）」，紧跟「公司信息」——它默认展开，
+// 用来告诉用户当前是否已连上云端（表没建时提示去执行迁移 SQL）。
 const TITLES = [
-  '公司信息', '品牌与图标', '应用图标与桌面快捷方式', '数据备份与恢复', '示例数据',
-  '价格规则（加价比例）', '打印设置', '库房管理', '📜 操作日志', '☁️ 云同步（GitHub）'
+  '公司信息', '🔄 设置同步（多设备）', '品牌与图标', '应用图标与桌面快捷方式',
+  '数据备份与恢复', '示例数据', '价格规则（加价比例）', '打印设置', '库房管理',
+  '📜 操作日志', '☁️ 云同步（GitHub）'
 ]
+/** 默认展开的模块：公司信息 + 设置同步状态 */
+const DEFAULT_OPEN = ['公司信息', '🔄 设置同步（多设备）']
 
 async function mountSettings() {
   const w = mount(SettingsView, { global: { plugins: [router] } })
@@ -99,16 +104,16 @@ describe('CollapseCard 组件本身', () => {
 })
 
 describe('系统设置页：模块可折叠', () => {
-  it('十个模块都包成了折叠卡片', async () => {
+  it('所有模块都包成了折叠卡片', async () => {
     const w = await mountSettings()
     expect(states(w).map(s => s.title)).toEqual(TITLES)
   })
 
-  it('默认只展开「公司信息」，其余收起', async () => {
+  it('默认只展开「公司信息」与「设置同步」，其余收起', async () => {
     const w = await mountSettings()
     const s = states(w)
-    expect(s.filter(x => x.open).map(x => x.title)).toEqual(['公司信息'])
-    expect(s.length - 1).toBe(s.filter(x => !x.open).length)
+    expect(s.filter(x => x.open).map(x => x.title)).toEqual(DEFAULT_OPEN)
+    expect(s.length - DEFAULT_OPEN.length).toBe(s.filter(x => !x.open).length)
   })
 
   it('点标题能单独展开该模块', async () => {
@@ -121,7 +126,8 @@ describe('系统设置页：模块可折叠', () => {
     await flushPromises()
     expect(states(w)[printIdx].open).toBe(true)
     // 其它模块不受影响
-    expect(states(w).filter(x => x.open).map(x => x.title)).toEqual(['公司信息', '打印设置'])
+    expect(states(w).filter(x => x.open).map(x => x.title))
+      .toEqual([...DEFAULT_OPEN, '打印设置'])
   })
 
   it('「全部展开」后每个模块都打开，「全部收起」后全部关上', async () => {
@@ -155,7 +161,7 @@ describe('系统设置页：模块可折叠', () => {
   it('localStorage 里是坏数据也不会崩，回落到默认', async () => {
     localStorage.setItem(STORAGE_KEY, '{不是 JSON')
     const w = await mountSettings()
-    expect(states(w).filter(x => x.open).map(x => x.title)).toEqual(['公司信息'])
+    expect(states(w).filter(x => x.open).map(x => x.title)).toEqual(DEFAULT_OPEN)
   })
 
   it('收起后模块内容仍在 DOM（不影响已有用例与未保存的填写）', async () => {

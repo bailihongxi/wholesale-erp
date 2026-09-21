@@ -15,7 +15,9 @@ app.use(createPinia())
 app.use(router)
 app.use(Vant)
 
-// 先从云端加载品牌配置（多设备同步），再挂载
+// 挂载之前先把云端的系统设置拉下来（V2.0-6 多设备同步）：
+// 公司抬头 / 打印模板 / 价格规则 / App 图标 / 菜单排序，一次请求全部就位。
+// 这样用户一睁眼看到的就是同步后的样子，不会出现「先显示旧的、再闪一下变新的」。
 import { loadBrandFromCloud } from './utils/brand'
 loadBrandFromCloud().finally(() => app.mount('#app'))
 

@@ -25,6 +25,30 @@
       </div>
     </CollapseCard>
 
+    <!-- 多设备设置同步：手机改了抬头，电脑刷新即可生效（V2.0-6） -->
+    <CollapseCard v-model="panels.settingsSync" title="🔄 设置同步（多设备）">
+      <div v-if="syncState.cloudReady" class="sync-state ok">
+        <strong>✅ 已连接云端</strong>
+        <span>
+          公司信息、打印模板、价格规则、App 图标与菜单排序会在各设备间自动同步。
+          本次启动：拉取 {{ syncState.pulled }} 项、上传 {{ syncState.pushed }} 项。
+        </span>
+      </div>
+      <div v-else class="sync-state warn">
+        <strong>⚠️ 云端设置尚未启用</strong>
+        <span>
+          当前设置只保存在这台设备。需在 Supabase 控制台的 SQL Editor 执行一次
+          <code>supabase/migrate_v2.0-6_system_settings.sql</code>，刷新后即可多设备同步。
+        </span>
+      </div>
+      <div class="btn-row">
+        <button class="ghost-btn" type="button" :disabled="resyncing" @click="resyncSettings">
+          {{ resyncing ? '同步中…' : '立即同步' }}
+        </button>
+        <span class="tip">本机已纳入同步的设置：{{ syncCount }} 项</span>
+      </div>
+    </CollapseCard>
+
     <!-- 品牌与图标：登录页标志 / 各角色头像 / 网页版快捷图标 -->
     <BrandSettingsPanel v-model:open="panels.brand" />
 
@@ -285,9 +309,26 @@ import AppIconPanel from '../../components/AppIconPanel.vue'
 import AuditLogPanel from '../../components/AuditLogPanel.vue'
 import { APP_VERSION, APP_RELEASE_DATE, APP_NAME } from '../../version'
 import { migrateToCloud } from '../../utils/cloudMigrate'
-import { touchSetting, getSyncSummary } from '../../utils/settingsSync'
+import {
+  touchSetting, getSyncSummary, getLastSync, initSettingSync
+} from '../../utils/settingsSync'
 
 const migrating = ref(false)
+
+// ---------- 多设备设置同步状态（V2.0-6） ----------
+const syncState = ref(getLastSync())
+const resyncing = ref(false)
+const syncCount = computed(() => getSyncSummary().count)
+
+async function resyncSettings(): Promise<void> {
+  resyncing.value = true
+  try {
+    syncState.value = await initSettingSync()
+    showToast(syncState.value.cloudReady ? '已与云端同步' : '云端设置未启用，当前仅本机生效')
+  } finally {
+    resyncing.value = false
+  }
+}
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
 } from '../../utils/priceRule'
@@ -311,15 +352,16 @@ const previewRetail = computed(() => calcRetail(sampleCost.value, rule.value))
  * 展开状态记在 localStorage，下次进来保持原来的样子。
  */
 const PANEL_KEYS = [
-  'company', 'brand', 'appicon', 'backup', 'demo', 'price', 'print', 'warehouse', 'audit', 'sync'
+  'company', 'settingsSync', 'brand', 'appicon', 'backup', 'demo', 'price', 'print',
+  'warehouse', 'audit', 'sync'
 ] as const
 type PanelKey = typeof PANEL_KEYS[number]
 const PANEL_STORAGE_KEY = 'erp_settings_panels'
 
 function defaultPanels(): Record<PanelKey, boolean> {
   return {
-    company: true, brand: false, appicon: false, backup: false, demo: false,
-    price: false, print: false, warehouse: false, audit: false, sync: false
+    company: true, settingsSync: true, brand: false, appicon: false, backup: false,
+    demo: false, price: false, print: false, warehouse: false, audit: false, sync: false
   }
 }
 
@@ -659,5 +701,22 @@ function logout(): void {
 .lnk { color: var(--c-accent); text-decoration: none; word-break: break-all; }
 @media (max-width: 600px) {
   .ss-item { min-width: 100%; }
+}
+
+/* 多设备设置同步状态条（V2.0-6） */
+.sync-state {
+  display: flex; flex-direction: column; gap: 4px;
+  border-left: 3px solid var(--c-border); background: #f7f9fc;
+  border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;
+  font-size: 13px; line-height: 1.6; color: var(--c-muted);
+}
+.sync-state strong { font-size: 13px; }
+.sync-state.ok { border-left-color: #1a8a4a; background: #f2fbf6; }
+.sync-state.ok strong { color: #1a8a4a; }
+.sync-state.warn { border-left-color: #d98700; background: #fffaf0; }
+.sync-state.warn strong { color: #d98700; }
+.sync-state code {
+  background: rgba(0, 0, 0, .06); border-radius: 4px;
+  padding: 1px 5px; font-size: 12px; word-break: break-all;
 }
 </style>

@@ -199,7 +199,9 @@ describe('打印纸张与分页', () => {
     s.columns = s.columns.map(c => (c.key === 'model' ? { ...c, on: false } : c))
     const off = buildOrderPrintHTML(orderData(2), true, s)
     expect(off).not.toContain('型号')
-    expect(off).toContain('商品名称')
+    // 关掉型号不影响「商品名列」：这里取当前默认列名，改列名时不必改断言
+    const nameLabel = defaultPrintSettings().columns.find(c => c.key === 'name')!.label
+    expect(off).toContain(nameLabel)
   })
 
   it('字段可改名：表头使用自定义列名', () => {

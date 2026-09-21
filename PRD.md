@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.7　|　**产品版本：V2.0-5（选商品 1000 条修复 + 选商品服务端分页）**
+> 文档版本：V2.7　|　**产品版本：V2.0-8（系统设置云端同步 · 多设备共用）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-5'`，`package.json` → `version: "2.0.5"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-8'`，`package.json` → `version: "2.0.8"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -1955,3 +1955,50 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 ### Bug 修复
 - 入库确认卡住：CloudQuery 缺 `and()` 方法 → 改成 `.filter()`
 - 所有业务表数据已清空，从头开始做单流程验证
+
+
+---
+
+## V2.0-7（2026-09-22）
+
+- 手机端登录页居中适配。
+- 品牌配置（系统名称 / 登录 logo / App 图标）云端化准备：抽出 `src/utils/settingsSync.ts`，
+  把「本机读写」与「云端同步」分层，为多设备共用打好地基。
+
+---
+
+## V2.0-8（2026-09-22）：系统设置云端同步，多设备共用
+
+### 需求
+电脑上配好的公司抬头、打印模板、价格规则、App 图标、菜单排序，
+换台机器或换成手机登录就全回到默认值 —— 各配一遍还容易不一致。
+
+### 方案
+沿用 `systemSettings` 表（key + jsonb value + updatedAt），以 **last-write-wins** 同步：
+- **读取零改动**：各模块照旧读 localStorage，把它当本机缓存；
+- **写入补推**：`touchSetting(key)` 在 localStorage 写完后异步 upsert 到云端；
+- **启动拉取**：`main.ts` 挂载前 `initSettingSync()` 一次拉全表，再补推本机独有的配置
+  （老用户升级时历史设置自动搬上云端，不会丢）；
+- **内存重载**：`onSettingsReloaded()` 钩子让 `brand` / `menuOrder` 这类 import 时就
+  初始化的模块级 ref 重新读一遍。
+
+### 同步范围（白名单，封闭）
+仅同步：`erp_company` / `erp_print_settings` / `erp_price_rule` / `erp_brand_config` /
+`erp_menu_order_*`。
+**明确不同步**：登录失败计数、`erp_session`、记住的账号（否则一台设备输错密码会锁住全公司）；
+侧边栏折叠、面板展开（手机和电脑布局本就不同，同步会互相打架）。
+
+### 上线必要条件
+必须在 Supabase 控制台执行一次 `supabase/migrate_v2.0-6_system_settings.sql`
+（幂等，可重复运行）。未执行时系统**自动降级为本机模式**，设置页会明确提示未启用。
+
+### Bug 修复
+- 打印页码原先挂在「末页签章行」里 → 多页单据前几页没有页码，装订易串行。
+  改为每页页脚独立渲染（末页仍跟随在签章之后）。
+- `public/sw.js` 对所有请求一律缓存优先 → 发新版后用户仍拿到缓存里的旧首页，
+  新功能看着像没上线。改为**导航请求 network-first**，断网才回退缓存。
+
+### 验证
+- 新增 `tests/settings-cloud-sync.test.ts`（21 例）：覆盖同步白名单安全边界、
+  首次迁移、双向 LWW 冲突判定、云端不可用时降级。
+- `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 566 全绿 / 50 文件。

@@ -1441,3 +1441,36 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 ### Bug 修复
 - 入库确认卡住：CloudQuery 缺 `and()` 方法 → 全部改成 `.filter()`。
 - 业务表数据全清，从头做单验证。
+
+
+---
+
+## 三十五、V2.0-7（2026-09-22）：手机端登录居中 + 品牌配置云端化准备
+
+- 手机端登录页居中适配。
+- 抽出 `src/utils/settingsSync.ts`：本机读写（localStorage）与云端同步分层，
+  品牌配置先行接入 `systemSettings` 表。
+
+---
+
+## 三十六、V2.0-8（2026-09-22）：系统设置云端同步
+
+**目标**：公司抬头 / 打印模板 / 价格规则 / App 图标 / 菜单排序跨设备共用一份。
+
+| 环节 | 做法 |
+| --- | --- |
+| 存储 | `systemSettings` 表（key 唯一 + jsonb value + updatedAt） |
+| 读 | 各模块照旧读 localStorage，零侵入 |
+| 写 | `touchSetting(key)` → 记时间戳 + 异步 upsert |
+| 启 | `initSettingSync()`：先拉云端，再补推本机独有（老用户历史设置不丢） |
+| 内存 | `onSettingsReloaded()` 让模块级 ref（brand / menuOrder）重载 |
+| 冲突 | last-write-wins（比 updatedAt） |
+| 降级 | 表没建 / 离线 → 纯本机模式，设置页明确提示 |
+
+同步白名单**封闭**：登录态、会话、记住账号、侧边栏折叠、面板展开一律不同步。
+
+上线前需在 Supabase 执行 `supabase/migrate_v2.0-6_system_settings.sql`（幂等）。
+
+顺带修两个既存缺陷：打印多页时只有末页有页码；sw.js 缓存优先导致新版首页不生效（改 network-first）。
+
+验证：新增 21 例同步测试；`npm run build` 0 错误；`npx vitest run` 566 全绿。
