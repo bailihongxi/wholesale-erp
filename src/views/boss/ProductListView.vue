@@ -184,6 +184,10 @@
           <ul v-if="importReport.errors?.length" class="dup-list">
             <li v-for="(e, i) in importReport.errors" :key="`e${i}`" class="tip">第 {{ e.line }} 行：{{ e.reason }}</li>
           </ul>
+          <ul v-if="importLineErrors.length" class="dup-list">
+            <li v-for="(e, i) in importLineErrors.slice(0, 20)" :key="`le${i}`" class="tip">第 {{ e.line }} 行：{{ e.reason }}</li>
+            <li v-if="importLineErrors.length > 20" class="tip">…另有 {{ importLineErrors.length - 20 }} 行被跳过</li>
+          </ul>
         </div>
 
         <div class="modal-actions">
@@ -420,9 +424,11 @@ const importReport = ref<ImportReport | null>(null)
 const importRows = computed<Array<Omit<Product, 'id'>>>(() => {
   const src = pasteText.value.trim()
   if (!src) return []
-  const { rows } = csvToProducts(src)
+  const { rows, lineErrors } = csvToProducts(src)
+  importLineErrors.value = lineErrors
   return rows
 })
+const importLineErrors = ref<Array<{ line: number; reason: string }>>([])
 
 function openImport(): void { showImport.value = true }
 function downloadTemplate(): void {
