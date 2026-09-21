@@ -47,21 +47,22 @@ export const usePurchaseStore = defineStore('purchase', () => {
       remark: data.remark
     }) as number
 
-    for (const item of data.items) {
-      // 赠品行：金额计 0、不参与合计（厂家随货送的赠品，验货照常入库）
+    // 批量插入明细（云端模式下 N 次请求 → 1 次）
+    const itemRows = data.items.map(item => {
       const isGift = item.isGift === true
       const price = isGift ? 0 : (item.price ?? item.product.purchasePrice)
       const subtotal = price * item.quantity
       if (!isGift) totalAmount += subtotal
-      await db.purchaseOrderItems.add({
+      return {
         purchaseOrderId: orderId,
         productId: item.product.id!,
         quantity: item.quantity,
         price,
         subtotal,
         isGift
-      })
-    }
+      }
+    })
+    await db.purchaseOrderItems.bulkAdd(itemRows)
     await db.purchaseOrders.update(orderId, { totalAmount })
     await writeLog(
       data.purchaserId,

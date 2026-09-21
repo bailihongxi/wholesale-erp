@@ -182,30 +182,38 @@ async function handleSubmit(): Promise<void> {
   }
   if (submitting.value) return
   submitting.value = true
-  const res = await purchaseStore.createOrder({
-    supplierId: form.supplierId,
-    purchaserId: userStore.currentUser?.id ?? 1,
-    items: form.items.map(it => ({
-      product: it.product,
-      quantity: Number(it.quantity) || 0,
-      price: Number(it.price) || 0,
-      isGift: it.isGift
-    })),
-    remark: form.remark
-  })
-  submitting.value = false
-  if (res.ok) {
-    showToast('采购单创建成功')
-    router.push('/purchase/orders')
-  } else {
-    showToast(res.message)
+  try {
+    const res = await purchaseStore.createOrder({
+      supplierId: form.supplierId,
+      purchaserId: userStore.currentUser?.id ?? 1,
+      items: form.items.map(it => ({
+        product: it.product,
+        quantity: Number(it.quantity) || 0,
+        price: Number(it.price) || 0,
+        isGift: it.isGift
+      })),
+      remark: form.remark
+    })
+    if (res.ok) {
+      showToast('采购单创建成功')
+      router.push('/purchase/orders')
+    } else {
+      showToast(res.message)
+    }
+  } catch (e: any) {
+    showToast('提交失败：' + (e?.message || '网络错误'))
+  } finally {
+    submitting.value = false
   }
 }
 
 onMounted(async () => {
-  suppliers.value = await purchaseStore.listSuppliers()
-  const list = await productStore.search('')
-  const smap = await productStore.stockMap()
+  const [supList, list, smap] = await Promise.all([
+    purchaseStore.listSuppliers(),
+    productStore.search(''),
+    productStore.stockMap()
+  ])
+  suppliers.value = supList
   rows.value = list.map(p => ({ product: p, stock: smap[p.id!] ?? 0 }))
 })
 </script>

@@ -38,10 +38,14 @@ export const useSalesStore = defineStore('sales', () => {
     // 检查库存是否够
     const { useProductStore } = await import('./product')
     const productStore = useProductStore()
-    for (const item of data.items) {
-      const stock = await productStore.getStock(item.product.id!)
-      if (stock < item.quantity) {
-        return { ok: false, message: `${productStore.productName(item.product)} 库存不足（现有 ${stock}）` }
+    // 库存检查并行查
+    const stockResults = await Promise.all(
+      data.items.map(it => productStore.getStock(it.product.id!))
+    )
+    for (let i = 0; i < data.items.length; i++) {
+      const item = data.items[i]
+      if (stockResults[i] < item.quantity) {
+        return { ok: false, message: `${productStore.productName(item.product)} 库存不足（现有 ${stockResults[i]}）` }
       }
     }
 
@@ -61,22 +65,23 @@ export const useSalesStore = defineStore('sales', () => {
       priceMode: data.priceMode ?? 'wholesale'
     }) as number
 
-    for (const item of data.items) {
-      // 赠品行：金额计 0、不参与合计（送经销商的赠品，拣货照常出库）
+    // 批量插入明细
+    const mode = data.priceMode ?? 'wholesale'
+    const itemRows = data.items.map(item => {
       const isGift = item.isGift === true
-      const mode = data.priceMode ?? 'wholesale'
       const price = isGift ? 0 : (item.price ?? (mode === 'retail' ? item.product.retailPrice : item.product.wholesalePrice))
       const subtotal = price * item.quantity
       if (!isGift) totalAmount += subtotal
-      await db.saleOrderItems.add({
+      return {
         saleOrderId: orderId,
         productId: item.product.id!,
         quantity: item.quantity,
         price,
         subtotal,
         isGift
-      })
-    }
+      }
+    })
+    await db.saleOrderItems.bulkAdd(itemRows)
     await db.saleOrders.update(orderId, { totalAmount })
     await writeLog(
       data.salesId,
