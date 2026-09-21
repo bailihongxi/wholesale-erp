@@ -76,3 +76,10 @@ function prefetchRoutes(): void {
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => setTimeout(prefetchRoutes, 400))
 }
+
+// 注册 Service Worker：缓存静态资源，二次打开秒开
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {})
+  })
+}

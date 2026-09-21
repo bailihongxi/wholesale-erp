@@ -81,8 +81,7 @@ function buildCss(paper: PaperSize): string {
   .hd-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
   .hd-date { font-size: 11px; font-weight: 400; letter-spacing: 0; color: #475569; margin-left: 8px; }
   .hd-ono { font-size: 12px; justify-self: end; white-space: nowrap; }
-  .sign-row { display: flex; align-items: flex-end; gap: 16px; margin-top: 8px; }
-  .hd-page { font-size: 11px; color: #64748b; margin-left: auto; white-space: nowrap; }
+  .sign .hd-page { flex: none !important; margin-left: 16px; font-size: 11px; color: #64748b; }
   .hd-co { font-size: ${f.co}; font-weight: 700; letter-spacing: 2px; color: #1a365d; margin: 0; justify-self: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hd-title { font-size: ${f.title}; font-weight: 600; letter-spacing: 6px; margin: 0; color: #1a365d; justify-self: center; white-space: nowrap; }
   .hd-sub { font-size: ${f.base}; color: #64748b; margin: 2px 0 0; }
@@ -303,7 +302,7 @@ function buildPageHtml(
     ? ['制单人', '采购主管', '供应商确认']
     : ['制单人', '仓库发货', '客户签收']
   const signRow = isLast && settings.showSign
-    ? `<div class="sign">${signNames.map(n => `<span class="s">${n}：<span class="line"></span></span>`).join('')}</div>`
+    ? `<div class="sign">${signNames.map(n => `<span class="s">${n}：<span class="line"></span></span>`).join('')}<span class="s hd-page">第 ${pageNo} / ${pageCount} 页</span></div>`
     : ''
 
   const party = isFirst
@@ -344,10 +343,7 @@ function buildPageHtml(
     </table>
 
     ${remark}
-    <div class="sign-row">
     ${signRow}
-    <span class="hd-page">第 ${pageNo} / ${pageCount} 页</span>
-    </div>
 
     <div class="foot">${esc(settings.footNote)}</div>
   </section>`
