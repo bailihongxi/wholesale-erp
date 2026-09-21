@@ -758,8 +758,12 @@ function logout(): void {
 .sync-steps {
   margin: 6px 0 2px; padding-left: 20px;
   display: flex; flex-direction: column; gap: 2px;
+  /* Vant 的 base 样式把 ol/ul 的 list-style 抹平了，不写回来序号就没了，
+     「四步」看起来像四行无关的文字 */
+  list-style: decimal;
 }
 .sync-steps li { font-size: 12.5px; line-height: 1.7; }
+.sync-steps li::marker { color: var(--c-muted); font-weight: 700; }
 .sync-state .btn-row { margin-top: 8px; }
 /* <a> 默认是行内元素，height 不生效，得先撑成 flex 才和按钮一样高 */
 .sync-state a.ghost-btn {

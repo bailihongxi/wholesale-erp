@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.9　|　**产品版本：V2.0-10（云端设置一键自助启用）**
+> 文档版本：V3.0　|　**产品版本：V2.0-11（四步指引补序号）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-10'`，`package.json` → `version: "2.0.10"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-11'`，`package.json` → `version: "2.0.11"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2056,3 +2056,12 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
   页面上按钮与四步指引真的渲染、复制内容与脚本一致、复制失败有提示、
   以及「立即同步」按钮与设置计数不被挤掉的回归。
 - `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 全绿。
+## V2.0-11（2026-09-22）：四步指引补回序号
+
+V2.0-10 上线后实机复核发现：设置页那四步「复制 SQL → 打开 SQL Editor → 粘贴 Run → 刷新」
+渲染成了**没有序号的四行文字** —— Vant 的 base 样式把 `ol/ul` 的 `list-style` 抹平了，
+而 scoped 样式当初只写了 `padding-left`。
+
+修法：`.sync-steps` 补 `list-style: decimal`，`::marker` 加粗，序号用弱化色。
+同时补一条用例（断言 `.sync-steps` 是 `OL` 且样式块里含 `list-style: decimal`），
+防止以后再被抹平。

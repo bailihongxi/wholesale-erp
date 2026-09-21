@@ -134,6 +134,17 @@ describe('设置页「云端设置尚未启用」指引', () => {
     expect(warn.text()).toContain('粘贴')
   })
 
+  it('四步指引带序号（Vant 的 base 样式会抹平 ol 的 list-style）', async () => {
+    const w = await mountSettings()
+    const ol = w.find('.sync-steps')
+    expect(ol.element.tagName).toBe('OL')
+    // jsdom 里没有 Vant 的 CSS，只能从源码确认样式写回来了；
+    // 实机若不写回来，四步会渲染成没有序号的四行字（已踩过）
+    const sfc = src('src/views/boss/SettingsView.vue')
+    const block = sfc.slice(sfc.indexOf('.sync-steps {'))
+    expect(block.slice(0, 400)).toContain('list-style: decimal')
+  })
+
   it('SQL Editor 链接是可直接点开的新标签页', async () => {
     const w = await mountSettings()
     const link = w.find('.sync-state.warn a.ghost-btn')
