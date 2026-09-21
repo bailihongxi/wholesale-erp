@@ -79,10 +79,10 @@ export const ALL_MODULE_ROUTES: string[] = ALL_MODULES.map(m => m.route)
 export const DEFAULT_ROLE_PERMS: Record<string, string[]> = {
   boss: [
     '/boss/home', '/boss/products', '/stock',
-    '/purchase/orders', '/purchase/quotes', '/sales/orders', '/customers', '/purchase/suppliers',
+    '/purchase/orders', '/sales/orders', '/customers', '/purchase/suppliers',
     '/finance', '/boss/users', '/boss/settings'
   ],
-  purchaser: ['/purchase/home', '/purchase/orders', '/purchase/quotes', '/purchase/suppliers'],
+  purchaser: ['/purchase/home', '/purchase/orders', '/purchase/suppliers'],
   sales: ['/sales/home', '/sales/orders', '/customers'],
   finance: ['/finance/home', '/finance', '/stock'],
   // 库存作业已并入库存管理页内 Tab，库房角色一个「库存管理」入口即可覆盖全部作业

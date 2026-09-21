@@ -246,13 +246,23 @@ export async function importProducts(
     report.updated = toUpdate.length
   }
 
-  // 批量插入新商品：分批，每批 500 条，insert 时直接返回 id
+  // 批量插入新商品：分批，每批 500 条
   const BATCH = 500
   const insertedIds: number[] = []
+  const pt = db.products as any
+  const useReturning = typeof pt.bulkAddReturningIds === 'function'
   for (let i = 0; i < toInsert.length; i += BATCH) {
     const batch = toInsert.slice(i, i + BATCH)
-    const ids = await (db.products as any).bulkAddReturningIds(batch)
-    insertedIds.push(...ids)
+    if (useReturning) {
+      const ids = await pt.bulkAddReturningIds(batch)
+      insertedIds.push(...ids)
+    } else {
+      // 本地 Dexie：逐行 add
+      for (const row of batch) {
+        const id = await db.products.add(row)
+        insertedIds.push(id)
+      }
+    }
   }
   report.created = insertedIds.length
 
