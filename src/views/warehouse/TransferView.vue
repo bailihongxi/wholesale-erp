@@ -288,3 +288,11 @@ watch(tab, v => { if (v === 'history') void loadHistory() })
 .dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .dp-sub { font-size: 12px; color: var(--c-muted); }
 </style>
+
+/* 手机端：合计行通栏 */
+@media (max-width: 767px) {
+  .data-table tfoot { display: block; }
+  .data-table tfoot tr { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .data-table tfoot td { display: inline-block; width: auto; }
+  .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
+}

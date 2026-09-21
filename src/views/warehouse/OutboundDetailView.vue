@@ -402,3 +402,11 @@ async function handleOutbound(): Promise<void> {
 .link-btn.danger { color: var(--c-danger); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 </style>
+
+/* 手机端：合计行通栏 */
+@media (max-width: 767px) {
+  .data-table tfoot { display: block; }
+  .data-table tfoot tr { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .data-table tfoot td { display: inline-block; width: auto; }
+  .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
+}
