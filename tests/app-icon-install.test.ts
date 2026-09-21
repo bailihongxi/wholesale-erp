@@ -69,8 +69,9 @@ describe('需求1：全站列表统一 20 条/页', () => {
       // 分页后数据：旧列表用 pager.paged.value，商品档案已改为服务端分页用 pageRows
       expect(tpl).toMatch(/paged\.value|pageRows/)
       expect(s).toContain('TablePager.vue') // AuditLogPanel 在 components/ 下用相对路径 './TablePager.vue'
-      // 商品档案历史上用 PAGE_SIZE_PRODUCT，第十五轮起两者都等于 20
-      expect(s).toMatch(/PAGE_SIZE_(LIST|PRODUCT)/)
+      // 商品档案历史上用 PAGE_SIZE_PRODUCT；第十五轮起都等于 20；
+      // 服务端分页视图改走 useServerPager（默认同样是 PAGE_SIZE_LIST=20）
+      expect(s).toMatch(/PAGE_SIZE_(LIST|PRODUCT)|useServerPager/)
     })
   }
 

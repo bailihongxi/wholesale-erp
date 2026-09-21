@@ -13,9 +13,9 @@
     </div>
 
     <div class="block">
-      <h3 class="block-title">供应商列表（{{ list.length }}<span v-if="hasKeyword"> / 共 {{ suppliers.length }}</span>）</h3>
+      <h3 class="block-title">供应商列表（{{ pager.total.value }}）</h3>
 
-      <LoadingBlock v-if="loading" :rows="5" />
+      <LoadingBlock v-if="pager.loading.value" :rows="5" />
 
       <ul v-else class="zebra-list list">
         <li v-for="s in pager.paged.value" :key="s.id" class="item" @click="openEdit(s)">
@@ -76,11 +76,12 @@
 
 <script setup lang="ts">
 import TablePager from '../../components/TablePager.vue'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
-import { ref, computed, onMounted, watch } from 'vue'
+import { useServerPager } from '../../composables/useServerPager'
+import { ref, computed } from 'vue'
 import { showToast } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
 import { db } from '../../db'
+import { serverPage } from '../../db/serverPage'
 import { hasInvoice, invoiceComplete, invoiceOf, invoiceSummary, emptyInvoice } from '../../utils/invoice'
 import type { Supplier, InvoiceInfo } from '../../types'
 import InvoiceFieldset from '../../components/InvoiceFieldset.vue'
@@ -89,41 +90,28 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 
 const purchaseStore = usePurchaseStore()
-const suppliers = ref<Supplier[]>([])
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
-const loading = ref(true)
 const keyword = ref('')
 const form = ref({ name: '', contact: '', phone: '', address: '', paymentTerm: '', remark: '' })
 const invoice = ref<InvoiceInfo>(emptyInvoice())
 
 const hasKeyword = computed(() => !!keyword.value.trim())
 
-const list = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return suppliers.value
-  return suppliers.value.filter(s =>
-    s.name.toLowerCase().includes(kw) ||
-    (s.contact ?? '').toLowerCase().includes(kw) ||
-    (s.phone ?? '').toLowerCase().includes(kw) ||
-    (s.invoiceTitle ?? '').toLowerCase().includes(kw) ||
-    (s.taxNo ?? '').toLowerCase().includes(kw)
-  )
+// 服务端分页：只拉当前页 + 总数，不再进页面就 toArray() 全量供应商。
+// 关键词落在供应商自身字段（名称/联系人/电话/开票抬头/税号），走 search 双模语义一致。
+const pager = useServerPager<Supplier>({
+  watch: [keyword],
+  loader: (pg, size) =>
+    serverPage<Supplier>(db.suppliers, {
+      page: pg,
+      pageSize: size,
+      search: { fields: ['name', 'contact', 'phone', 'invoiceTitle', 'taxNo'], keyword: keyword.value },
+      orderBy: 'name',
+      ascending: true,
+    }),
 })
-
-
-// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
-const pager = usePagination(list, PAGE_SIZE_LIST)
-watch(keyword, () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
-
-async function reload(): Promise<void> {
-  try {
-    suppliers.value = await purchaseStore.listSuppliers()
-  } finally {
-    loading.value = false
-  }
-}
 
 function openNew(): void {
   editingId.value = null
@@ -174,10 +162,9 @@ async function save(): Promise<void> {
     showToast('已添加')
   }
   showForm.value = false
-  await reload()
+  await pager.reload()
 }
 
-onMounted(reload)
 </script>
 
 <style scoped>

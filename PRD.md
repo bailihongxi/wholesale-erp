@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.6　|　**产品版本：V2.0-3（性能优化版）**
+> 文档版本：V2.6　|　**产品版本：V2.0-4（列表服务端分页推广版）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-3'`，`package.json` → `version: "2.0.3"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-4'`，`package.json` → `version: "2.0.4"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -1877,3 +1877,13 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 - **阶段二（商品档案示范）**：列表改为服务端分页（`queryPage` 只拉当前页 + 总数，支持状态 / 分类过滤与多字段模糊搜索），首屏不再全量拉 6281 条；分类下拉走 `distinct('category')` 窄字段；库存按当前页商品 id 精准拉取。
 
 > 其余大列表（采购 / 销售 / 财务 / 客户 / 供应商等）沿用 `usePagination` + 全表 `toArray()`，数据量较小时影响有限；后续可按商品档案同款范式推广服务端分页。
+
+
+## 三十三、V2.0-4（2026-09-21）：列表服务端分页推广
+
+把 V2.0-3 在商品档案验证过的「服务端分页」范式推广到其余大列表页，消除「进页面就全表 `toArray()`」：
+
+- **基础设施**：新增 `src/db/serverPage.ts` —— 云端走 `CloudTable.queryPage`（只拉当前页 + 总数），本地 / 测试走 `toArray()` + `localApplyFilters`（复刻 eq / gte / lte / inFilter / search / orderBy 语义）后切片，保证双模行为一致；`useServerPager` 增加 `loading` 与 `onMounted` 自动首拉，接口与 `usePagination` 对齐，模板零改动迁移。
+- **已转换**：销售单、采购单、销售报价单、预采询价单、客户档案、供应商档案、出入库流水、操作日志。跨表搜索（按客户名 / 供应商名找单）云端用 `orExpr`，本地用 `extraFilter` 同一套条件兜底。
+- **未转换（有原因）**：出入库单据、库存明细 / 预警、经营报表、财务收支流水、对账 —— 这些页的行是**多表聚合**出来的（单据由 `stockRecords` 按批次号分组、流水由 `payments` + `ledgerEntries` 合并），`queryPage` 不支持 group by，需先落库单据表才能分页；商品选择器 `ProductPicker` 由调用方传 `rows`，改造要连带改所有下单页，另开一轮。
+- 验证：`npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 522 全绿。

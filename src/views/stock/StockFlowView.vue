@@ -1,9 +1,9 @@
 <template>
   <!-- 出入库流水：采购入库 / 销售出库 / 库存调整的最近记录 -->
   <div class="page">
-    <div class="sum-line">最近 {{ records.length }} 条出入库记录</div>
+    <div class="sum-line">最近 {{ pager.total.value }} 条出入库记录</div>
 
-    <LoadingBlock v-if="loading" :rows="6" />
+    <LoadingBlock v-if="pager.loading.value" :rows="6" />
 
     <template v-else>
       <ul v-if="isMobile" class="zebra-list">
@@ -17,7 +17,7 @@
           <div class="fc-name">{{ r.productName }}</div>
           <div class="fc-sub">{{ fmtDate(r.createdAt) }}</div>
         </li>
-        <li v-if="!records.length" class="empty">暂无流水</li>
+        <li v-if="!pager.total.value" class="empty">暂无流水</li>
       </ul>
 
       <table v-else class="data-table flow-table">
@@ -42,7 +42,7 @@
             </td>
             <td class="c-muted">{{ r.refOrderId ? `#${r.refOrderId}` : '-' }}</td>
           </tr>
-          <tr v-if="!records.length"><td colspan="6" class="empty">暂无流水</td></tr>
+          <tr v-if="!pager.total.value"><td colspan="6" class="empty">暂无流水</td></tr>
         </tbody>
       </table>
 
@@ -59,15 +59,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import TablePager from '../../components/TablePager.vue'
 import { useResponsive } from '../../composables/useResponsive'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { useServerPager } from '../../composables/useServerPager'
 import { db } from '../../db'
-
-/** 一次性取回的上限：分页只负责显示，这里防止极端数据量把整表拉进内存 */
-const FLOW_FETCH_LIMIT = 500
+import { serverPage } from '../../db/serverPage'
 
 interface FlowRow {
   id?: number
@@ -80,39 +78,38 @@ interface FlowRow {
 }
 
 const { isMobile } = useResponsive()
-const records = ref<FlowRow[]>([])
-const loading = ref(true)
 
-
-// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
-const pager = usePagination(records, PAGE_SIZE_LIST)
-const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
-
-async function load(): Promise<void> {
-  try {
-    const rows = await db.stockRecords.orderBy('createdAt').reverse().limit(FLOW_FETCH_LIMIT).toArray()
-    // 商品名一次性查全，避免逐条查库
+// 服务端分页：只拉当前页 + 总数，不再把流水整表（旧实现最多 500 条）拉进内存。
+// 商品名只查当前页用到的那些商品，避免逐条查库。
+const pager = useServerPager<FlowRow>({
+  loader: async (pg, size) => {
+    const { rows, total } = await serverPage<any>(db.stockRecords, {
+      page: pg,
+      pageSize: size,
+      orderBy: 'createdAt',
+      ascending: false,
+    })
     const ids = Array.from(new Set(rows.map(r => r.productId)))
     const products = await db.products.bulkGet(ids)
     const nameMap: Record<number, string> = {}
     products.forEach(p => {
       if (p?.id) nameMap[p.id] = `${p.brand} ${p.model}`.trim()
     })
-    records.value = rows.map(r => ({
-      id: r.id,
-      type: r.type,
-      productId: r.productId,
-      productName: nameMap[r.productId] ?? `商品#${r.productId}`,
-      quantity: r.quantity,
-      refOrderId: r.refOrderId,
-      createdAt: r.createdAt
-    }))
-  } catch {
-    records.value = []
-  } finally {
-    loading.value = false
-  }
-}
+    return {
+      rows: rows.map(r => ({
+        id: r.id,
+        type: r.type,
+        productId: r.productId,
+        productName: nameMap[r.productId] ?? `商品#${r.productId}`,
+        quantity: r.quantity,
+        refOrderId: r.refOrderId,
+        createdAt: r.createdAt,
+      })),
+      total,
+    }
+  },
+})
+const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 function typeLabel(t: string): string {
   return t === 'purchase_in' ? '采购入库' : t === 'sale_out' ? '销售出库' : '库存调整'
@@ -121,7 +118,6 @@ function fmtDate(s: string): string {
   return s ? s.slice(0, 16).replace('T', ' ') : ''
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

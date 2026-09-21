@@ -26,9 +26,9 @@
         <button v-if="hasFilter" class="reset-btn" type="button" @click="resetFilter">重置</button>
         <button v-if="!isMobile" class="add-btn" type="button" @click="mode = 'create'">＋ 新建询价</button>
       </div>
-      <div class="sum-line">共 {{ list.length }} 张预采询价单</div>
+      <div class="sum-line">共 {{ pager.total.value }} 张预采询价单</div>
 
-      <LoadingBlock v-if="loading" :rows="6" />
+      <LoadingBlock v-if="pager.loading.value" :rows="6" />
 
       <ul v-else-if="isMobile" class="card-list zebra-list">
         <li v-for="o in pager.paged.value" :key="o.id" class="quote-card" @click="openDetail(o.id!)">
@@ -257,7 +257,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -272,7 +272,10 @@ import { useProductStore } from '../../stores/product'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { useServerPager } from '../../composables/useServerPager'
+import { db } from '../../db'
+import { escapeOr } from '../../db/cloudDb'
+import { serverPage } from '../../db/serverPage'
 import { buildOrderPrintHTML, getCompanyName } from '../../utils/printTemplate'
 import type { Product, QuoteOrder, QuoteOrderItem } from '../../types'
 
@@ -288,24 +291,61 @@ type Mode = 'list' | 'create' | 'detail'
 const mode = ref<Mode>('list')
 
 // ---- 列表 ----
-const quotes = ref<QuoteOrder[]>([])
-const loading = ref(true)
 const keyword = ref('')
 const statusFilter = ref('')
 const hasFilter = computed(() => !!keyword.value.trim() || !!statusFilter.value)
+const suppliers = ref<any[]>([])
 
-const list = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  let data = quotes.value
-  if (statusFilter.value) data = data.filter(q => q.status === statusFilter.value)
-  if (kw) {
-    data = data.filter(q => q.orderNo.toLowerCase().includes(kw) || partyName(q).toLowerCase().includes(kw))
-  }
-  return data
+// 服务端分页：只拉当前页 + 总数，不再进页面就 toArray() 全量询价单。
+// 采购询价单 kind='purchase'（走 eq）；关键词走 单号 / 供应商名。
+const pager = useServerPager<QuoteOrder>({
+  watch: [keyword, statusFilter],
+  loader: async (pg, size) => {
+    await ensureSuppliers()
+    const kw = keyword.value.trim()
+    const lower = kw.toLowerCase()
+    const eq: Record<string, any> = { kind: 'purchase' }
+    if (statusFilter.value) eq.status = statusFilter.value
+    let orExpr: string | undefined
+    if (kw) {
+      const ids = suppliers.value
+        .filter((c: any) => String(c.name ?? '').toLowerCase().includes(lower))
+        .map((c: any) => c.id!)
+      const kwParts = [`orderNo.ilike.*${escapeOr(kw)}*`, `customerName.ilike.*${escapeOr(kw)}*`]
+      if (ids.length) kwParts.push(`customerId.in.(${ids.join(',')})`)
+      orExpr = `or(${kwParts.join(',')})`
+    }
+    // 本地 / 测试模式没有 orExpr 语义，用同一套条件在行上过滤
+    const extraFilter = (r: QuoteOrder): boolean => {
+      const row = r as any
+      if (row.kind !== 'purchase') return false
+      if (!kw) return true
+      return (
+        String(row.orderNo ?? '').toLowerCase().includes(lower) ||
+        String(row.customerName ?? '').toLowerCase().includes(lower) ||
+        (row.customerId > 0 &&
+          String(suppliers.value.find((c: any) => c.id === row.customerId)?.name ?? '')
+            .toLowerCase().includes(lower))
+      )
+    }
+    return serverPage<QuoteOrder>(db.quoteOrders, {
+      page: pg,
+      pageSize: size,
+      eq,
+      orExpr,
+      extraFilter,
+      orderBy: 'quoteDate',
+      ascending: false,
+    })
+  },
 })
-const pager = usePagination(list, PAGE_SIZE_LIST)
-watch([keyword, statusFilter], () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
+
+/** 供应商列表既用于列表展示（供应商名），也用于新建询价的下拉；按需加载一次 */
+async function ensureSuppliers(): Promise<void> {
+  if (!suppliers.value.length) suppliers.value = await purchaseStore.listSuppliers()
+}
+
 
 function resetFilter(): void { keyword.value = ''; statusFilter.value = '' }
 
@@ -317,7 +357,6 @@ function partyName(q: QuoteOrder): string {
 }
 
 // ---- 新建 ----
-const suppliers = ref<any[]>([])
 const rows = ref<PickerRow[]>([])
 const submitting = ref(false)
 interface Line { product: Product; quantity: number; price: number }
@@ -382,7 +421,7 @@ async function handleCreate(): Promise<void> {
     form.validDays = 0
     form.remark = ''
     form.items = []
-    await reload()
+    await pager.reload()
     mode.value = 'list'
   } else {
     showToast(res.message)
@@ -430,7 +469,7 @@ async function handleConvert(): Promise<void> {
     showToast(res.message)
     if (res.ok) {
       quote.value = (await quotesStore.getQuote(quote.value.id!)) ?? null
-      await reload()
+      await pager.reload()
     }
   } finally {
     converting.value = false
@@ -448,7 +487,7 @@ async function handleRemove(): Promise<void> {
   showToast(res.message)
   if (res.ok) {
     mode.value = 'list'
-    await reload()
+    await pager.reload()
   }
 }
 
@@ -486,19 +525,10 @@ async function openPreview(): Promise<void> {
 // ---- 公共 ----
 function go(p: string): void { router.push(p) }
 
-async function reload(): Promise<void> {
-  try {
-    quotes.value = await quotesStore.listQuotes('purchase')
-  } finally {
-    loading.value = false
-  }
-}
-
 onMounted(async () => {
   suppliers.value = await purchaseStore.listSuppliers()
   const list = await productStore.search('')
   rows.value = list.map(p => ({ product: p, stock: 0 }))
-  await reload()
 })
 </script>
 

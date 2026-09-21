@@ -11,24 +11,23 @@
         v-model="keyword"
         class="tb-search"
         placeholder="搜索单号 / 供应商"
-        @search="reload"
       />
-      <select v-model="statusFilter" class="filter" @change="reload">
+      <select v-model="statusFilter" class="filter">
         <option value="">全部状态</option>
         <option value="pending">待入库</option>
         <option value="partial">部分入库</option>
         <option value="completed">已完成</option>
       </select>
-      <input v-model="dateFrom" type="date" class="filter" aria-label="开始日期" @change="reload" />
+      <input v-model="dateFrom" type="date" class="filter" aria-label="开始日期" />
       <span class="dp-sep">至</span>
-      <input v-model="dateTo" type="date" class="filter" aria-label="结束日期" @change="reload" />
+      <input v-model="dateTo" type="date" class="filter" aria-label="结束日期" />
       <button v-if="hasFilter" class="reset-btn" type="button" @click="resetFilter">重置</button>
       <button v-if="!isMobile" class="add-btn" type="button" @click="go('/purchase/orders/new')">＋ 新建</button>
     </div>
 
-    <div class="sum-line">共 {{ orders.length }} 张采购单</div>
+    <div class="sum-line">共 {{ pager.total.value }} 张采购单</div>
 
-    <LoadingBlock v-if="loading" :rows="6" />
+    <LoadingBlock v-if="pager.loading.value" :rows="6" />
 
     <!-- 手机端卡片 -->
     <ul v-else-if="isMobile" class="card-list zebra-list">
@@ -73,21 +72,24 @@
       show-jump
     />
 
-    <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/purchase/orders/new')">＋</button>
+    <button v-if="!pager.loading.value && isMobile" class="fab" type="button" @click="go('/purchase/orders/new')">＋</button>
   </div>
 </template>
 
 <script setup lang="ts">
 import TablePager from '../../components/TablePager.vue'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
-import { ref, computed, onMounted, watch } from 'vue'
+import { useServerPager } from '../../composables/useServerPager'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useResponsive } from '../../composables/useResponsive'
 import SearchInput from '../../components/SearchInput.vue'
-import type { PurchaseOrder, Supplier } from '../../types'
-import PageHeader from '../../components/ui/PageHeader.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
+import { serverPage } from '../../db/serverPage'
+import { db } from '../../db'
+import { escapeOr } from '../../db/cloudDb'
+import type { PurchaseOrder } from '../../types'
+import PageHeader from '../../components/ui/PageHeader.vue'
 
 const router = useRouter()
 const purchaseStore = usePurchaseStore()
@@ -97,45 +99,54 @@ const keyword = ref('')
 const statusFilter = ref('')
 const dateFrom = ref('')
 const dateTo = ref('')
-const orders = ref<PurchaseOrder[]>([])
-const suppliers = ref<Supplier[]>([])
-/** 首次拉数据期间用骨架占位，避免先闪一下「没有符合条件的采购单」 */
-const loading = ref(true)
+
+const supplierMap = ref<Map<number, string>>(new Map())
 
 const hasFilter = computed(
   () => !!keyword.value || !!statusFilter.value || !!dateFrom.value || !!dateTo.value
 )
 
-// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
-const pager = usePagination(orders, PAGE_SIZE_LIST)
-// 筛选条件一变就回第一页，否则会停在一个已被筛掉的页码上
-watch(orders, () => pager.reset())
+// 服务端分页：只拉当前页 + 总数，不再进页面就全量拉取采购单
+const pager = useServerPager<PurchaseOrder>({
+  watch: [keyword, statusFilter, dateFrom, dateTo],
+  loader: async (pg, size) => {
+    await ensureSuppliers()
+    const kw = keyword.value.trim()
+    let orExpr: string | undefined
+    let extraFilter: ((r: PurchaseOrder) => boolean) | undefined
+    if (kw) {
+      const lower = kw.toLowerCase()
+      const ids = [...supplierMap.value.entries()]
+        .filter(([, n]) => n.toLowerCase().includes(lower))
+        .map(([id]) => id)
+      const parts = [`orderNo.ilike.*${escapeOr(kw)}*`]
+      if (ids.length) parts.push(`supplierId.in.(${ids.join(',')})`)
+      orExpr = parts.join(',')
+      extraFilter = (r) =>
+        (r.orderNo ?? '').toLowerCase().includes(lower) ||
+        (supplierMap.value.get(r.supplierId) ?? '').toLowerCase().includes(lower)
+    }
+    return serverPage<PurchaseOrder>(db.purchaseOrders, {
+      page: pg,
+      pageSize: size,
+      eq: statusFilter.value ? { status: statusFilter.value } : {},
+      gte: dateFrom.value ? { orderDate: dateFrom.value } : {},
+      lte: dateTo.value ? { orderDate: dateTo.value } : {},
+      orderBy: 'orderDate',
+      ascending: false,
+      orExpr,
+      extraFilter,
+    })
+  },
+})
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
-async function reload(): Promise<void> {
-  let data = await purchaseStore.listOrders()
-
-  if (statusFilter.value) {
-    data = data.filter(o => o.status === statusFilter.value)
-  }
-  // 日期区间按 YYYY-MM-DD 字符串比较，结束日含当天
-  if (dateFrom.value) {
-    data = data.filter(o => (o.orderDate ?? '').slice(0, 10) >= dateFrom.value)
-  }
-  if (dateTo.value) {
-    data = data.filter(o => (o.orderDate ?? '').slice(0, 10) <= dateTo.value)
-  }
-
-  const kw = keyword.value.trim().toLowerCase()
-  if (kw) {
-    data = data.filter(o => {
-      const no = (o.orderNo ?? '').toLowerCase()
-      const party = supplierName(o.supplierId).toLowerCase()
-      return no.includes(kw) || party.includes(kw)
-    })
-  }
-  orders.value = data
-  loading.value = false
+async function loadSuppliers(): Promise<void> {
+  const list = await purchaseStore.listSuppliers()
+  supplierMap.value = new Map(list.map(c => [c.id!, c.name]))
+}
+async function ensureSuppliers(): Promise<void> {
+  if (supplierMap.value.size === 0) await loadSuppliers()
 }
 
 function resetFilter(): void {
@@ -143,11 +154,10 @@ function resetFilter(): void {
   statusFilter.value = ''
   dateFrom.value = ''
   dateTo.value = ''
-  void reload()
 }
 
 function supplierName(id: number): string {
-  return suppliers.value.find(s => s.id === id)?.name ?? '未知供应商'
+  return supplierMap.value.get(id) ?? '未知供应商'
 }
 function statusText(s: string): string {
   return { pending: '待入库', partial: '部分入库', completed: '已完成' }[s] || s
@@ -156,14 +166,9 @@ function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
   try {
-    await Promise.all([
-      purchaseStore.listSuppliers().then(r => suppliers.value = r),
-      reload()
-    ])
+    await loadSuppliers()
   } catch {
     /* 数据库未就绪时保持空表，不让骨架卡住 */
-  } finally {
-    loading.value = false
   }
 })
 </script>

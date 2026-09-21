@@ -72,15 +72,15 @@ describe('第十七轮：库存管理默认打开「库存作业」', () => {
 })
 
 describe('版本号一致性（每轮随最新基线刷新）', () => {
-  it('version.ts 与 package.json 同步为 V2.0-3 / 2.0.3', () => {
-    expect(APP_VERSION).toBe('V2.0-3')
+  it('version.ts 与 package.json 同步为 V2.0-4 / 2.0.4', () => {
+    expect(APP_VERSION).toBe('V2.0-4')
     const pkg = JSON.parse(src('package.json')) as { version: string }
-    expect(pkg.version).toBe('2.0.3')
+    expect(pkg.version).toBe('2.0.4')
   })
 
-  it('三份文档都记录了当前版本 V2.0-3', () => {
+  it('三份文档都记录了当前版本 V2.0-4', () => {
     for (const f of ['PRD.md', 'MENU_SPEC.md', 'DEV_PLAN_V2.md']) {
-      expect(src(f), `${f} 未同步版本号`).toContain('V2.0-3')
+      expect(src(f), `${f} 未同步版本号`).toContain('V2.0-4')
     }
   })
 })

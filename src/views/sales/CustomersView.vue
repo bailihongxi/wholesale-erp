@@ -19,9 +19,9 @@
 
     <!-- 列表 -->
     <div class="block">
-      <h3 class="block-title">客户列表（{{ list.length }}<span v-if="hasKeyword"> / 共 {{ customers.length }}</span>）</h3>
+      <h3 class="block-title">客户列表（{{ pager.total.value }}）</h3>
 
-      <LoadingBlock v-if="loading" :rows="6" />
+      <LoadingBlock v-if="pager.loading.value" :rows="6" />
 
       <ul v-else-if="isMobile" class="zebra-list card-list">
         <li v-for="c in pager.paged.value" :key="c.id" class="cust-card" @click="openEdit(c)">
@@ -135,13 +135,15 @@
 
 <script setup lang="ts">
 import TablePager from '../../components/TablePager.vue'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
-import { ref, computed, onMounted, watch } from 'vue'
+import { useServerPager } from '../../composables/useServerPager'
+import { ref, computed } from 'vue'
 import { showToast } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
 import { useSalesStore } from '../../stores/sales'
 import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
+import { escapeOr } from '../../db/cloudDb'
+import { serverPage } from '../../db/serverPage'
 import { hasInvoice, invoiceComplete, invoiceOf, invoiceSummary, emptyInvoice } from '../../utils/invoice'
 import type { Customer, InvoiceInfo } from '../../types'
 import InvoiceFieldset from '../../components/InvoiceFieldset.vue'
@@ -151,7 +153,6 @@ import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 const salesStore = useSalesStore()
 const { isMobile } = useResponsive()
 
-const customers = ref<Customer[]>([])
 const keyword = ref('')
 const filterType = ref<'all' | 'dealer' | 'wholesale'>('all')
 const showForm = ref(false)
@@ -166,40 +167,47 @@ const invoice = ref<InvoiceInfo>(emptyInvoice())
 
 const hasKeyword = computed(() => !!keyword.value.trim())
 
-// 先按关键词过滤，再按「经销商 / 普通客户」筛选
-const list = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  let data = customers.value
-  if (kw) {
-    data = data.filter(c =>
-      c.name.toLowerCase().includes(kw) ||
-      (c.contact ?? '').toLowerCase().includes(kw) ||
-      (c.phone ?? '').toLowerCase().includes(kw) ||
-      // 开票抬头 / 税号也能搜，方便「按要开票的公司名」找客户
-      (c.invoiceTitle ?? '').toLowerCase().includes(kw) ||
-      (c.taxNo ?? '').toLowerCase().includes(kw)
-    )
-  }
-  if (filterType.value === 'dealer') data = data.filter(c => !!c.loginPhone)
-  if (filterType.value === 'wholesale') data = data.filter(c => !c.loginPhone)
-  return data
+// 服务端分页：只拉当前页 + 总数，不再进页面就 toArray() 全量客户。
+// 关键词：名称/联系人/电话/开票抬头/税号 任一命中；类型：经销商（有登录号）/ 普通客户。
+const pager = useServerPager<Customer>({
+  watch: [keyword, filterType],
+  loader: async (pg, size) => {
+    const kw = keyword.value.trim()
+    const ft = filterType.value
+    const fields = ['name', 'contact', 'phone', 'invoiceTitle', 'taxNo']
+    let orExpr: string | undefined
+    let extraFilter: ((r: Customer) => boolean) | undefined
+    if (kw || ft !== 'all') {
+      const parts: string[] = []
+      if (kw) {
+        parts.push(`or(${fields.map(f => `${f}.ilike.*${escapeOr(kw)}*`).join(',')})`)
+      }
+      if (ft === 'dealer') parts.push('and(loginPhone.not.is.null,loginPhone.neq.)')
+      else if (ft === 'wholesale') parts.push('or(loginPhone.is.null,loginPhone.eq.)')
+      // .or() 顶层逗号是 OR，两个条件都要满足 -> 用 and(...) 包起来
+      orExpr = parts.length > 1 ? `and(${parts.join(',')})` : parts[0]
+      const lower = kw.toLowerCase()
+      // 本地 / 测试模式没有 orExpr 语义，用同一套条件在行上过滤
+      extraFilter = (r) => {
+        const row = r as any
+        if (kw && !fields.some(f => String(row[f] ?? '').toLowerCase().includes(lower))) return false
+        if (ft === 'dealer' && !row.loginPhone) return false
+        if (ft === 'wholesale' && !!row.loginPhone) return false
+        return true
+      }
+    }
+    return serverPage<Customer>(db.customers, {
+      page: pg,
+      pageSize: size,
+      orExpr,
+      extraFilter,
+      orderBy: 'name',
+      ascending: true,
+    })
+  },
 })
-
-
-// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
-const pager = usePagination(list, PAGE_SIZE_LIST)
-watch([keyword, filterType], () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
-const loading = ref(true)
-
-async function reload(): Promise<void> {
-  try {
-    customers.value = await salesStore.listCustomers()
-  } finally {
-    loading.value = false
-  }
-}
 
 function openNew(): void {
   editingId.value = null
@@ -269,13 +277,12 @@ async function save(): Promise<void> {
       showToast('已新增客户')
     }
     showForm.value = false
-    await reload()
+    await pager.reload()
   } finally {
     saving.value = false
   }
 }
 
-onMounted(reload)
 </script>
 
 <style scoped>

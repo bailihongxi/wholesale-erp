@@ -11,10 +11,10 @@
         <option value="">全部动作</option>
         <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
       </select>
-      <span class="tb-tip">共 {{ list.length }} 条 / 全部 {{ logs.length }}</span>
+      <span class="tb-tip">共 {{ pager.total.value }} 条</span>
     </div>
 
-    <LoadingBlock v-if="loading" :rows="7" />
+    <LoadingBlock v-if="pager.loading.value" :rows="7" />
 
     <table v-else-if="!isMobile" class="data-table log-table">
       <thead>
@@ -71,8 +71,9 @@
  * 独立页 AuditLogView 与系统设置页的「操作日志」折叠卡片共用同一份列表逻辑，
  * 保证搜索 / 筛选 / 分页行为完全一致。
  */
-import { ref, computed, onMounted, watch } from 'vue'
-import { usePagination, PAGE_SIZE_LIST } from '../composables/usePagination'
+import { ref, computed, onMounted } from 'vue'
+import { useServerPager } from '../composables/useServerPager'
+import { serverPage } from '../db/serverPage'
 import TablePager from './TablePager.vue'
 import SearchInput from './SearchInput.vue'
 import { useResponsive } from '../composables/useResponsive'
@@ -83,9 +84,6 @@ import LoadingBlock from './ui/LoadingBlock.vue'
 
 const { isMobile } = useResponsive()
 
-const logs = ref<AuditLog[]>([])
-/** 首次拉数据期间骨架占位，避免先闪一下「暂无操作日志」 */
-const loading = ref(true)
 const users = ref<User[]>([])
 const keyword = ref('')
 const actionFilter = ref('')
@@ -93,24 +91,22 @@ const actionOptions = Object.values(AUDIT_ACTIONS)
 
 const hasFilter = computed(() => !!keyword.value.trim() || !!actionFilter.value)
 
-const list = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  let data = logs.value
-  if (actionFilter.value) data = data.filter(l => l.action === actionFilter.value)
-  if (kw) {
-    data = data.filter(l =>
-      l.action.toLowerCase().includes(kw) || l.detail.toLowerCase().includes(kw)
-    )
-  }
-  // 最新在前
-  return [...data].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+// 服务端分页：只拉当前页 + 总数，不再进页面就 toArray() 全量日志。
+// 日志表增长最快，全量拉取是首屏卡顿的主要来源之一。
+const pager = useServerPager<AuditLog>({
+  watch: [keyword, actionFilter],
+  loader: (pg, size) =>
+    serverPage<AuditLog>(db.auditLogs, {
+      page: pg,
+      pageSize: size,
+      eq: actionFilter.value ? { action: actionFilter.value } : {},
+      search: { fields: ['action', 'detail'], keyword: keyword.value },
+      orderBy: 'createdAt',
+      ascending: false,
+    }),
 })
-
-// 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
-const pager = usePagination(list, PAGE_SIZE_LIST)
-// 关键字 / 动作筛选变了就回第一页
-watch([keyword, actionFilter], () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
+
 
 function operatorName(id: number): string {
   return users.value.find(u => u.id === id)?.name ?? `#${id}`
@@ -120,16 +116,14 @@ function fmt(s: string): string {
   return s ? s.slice(0, 16).replace('T', ' ') : '-'
 }
 
-async function reload(): Promise<void> {
+// 操作员名字仍需一次性取回（用户表小且长期缓存）；日志本体已走服务端分页
+onMounted(async () => {
   try {
-    logs.value = await db.auditLogs.toArray()
     users.value = await db.users.toArray()
-  } finally {
-    loading.value = false
+  } catch {
+    /* 库未就绪时保持空表，不让骨架卡住 */
   }
-}
-
-onMounted(reload)
+})
 </script>
 
 <style scoped>

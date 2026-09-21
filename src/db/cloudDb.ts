@@ -18,12 +18,25 @@ export interface QueryPageOpts {
   pageSize?: number
   eq?: Record<string, any>
   search?: { fields: string[]; keyword: string }
+  /** 范围过滤（日期/数值），键为字段名，值为 ISO/日期串 */
+  gte?: Record<string, string>
+  lte?: Record<string, string>
+  /** in 过滤：键为字段名，值为候选数组（如 customerId 列表） */
+  inFilter?: Record<string, any[]>
+  /** 原始 PostgREST or 表达式，用于跨字段 OR（如 单号模糊 OR 对方ID in） */
+  orExpr?: string
+  /**
+   * 本地/测试模式专用的自定义行匹配（云端 queryPage 会忽略它）。
+   * 用于「跨表名搜索」：例如按客户名搜销售单，云端用 orExpr 解析客户ID，
+   * 本地模式没有 orExpr 语义，就用 extraFilter 直接对行做 OR 匹配。
+   */
+  extraFilter?: (row: any) => boolean
   orderBy?: string
   ascending?: boolean
 }
 
 /** 转义 PostgREST .or() 语法里的特殊字符，避免关键词破坏查询 */
-function escapeOr(kw: string): string {
+export function escapeOr(kw: string): string {
   return kw.replace(/([\\*,()%])/g, '\\$1')
 }
 
@@ -277,6 +290,18 @@ export class CloudTable<T = any> {
         if (parts.length) q = q.or(parts.join(','))
       }
     }
+    if (opts.gte) {
+      for (const [k, v] of Object.entries(opts.gte)) { if (v != null && v !== '') q = q.gte(k, v) }
+    }
+    if (opts.lte) {
+      for (const [k, v] of Object.entries(opts.lte)) { if (v != null && v !== '') q = q.lte(k, v) }
+    }
+    if (opts.inFilter) {
+      for (const [k, vals] of Object.entries(opts.inFilter)) {
+        if (Array.isArray(vals) && vals.length) q = q.in(k, vals as any)
+      }
+    }
+    if (opts.orExpr) q = q.or(opts.orExpr)
     if (opts.orderBy) q = q.order(opts.orderBy, { ascending: !!opts.ascending })
     const { data, error, count } = await q.range(start, end)
     if (error) throw new Error(`${this.name}.queryPage: ${error.message}`)

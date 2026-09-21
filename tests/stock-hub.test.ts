@@ -259,7 +259,8 @@ describe('首屏骨架：消除"先闪空态再出数据"', () => {
     for (const p of pages) {
       const code = src(p)
       expect(code, p + ' 未接入 LoadingBlock').toContain('LoadingBlock')
-      expect(code, p + ' 未在加载完成后关闭骨架').toMatch(/loading\.value\s*=\s*false/)
+      // 历史写法手动 loading.value = false；服务端分页视图改走 pager.loading（由 useServerPager 自动管理）
+      expect(code, p + ' 未在加载完成后关闭骨架').toMatch(/loading\.value\s*=\s*false|pager\.loading/)
     }
   })
 })

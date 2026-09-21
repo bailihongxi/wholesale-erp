@@ -5,7 +5,7 @@
 > 配套文档：PRD.md、UI设计稿.html（最终确认版）
 > 前置状态：业务逻辑层已完成（74个测试全绿），本次重写UI层
 >
-> **产品版本：V2.0-3（2026-09-21 性能优化版）**
+> **产品版本：V2.0-4（2026-09-21 列表服务端分页推广版）**
 > 本文档为开发执行计划，产品对外版本统一为 **V1.0-11**（`src/version.ts` / `package.json` 同步）。
 > 历史基线见文末 **「十六、V1.0-1 发布基线」**；第十二轮见 **「十七、V1.0-2 · 第十二轮」**，第十三轮见 **「十八、V1.0-3 · 第十三轮」**，第十四轮见 **「十九、V1.0-4 · 第十四轮」**，第十五 / 十六轮见 **「二十、V1.0-5 · 第十五轮」「二十一、V1.0-5 · 第十六轮」**，第十七轮见 **「二十二、V1.0-6 · 第十七轮」**，第十八轮见 **「二十三、V1.0-7 · 第十八轮」**，第十九轮见 **「二十四、V1.0-8 · 第十九轮」**，第二十轮见 **「二十五、V1.0-9 · 第二十轮」**，第二十一轮见 **「二十六、V1.0-10 · 第二十一轮」**，第二十二轮见 **「二十七、V1.0-11 · 第二十二轮」**。
 
@@ -1398,4 +1398,15 @@ A3 已按要求取消。`@page { size: <w>mm <h>mm; margin: 0 }`，横竖由宽�
 
 - 根因：新加坡 Supabase 节点高延迟（1000 行商品 ≈2.4s），几乎所有列表进页面就全表 `toArray()`，且 `count()/orderBy()` 不走缓存重复请求。
 - 改动：`cloudDb.ts` 新增 `queryPage` / `count` 缓存 / `distinct` / `warmUp`；`user.ts` 登录后 `warmUp()`；`product.ts` 新增 `listPage` / `distinctCategories`（云端走 `queryPage`，本地走内存过滤）；`ProductListView.vue` 服务端分页重写。
+- 验证：`npm run build` 0 错误；`npx vitest run` 522 全绿。
+
+
+## 三十一、V2.0-4（2026-09-21）：列表服务端分页推广
+
+- 目标：把商品档案（V2.0-3）验证过的服务端分页范式推广到其余大列表，消除「进页面就全表 toArray()」。
+- 新增 `src/db/serverPage.ts`：`serverPage(table, opts)` 云端调 `queryPage`、本地 `toArray()` + `localApplyFilters` 后切片，双模语义一致。
+- `useServerPager` 增加 `loading` + `onMounted` 自动首拉；接口与 `usePagination` 完全对齐，`pager.paged.value` / `pager.total.value` / `TablePager` 用法不变。
+- 已转换：销售单、采购单、销售报价单、预采询价单、客户档案、供应商档案、出入库流水、操作日志。
+- 踩坑：模板里 `pager.loading` 是嵌套 ref、Vue **不会自动解包**，必须写 `pager.loading.value`，否则骨架永驻、列表永远不显示（曾一次红 12 个用例）。
+- 未转换（原因记录）：出入库单据 / 库存明细 / 库存预警 / 经营报表 / 财务流水 / 对账为多表聚合结果，`queryPage` 不支持 group by；`ProductPicker` 由调用方传 rows，需连带改所有下单页。
 - 验证：`npm run build` 0 错误；`npx vitest run` 522 全绿。
