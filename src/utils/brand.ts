@@ -127,11 +127,49 @@ function read(): BrandConfig {
 /** 全局响应式配置 */
 const config = ref<BrandConfig>(read())
 
-function persist(): void {
+async function persist(): Promise<void> {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config.value))
   } catch {
     /* 隐私模式 / 配额满：内存里仍然生效，只是不落盘 */
+  }
+  // 云端同步：登录后写 systemSettings 表，多设备共享
+  try {
+    const { supabase } = await import('../db/supabaseClient')
+    if (!supabase) return
+    await supabase.from('systemSettings').upsert({
+      id: 1,
+      key: 'brand_config',
+      value: config.value,
+      updatedAt: new Date().toISOString()
+    })
+  } catch {
+    /* 表不存在或网络问题：本地仍然生效 */
+  }
+}
+
+/** 启动时从云端加载品牌配置（覆盖本地旧值） */
+export async function loadBrandFromCloud(): Promise<void> {
+  try {
+    const { supabase } = await import('../db/supabaseClient')
+    if (!supabase) return
+    const { data } = await supabase.from('systemSettings').select('value').eq('key', 'brand_config').single()
+    if (data?.value) {
+      const saved = data.value as Partial<BrandConfig>
+      const base = defaultConfig()
+      config.value = {
+        ...base,
+        ...saved,
+        loginLogo: { ...base.loginLogo, ...(saved.loginLogo ?? {}) },
+        sideLogo: { ...base.sideLogo, ...(saved.sideLogo ?? {}) },
+        roleAvatars: { ...base.roleAvatars, ...(saved.roleAvatars ?? {}) },
+        moduleIcons: { ...base.moduleIcons, ...(saved.moduleIcons ?? {}) },
+        appIcon: { ...base.appIcon, ...(saved.appIcon ?? {}) },
+        appIconBg: saved.appIconBg ?? base.appIconBg
+      }
+    }
+  } catch {
+    /* 表不存在或网络问题：用本地默认值 */
   }
 }
 
@@ -156,45 +194,45 @@ export function useBrand() {
     roleAvatar,
     setLoginLogo(v: BrandIcon): void {
       config.value = { ...config.value, loginLogo: { ...v } }
-      persist()
+      void persist()
     },
     setSideLogo(v: BrandIcon): void {
       config.value = { ...config.value, sideLogo: { ...v } }
-      persist()
+      void persist()
     },
     setLoginText(title: string, sub: string): void {
       config.value = { ...config.value, loginTitle: title, loginSub: sub }
-      persist()
+      void persist()
     },
     setModuleIcon(route: string, icon: string): void {
       config.value = {
         ...config.value,
         moduleIcons: { ...config.value.moduleIcons, [route]: icon }
       }
-      persist()
+      void persist()
     },
     setAppIcon(v: AppIconSetting): void {
       config.value = { ...config.value, appIcon: { ...v } }
-      persist()
+      void persist()
     },
     setAppIconBg(bg: string): void {
       config.value = { ...config.value, appIconBg: bg }
-      persist()
+      void persist()
     },
     resetAppIcon(): void {
       config.value = { ...config.value, appIcon: { ...DEFAULT_APP_ICON }, appIconBg: DEFAULT_APP_ICON_BG }
-      persist()
+      void persist()
     },
     setRoleAvatar(role: string, v: BrandIcon): void {
       config.value = {
         ...config.value,
         roleAvatars: { ...config.value.roleAvatars, [role]: { ...v } }
       }
-      persist()
+      void persist()
     },
     resetModuleIcons(): void {
       config.value = { ...config.value, moduleIcons: {} }
-      persist()
+      void persist()
     },
     resetRoleAvatars(): void {
       const roleAvatars: Record<string, BrandIcon> = {}
@@ -202,11 +240,11 @@ export function useBrand() {
         roleAvatars[r] = { type: 'text', value: DEFAULT_ROLE_AVATARS[r] ?? '👤' }
       }
       config.value = { ...config.value, roleAvatars }
-      persist()
+      void persist()
     },
     resetAll(): void {
       config.value = defaultConfig()
-      persist()
+      void persist()
     }
   }
 }

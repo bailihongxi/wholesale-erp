@@ -364,6 +364,9 @@ function tipForget(): void {
 /* 手机端上下布局 */
 .login-page.is-mobile {
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
 }
 .login-page.is-mobile .form-panel {
   flex: none;

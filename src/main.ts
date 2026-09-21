@@ -14,7 +14,10 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(Vant)
-app.mount('#app')
+
+// 先从云端加载品牌配置（多设备同步），再挂载
+import { loadBrandFromCloud } from './utils/brand'
+loadBrandFromCloud().finally(() => app.mount('#app'))
 
 /**
  * 启动即套用「已保存的应用图标」（第十六轮）。
