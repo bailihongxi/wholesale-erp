@@ -1,6 +1,10 @@
 <template>
   <AppLayout v-if="!isPlainRoute">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <keep-alive>
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </AppLayout>
   <router-view v-else />
 </template>

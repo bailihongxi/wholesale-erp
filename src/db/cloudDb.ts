@@ -104,13 +104,20 @@ class CloudQuery {
       if (r.error) throw new Error(`CloudQuery.toArray: ${r.error.message}`)
       all.push(...((r.data as T[]) || []))
     }
-    return all
+    return this._filterFn ? all.filter(this._filterFn) : all
   }
 
   async first<T = any>(): Promise<T | undefined> {
     const arr = await this.toArray<T>()
     return arr[0]
   }
+
+  /** Dexie 兼容：前端 filter（拉完再过滤） */
+  filter(fn: (row: any) => boolean): this {
+    this._filterFn = fn
+    return this
+  }
+  private _filterFn?: (row: any) => boolean
 
   async count(): Promise<number> {
     const { count, error } = await this.build({ count: true, head: true })
