@@ -86,6 +86,9 @@ export function roleLabelOf(role: string): string {
   return ROLE_LABELS[role] ?? role
 }
 
+/** 系统名称的出厂默认值；index.html 的首屏加载页写的是同一个字面量 */
+export const DEFAULT_SYSTEM_NAME = '家电批发ERP'
+
 function defaultConfig(): BrandConfig {
   const roleAvatars: Record<string, BrandIcon> = {}
   for (const r of AVATAR_ROLES) {
@@ -93,7 +96,7 @@ function defaultConfig(): BrandConfig {
   }
   return {
     loginLogo: { type: 'text', value: 'ERP' },
-    loginTitle: '家电批发ERP',
+    loginTitle: DEFAULT_SYSTEM_NAME,
     loginSub: '进货 · 库存 · 销售 · 对账 全流程管理',
     sideLogo: { type: 'text', value: 'ERP' },
     roleAvatars,
@@ -129,12 +132,30 @@ function read(): BrandConfig {
 /** 全局响应式配置 */
 const config = ref<BrandConfig>(read())
 
+/**
+ * 把「系统名称」同步到浏览器标签页标题与苹果主屏名称。
+ *
+ * index.html 的首屏加载页（#app-boot）读的是同一份 localStorage 配置，
+ * 两边取值一致 —— 刷新时加载页显示的名字不会和进来之后的标题打架。
+ */
+function syncDocumentTitle(title: string): void {
+  if (typeof document === 'undefined') return
+  const name = title.trim() || DEFAULT_SYSTEM_NAME
+  document.title = name
+  const apple = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+  if (apple) apple.setAttribute('content', name)
+}
+
+// import 时就先对齐一次（标签页标题等于「系统名称」）
+syncDocumentTitle(config.value.loginTitle)
+
 async function persist(): Promise<void> {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config.value))
   } catch {
     /* 隐私模式 / 配额满：内存里仍然生效，只是不落盘 */
   }
+  syncDocumentTitle(config.value.loginTitle)
   // 推到云端，手机和电脑共用同一套品牌配置（V2.0-6）
   touchSetting(STORAGE_KEY)
 }
@@ -146,6 +167,8 @@ async function persist(): Promise<void> {
  */
 export function reloadBrand(): void {
   config.value = read()
+  // 云端拉下来的系统名称可能是别的设备改的，标题跟着一起换
+  syncDocumentTitle(config.value.loginTitle)
 }
 
 // 云端设置被拉下来之后，自动把内存里的品牌配置刷新成最新值

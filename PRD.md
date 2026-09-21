@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.7　|　**产品版本：V2.0-8（系统设置云端同步 · 多设备共用）**
+> 文档版本：V2.8　|　**产品版本：V2.0-9（首屏加载页跟随系统名称）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-8'`，`package.json` → `version: "2.0.8"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-9'`，`package.json` → `version: "2.0.9"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2002,3 +2002,30 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 - 新增 `tests/settings-cloud-sync.test.ts`（21 例）：覆盖同步白名单安全边界、
   首次迁移、双向 LWW 冲突判定、云端不可用时降级。
 - `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 566 全绿 / 50 文件。
+## V2.0-9（2026-09-22）：首屏加载页跟随「系统名称」
+
+### 问题
+「系统设置 → 品牌与图标 → 系统名称」改过之后，登录页/侧边栏都跟着变了，
+但**刷新页面时那一闪而过的加载页**（蓝底「家电批发ERP」+ 呼吸条）仍是写死的旧名。
+
+### 根因
+加载页是 `index.html` 里的**静态占位**（`#app-boot`），在 JS 解析前就要渲染，
+拿不到 Vue 里的品牌配置，于是名字被写死在 HTML 里，与设置各改各的。
+
+### 修法
+1. `index.html` 在该占位之后加一段**同步内联脚本**（在 `main.ts` 之前执行）：
+   读 `localStorage.erp_brand_config.loginTitle` 就地改名，顺带把
+   `<title>` 与 `apple-mobile-web-app-title` 一起对齐；
+   读不到 / 脏 JSON / 隐私模式一律回落到写死的默认名「家电批发ERP」，绝不会空白。
+2. 名字偏长（>10、>16 字）自动缩字号，避免换行把呼吸条挤下去。
+3. `src/utils/brand.ts` 抽出 `DEFAULT_SYSTEM_NAME` 单点维护默认名；新增
+   `syncDocumentTitle()`：import 时、改名后（`persist`）、云端配置拉回后
+   （`reloadBrand`）三处都刷新标签页标题 —— 改完名字不用刷新就生效。
+
+### 验证
+- 新增 `tests/boot-brand.test.ts`（11 例）：直接抽出 `index.html` 里的真实脚本源码在 jsdom 里执行，
+  覆盖改名生效、脚本早于 `main.ts`、超长缩字号、空白回落到默认名、脏 localStorage 不抛错，
+  以及 `brand.ts` 的标题同步（初始化 / 改名 / 留空 / 云端拉回）。
+- 实机（本地 5173）：把系统名称改成「百利鸿禧商贸ERP」后刷新，
+  首屏加载页与标签页标题同时显示新名字；登录页正常。
+- `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 579 全绿 / 51 文件。

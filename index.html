@@ -45,10 +45,42 @@
   <body>
     <div id="app">
       <div id="app-boot">
-        <div class="boot-logo">家电批发ERP</div>
+        <div class="boot-logo" id="boot-logo">家电批发ERP</div>
         <div class="boot-bar"></div>
       </div>
     </div>
+    <!--
+      首屏品牌名跟随「系统设置 → 品牌与图标 → 系统名称」。
+      这段静态 HTML 在 JS 之前就被渲染，拿不到 Vue 里的配置，所以这里同步读一次
+      localStorage（键 erp_brand_config，与 src/utils/brand.ts 一致）就地改名；
+      读不到 / 配置损坏时保留上面写死的默认名，绝不会变成空白。
+    -->
+    <script>
+      (function () {
+        var name = '家电批发ERP'
+        try {
+          var raw = localStorage.getItem('erp_brand_config')
+          if (raw) {
+            var saved = JSON.parse(raw)
+            if (saved && typeof saved.loginTitle === 'string' && saved.loginTitle.trim()) {
+              name = saved.loginTitle.trim()
+            }
+          }
+        } catch (e) {
+          /* 隐私模式 / 脏数据：保持默认名 */
+        }
+        document.title = name
+        var logo = document.getElementById('boot-logo')
+        if (logo) {
+          logo.textContent = name
+          // 名字偏长自动缩字号，避免换行把呼吸条挤下去
+          if (name.length > 10) logo.style.fontSize = '18px'
+          if (name.length > 16) logo.style.fontSize = '15px'
+        }
+        var apple = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+        if (apple) apple.setAttribute('content', name)
+      })()
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

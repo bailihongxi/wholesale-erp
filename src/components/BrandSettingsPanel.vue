@@ -111,7 +111,7 @@ import { computed, ref } from 'vue'
 import { showToast } from 'vant'
 import CollapseCard from './ui/CollapseCard.vue'
 import {
-  useBrand, AVATAR_ROLES, DEFAULT_ROLE_AVATARS, roleLabelOf, type BrandIcon
+  useBrand, AVATAR_ROLES, DEFAULT_ROLE_AVATARS, DEFAULT_SYSTEM_NAME, roleLabelOf, type BrandIcon
 } from '../utils/brand'
 import { fileToSquareDataUrl } from '../utils/image'
 
@@ -182,7 +182,7 @@ async function pickImage(e: Event): Promise<string> {
 }
 
 function saveLoginText(): void {
-  const title = titleDraft.value.trim() || '家电批发ERP'
+  const title = titleDraft.value.trim() || DEFAULT_SYSTEM_NAME
   const sub = subDraft.value.trim()
   titleDraft.value = title
   subDraft.value = sub
