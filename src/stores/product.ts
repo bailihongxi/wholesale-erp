@@ -23,10 +23,20 @@ export const useProductStore = defineStore('product', () => {
    * 一次性取出全部商品的库存，避免在列表里逐条查询（商品多时非常慢）。
    * 一个商品在多个库位（总仓/门店…）各有一行，这里**汇总**成总库存——
    * 旧实现直接覆盖只保留最后一个库位，多库位时库存数是错的。
+   *
+   * ⚠️ 云端只取 productId / quantity 两列做窄字段扫描：stock 表有 6281 行，
+   * 全字段拉（id/productId/quantity/updatedAt…）要搬几百 KB，而这里只用得到两个字段。
+   * 本地（Dexie / 测试）仍然 toArray()，保持原有语义。
    */
   async function stockMap(): Promise<Record<number, number>> {
-    const all = await db.stock.toArray()
     const map: Record<number, number> = {}
+    if (USE_CLOUD) {
+      const rows = (await (db.stock as any)
+        .scanNarrow('productId,quantity')) as Array<{ productId: number; quantity: number }>
+      for (const s of rows) map[s.productId] = (map[s.productId] ?? 0) + (Number(s.quantity) || 0)
+      return map
+    }
+    const all = await db.stock.toArray()
     for (const s of all) map[s.productId] = (map[s.productId] ?? 0) + s.quantity
     return map
   }
@@ -78,11 +88,81 @@ export const useProductStore = defineStore('product', () => {
     return { rows: all.slice(start, start + pageSize), total: all.length }
   }
 
-  /** 分类下拉数据源：取去重后的分类列表（窄字段一次拉取） */
+  /**
+   * 分类下拉数据源：取去重后的分类列表（窄字段一次拉取）。
+   *
+   * ⚠️ 必须缓存：取一次分类要**扫整张商品表**（6281 行 = 7 次并行 Range 请求，
+   * 新加坡节点下 1~2 秒）。分类是「几个固定值」，几乎不变，而商品档案页每次
+   * 进入都要它 —— 不缓存就是白等两次往返。
+   *
+   * 缓存分三层，目的都是让下拉框永远不用等网络：
+   *   1) 内存 catCache  —— 同一次会话内复用（商品档案与「选商品」共用一份）；
+   *   2) 并发去重 catPending —— 首屏两个组件同时要分类时只扫一次表；
+   *   3) localStorage（仅云端）—— 刷新 / 重开浏览器也能立刻出下拉；超过 CAT_TTL_MS
+   *      先返回旧值、再后台静默刷新一轮，既秒开又不会一直陈旧。
+   * 失效交给 clearPickerCache()（新增/修改商品、导入/删除/批量改后都会调）。
+   */
+  const CAT_CACHE_KEY = 'erp.product.categories.v1'
+  /** 超过这个时长就后台重新扫一次（先给缓存值，不让用户等） */
+  const CAT_TTL_MS = 10 * 60 * 1000
+  let catCache: string[] | null = null
+  let catPending: Promise<string[]> | null = null
+  let catTs = 0
+
+  /** 把上次会话留下的分类读回内存（仅云端；本地/测试保持原来的每次扫表语义） */
+  function readCatStore(): void {
+    if (catCache || !USE_CLOUD) return
+    try {
+      const raw = localStorage.getItem(CAT_CACHE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed?.list)) {
+        catCache = parsed.list as string[]
+        catTs = Number(parsed.ts) || 0
+      }
+    } catch { /* 存储不可用就退化成每次扫表，不影响功能 */ }
+  }
+
+  function writeCatStore(list: string[]): void {
+    if (!USE_CLOUD) return
+    try { localStorage.setItem(CAT_CACHE_KEY, JSON.stringify({ list, ts: Date.now() })) } catch { /* 无痕模式等忽略 */ }
+  }
+
+  /** 真正去扫表：云端走窄字段 distinct，本地 / 测试走 Dexie 全表 */
+  async function scanCategories(): Promise<string[]> {
+    return USE_CLOUD
+      ? await (db.products as any).distinct('category')
+      : [...new Set((await db.products.toArray()).map(p => p.category).filter(Boolean))].sort()
+  }
+
+  /** 后台静默刷新一轮（过期时用；出错就继续用旧值） */
+  async function refreshCategoriesSilently(): Promise<void> {
+    try {
+      const list = await scanCategories()
+      catCache = list
+      catTs = Date.now()
+      writeCatStore(list)
+    } catch { /* 网络出错就保持旧值 */ }
+  }
+
   async function distinctCategories(): Promise<string[]> {
-    if (USE_CLOUD) return (db.products as any).distinct('category')
-    const all = await db.products.toArray()
-    return [...new Set(all.map(p => p.category).filter(Boolean))].sort()
+    readCatStore()
+    if (catCache) {
+      // 过期了也先把缓存值交出去，同时后台补一轮刷新
+      if (Date.now() - catTs > CAT_TTL_MS) void refreshCategoriesSilently()
+      return catCache
+    }
+    if (!catPending) {
+      catPending = scanCategories()
+        .then(list => {
+          catCache = list
+          catTs = Date.now()
+          writeCatStore(list)
+          return list
+        })
+        .finally(() => { catPending = null })
+    }
+    return catPending
   }
 
   async function search(keyword: string): Promise<Product[]> {
@@ -125,17 +205,50 @@ export const useProductStore = defineStore('product', () => {
     return await db.products.get(id)
   }
 
+  /**
+   * 商品 id → 名称 映射：下拉、历史列表只想显示商品名时用它。
+   * ⚠️ 云端走窄字段扫描（只要 id / brand / model 三列）——
+   * 为了显示个名字把 6281 行 × 十几个字段全拉下来太亏。
+   */
+  async function nameMap(): Promise<Record<number, string>> {
+    if (USE_CLOUD) {
+      const rows = (await (db.products as any)
+        .scanNarrow('id,brand,model')) as Array<{ id: number; brand?: string; model?: string }>
+      const m: Record<number, string> = {}
+      for (const p of rows) m[p.id] = productName({ brand: p.brand ?? '', model: p.model ?? '' }) || `商品#${p.id}`
+      return m
+    }
+    const all = await db.products.toArray()
+    const m: Record<number, string> = {}
+    for (const p of all) m[p.id!] = productName(p) || `商品#${p.id}`
+    return m
+  }
+
   async function getStock(productId: number): Promise<number> {
     const s = await db.stock.where('productId').equals(productId).first()
     return s?.quantity ?? 0
   }
 
+  /**
+   * 低库存商品（经营看板统计、经营报表预警清单都用它）。
+   *
+   * ⚠️ 云端走**窄字段扫描**：这里只需要 id / 品牌 / 型号 / 分类 / 预警值 5 列，
+   * 而 `db.products.toArray()` 会把 6281 行 × 十几个字段全搬下来（7 次 Range 请求、
+   * 几百 KB），绝大部分字段根本用不上。库存同样走窄字段的 stockMap()。
+   * 本地 / 测试保持原来 `where('status')` 的语义，两者结果一致。
+   */
+  const LOW_STOCK_FIELDS = 'id,brand,model,category,warnStock,status'
   async function getLowStockProducts(): Promise<Array<{ product: Product; quantity: number }>> {
     // 一次性把库存表读进内存再比对：逐个 getStock 在商品上千时会很慢
-    const [all, smap] = await Promise.all([
-      db.products.where('status').equals('active').toArray(),
-      stockMap()
-    ])
+    let all: Product[]
+    if (USE_CLOUD) {
+      const rows = (await (db.products as any)
+        .scanNarrow(LOW_STOCK_FIELDS, (q: any) => q.eq('status', 'active'))) as Array<Record<string, any>>
+      all = rows as unknown as Product[]
+    } else {
+      all = await db.products.where('status').equals('active').toArray()
+    }
+    const smap = await stockMap()
     return all
       .map(p => ({ product: p, quantity: smap[p.id!] ?? 0 }))
       .filter(x => x.quantity <= x.product.warnStock)
@@ -148,17 +261,17 @@ export const useProductStore = defineStore('product', () => {
   // 12562 行数据到浏览器，还得踩 Supabase 单请求 1000 行的上限（见 db/cloudDb.ts）。
   // 现在改成「按页取」：任何一页都只发 2 个请求、几十行数据。
 
-  /** 「选商品」弹窗的分类下拉：全表窄字段扫一次后缓存（分类几乎不变） */
-  let catCache: string[] | null = null
-
-  /** 商品导入 / 新增 / 改名后调用，让分类下拉重新扫一遍 */
-  function clearPickerCache(): void { catCache = null }
+  /** 商品导入 / 新增 / 改名后调用，让分类下拉重新扫一遍（含 localStorage 里的那份） */
+  function clearPickerCache(): void {
+    catCache = null
+    catTs = 0
+    try { if (USE_CLOUD) localStorage.removeItem(CAT_CACHE_KEY) } catch { /* 忽略 */ }
+  }
 
   /** 分类集合（带缓存），供 ProductPicker 的 categories 用 */
+  /** 与商品档案页共用同一份分类缓存（见 distinctCategories） */
   async function pickerCategories(): Promise<string[]> {
-    if (catCache) return catCache
-    catCache = await distinctCategories()
-    return catCache
+    return distinctCategories()
   }
 
   /**
@@ -257,7 +370,7 @@ export const useProductStore = defineStore('product', () => {
 
   return {
     products, productName, loadAll, search, createProduct, listAll, listPage, distinctCategories, stockMap,
-    updateProduct, getProduct, getStock, getLowStockProducts,
+    updateProduct, getProduct, nameMap, getStock, getLowStockProducts,
     pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache
   }
 })

@@ -368,6 +368,17 @@ async function loadCategories(): Promise<void> {
   catch { categoriesList.value = [] }
 }
 
+/**
+ * 商品被增删改之后调用：分类集合可能已经变了（新增了分类，或某分类的商品被删光），
+ * 先清掉分类缓存再重新拉一次下拉选项。
+ * 商品档案页的分类下拉是「扫整张商品表」得来的（见 stores/product.ts 注释），
+ * 不清缓存的话这里会一直显示旧的分类。
+ */
+async function refreshCategories(): Promise<void> {
+  productStore.clearPickerCache()
+  await loadCategories()
+}
+
 const colspan = computed(() => 8 + (canSeePurchasePrice.value ? 1 : 0) + (canSeeAnyPrice.value ? 2 : 0))
 
 function stockOf(id: number): number { return stockMap.value[id] ?? 0 }
@@ -415,6 +426,7 @@ async function mergeSelected(): Promise<void> {
   showToast('已合并')
   clearSelection()
   await reload()
+  await refreshCategories()
 }
 
 async function removeSelected(): Promise<void> {
@@ -423,6 +435,7 @@ async function removeSelected(): Promise<void> {
   showToast(`删除 ${r.deleted} 个${r.blocked ? `，${r.blocked} 个已被单据引用不能删` : ''}`)
   clearSelection()
   await reload()
+  await refreshCategories()
 }
 
 // ---------------------------------------------------------------- 导入导出
@@ -473,6 +486,7 @@ async function doImport(): Promise<void> {
     }
     showToast(`✅ 导入完成：新增 ${report.created}，更新 ${report.updated}，重复 ${report.skipped}`)
     await reload()
+    await refreshCategories()
   } catch (e: any) {
     showToast('❌ 导入失败：' + (e?.message || '未知错误'))
   } finally {
@@ -526,6 +540,7 @@ async function mergeGroup(g: DuplicateGroup): Promise<void> {
   showToast(res.message)
   await scanDuplicates()
   await reload()
+  await refreshCategories()
 }
 
 async function mergeAllGroups(): Promise<void> {
@@ -539,6 +554,7 @@ async function mergeAllGroups(): Promise<void> {
   showToast(n ? `共合并 ${n} 条重复商品` : '没有需要合并的商品')
   await scanDuplicates()
   await reload()
+  await refreshCategories()
 }
 
 async function deleteGroup(g: DuplicateGroup): Promise<void> {
@@ -549,6 +565,7 @@ async function deleteGroup(g: DuplicateGroup): Promise<void> {
   showToast(`删除 ${r.deleted} 条${r.blocked ? `，${r.blocked} 条已被单据引用` : ''}`)
   await scanDuplicates()
   await reload()
+  await refreshCategories()
 }
 
 // ---------------------------------------------------------------- 批量编辑
@@ -596,6 +613,7 @@ async function doBulkEdit(): Promise<void> {
   showBulk.value = false
   clearSelection()
   await reload()
+  await refreshCategories()
 }
 
 onMounted(async () => { await Promise.all([reload(), loadCategories()]) })

@@ -70,7 +70,8 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="3" class="total-label">合计</td>
+              <!-- 合计行要落在「行金额」列上：colspan 4 = 商品名称/原单数量/退货数量/单价 -->
+              <td colspan="4" class="total-label">合计</td>
               <td class="num t-amt">¥{{ total.toLocaleString() }}</td>
               <td></td>
             </tr>
@@ -151,6 +152,7 @@ import { useSalesStore } from '../../stores/sales'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useReturnsStore, type ReturnLine, type ReturnRow } from '../../stores/returns'
 import { useInventoryStore } from '../../stores/inventory'
+import { useProductStore } from '../../stores/product'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
@@ -161,6 +163,7 @@ const salesStore = useSalesStore()
 const purchaseStore = usePurchaseStore()
 const returnsStore = useReturnsStore()
 const inventoryStore = useInventoryStore()
+const productStore = useProductStore()
 const userStore = useUserStore()
 const { isMobile } = useResponsive()
 
@@ -257,10 +260,8 @@ async function init(): Promise<void> {
   const suppliers = await db.suppliers.toArray()
   customerMap.value = Object.fromEntries(customers.map(c => [c.id!, c.name]))
   supplierMap.value = Object.fromEntries(suppliers.map(s => [s.id!, s.name]))
-  const products = await db.products.toArray()
-  productNameMap.value = Object.fromEntries(
-    products.map(p => [p.id!, `${p.brand ?? ''} ${p.model ?? ''}`.trim() || `商品#${p.id}`])
-  )
+  // 只读名字：走窄字段扫描，不为显示名称去拉全字段整表
+  productNameMap.value = await productStore.nameMap()
   await loadHistory()
 }
 
@@ -304,7 +305,6 @@ watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void 
 .detail-pop { margin-top: 14px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
 .dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .dp-sub { font-size: 12px; color: var(--c-muted); }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -313,3 +313,4 @@ watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void 
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

@@ -849,18 +849,63 @@ body {
 
   /* 手机端：顶部模块名已由 MobileTopNav 显示，页面头只保留操作按钮，
      标题（含副标题）藏掉，消除与顶栏的重复。操作按钮仍在，不丢失功能。 */
-  /* 手机端：所有表格允许横向滚动，防止列太多溢出屏幕 */
-  .app-layout.is-mobile .data-table {
+
+  /* 手机端：所有表格允许横向滚动，防止列太多溢出屏幕。
+     ⚠️ 这里一律用 :where() 包住，把权重压到 0 —— 页面自己的手机端样式
+     （如开单页把明细表改成卡片）必须能覆盖掉它。此前没用 :where，权重 (0,3,0)
+     压过了页面样式，导致卡片模式被拆成「半表格」。
+     ⚠️ 表头和表体必须都设成 display: table 且同宽，不能只给其中一个 ——
+     否则整张表被拆成互不相干的两张，列宽各算各的（实测 644px vs 650px），
+     表头与数据行对不上；tfoot 更会落单成「匿名表」（实测只有 303px 宽），
+     这就是「合计行通栏错位」的根因。 */
+  :where(.app-layout.is-mobile) :where(.data-table) {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     max-width: 100%;
   }
-  .app-layout.is-mobile .data-table > thead,
-  .app-layout.is-mobile .data-table > tbody {
+  :where(.app-layout.is-mobile) :where(.data-table) > :where(thead, tbody) {
     display: table;
     width: 100%;
     min-width: 640px;
+  }
+
+  /* 手机端：合计行通栏。
+     拆表之后 tfoot 不再是「表格的一行」，若不管它就会缩成一块窄条（实测 303px），
+     与上面的表头/表体完全错位。这里把它显式做成「一整条横向 flex 条」：
+     左侧合计说明、右侧数量与金额，宽度撑满，不再试图对齐列 ——
+     手机屏上列本来就要横向滚动，合计行跟着滚反而看不见。
+     （这套规则原先在 12 个页面里各写了一遍，且都写在 </style> 外面从未生效，
+       现在收进全局一处，后续页面无需重复书写。） */
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot {
+    display: block;
+    width: 100%;
+  }
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot > tr {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    border-top: 2px solid var(--c-primary);
+    background: #f4f7fb;
+    padding: 12px 14px;
+  }
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot > tr > td {
+    display: inline-block;
+    width: auto;
+    padding: 0;
+    border: none;
+    background: none;
+    white-space: nowrap;
+  }
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot td.num,
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot td.t-amount {
+    margin-left: auto;
+  }
+  /* 合计里的空占位格（原来用来占住列位的 td）在通栏布局下没有意义，隐藏掉，
+     否则 flex 会给它们分走间隙、把金额挤偏。 */
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot td:empty {
+    display: none;
   }
   .app-layout.is-mobile .ui-page-main { display: none; }
   .app-layout.is-mobile .ui-page-head {

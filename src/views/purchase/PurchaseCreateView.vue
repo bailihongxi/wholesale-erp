@@ -66,14 +66,21 @@
             </tr>
           </tbody>
           <tfoot v-if="form.items.length">
+            <!-- 合计行的列位必须与表头逐列对齐：数量落在「数量」列、金额落在「金额」列。
+                 原先 colspan=6 连「数量」列一起占掉，结果数量跑进「进价」列、金额跑进
+                 「赠品」列，整行右移一格（手机端更明显，直接与表头错位）。 -->
             <tr>
-              <td colspan="6" class="total-label">
+              <td colspan="5" class="total-label">
                 合计<span class="t-note">{{ form.items.length }} 项商品{{ giftQty ? `，含赠品 ${giftQty} 件` : '' }}</span>
               </td>
               <td class="num t-qty">{{ totalQty }}</td>
-              <td v-if="canSeePurchasePrice" class="num"></td>
-              <td v-if="canSeePurchasePrice" class="num t-amount">¥{{ money(total) }}</td>
-              <td></td>
+              <template v-if="canSeePurchasePrice">
+                <td class="num"></td>
+                <td class="num t-amount">¥{{ money(total) }}</td>
+                <td></td>
+                <td></td>
+              </template>
+              <td v-else colspan="2"></td>
             </tr>
           </tfoot>
         </table>
@@ -257,12 +264,14 @@ onMounted(async () => {
 .gift-check { width: 16px; height: 16px; accent-color: var(--c-accent); cursor: pointer; }
 .mini-input:disabled { background: #f7f9fc; color: var(--c-muted); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
-</style>
 
 /* === 手机端：已选商品表改卡片式布局 === */
 @media (max-width: 767px) {
   .tb-scroll { overflow-x: visible; }
   .data-table thead { display: none; }
+  /* 卡片模式下不再需要「表格至少 640px 宽 + 横向滚动」那套（见 theme.css），
+     否则卡片会被撑到 640px、比屏幕还宽。原表格列宽约束一并解除。 */
+  .data-table, .data-table tbody { min-width: 0; }
   .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
   .data-table tbody tr {
     background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
@@ -290,3 +299,4 @@ onMounted(async () => {
   .data-table tfoot td.t-qty { font-size: 18px; }
   .data-table tfoot td.t-amount { font-size: 20px; margin-left: auto; }
 }
+</style>

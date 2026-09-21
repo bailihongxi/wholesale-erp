@@ -47,8 +47,11 @@ const tabs = computed<NavItem[]>(() => {
   right: 0;
   height: 58px;
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(255, 255, 255, .96);
-  backdrop-filter: blur(8px);
+  /* 底栏原来用 backdrop-filter: blur(8px) 做毛玻璃。但它固定在屏幕底部、
+     横跨整个视口，手机滚动时浏览器要**每帧**重算背后内容的模糊 —— 掉帧、
+     发热都从这里来。而它的底色本来就是 96% 白，模糊肉眼几乎看不出来，
+     换成纯白视觉无差别，滚动立刻顺滑。 */
+  background: #fff;
   border-top: 1px solid var(--c-border);
   box-shadow: 0 -2px 12px rgba(16, 32, 60, .05);
   z-index: 50;

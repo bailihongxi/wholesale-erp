@@ -94,13 +94,26 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
 
     // 本月毛利 = Σ(销售单价 - 商品当前进价) × 数量
+    //
+    // ⚠️ 旧写法是二重嵌套的 N+1：for 每个订单 → where('saleOrderId') 查一次明细、
+    // 再 for 每条明细 → getProduct() 查一次商品。云端就是几百到几千次新加坡往返
+    // （几百单 × 每单几条明细），首页加载能拖到十几秒。
+    // 现在两次请求搞定：明细整表拉完在内存分组，商品用 bulkGet 一次取回（保序）。
+    const monthOrderIds = new Set(
+      saleOrders.filter(so => new Date(so.orderDate) >= monthStart).map(so => so.id!)
+    )
+    const saleItems = await db.saleOrderItems.toArray()
+    const monthItems = monthOrderIds.size
+      ? saleItems.filter(it => monthOrderIds.has(it.saleOrderId))
+      : []
+    const itemProductIds = [...new Set(monthItems.map(it => it.productId))]
     let monthGrossProfit = 0
-    for (const so of saleOrders) {
-      const items = await db.saleOrderItems.where('saleOrderId').equals(so.id!).toArray()
-      for (const it of items) {
-        const p = await productStore.getProduct(it.productId)
-        const cost = p?.purchasePrice ?? 0
-        monthGrossProfit += (it.price - cost) * it.quantity
+    if (monthItems.length) {
+      const prods = (await (db.products as any).bulkGet(itemProductIds)) as Array<any>
+      const costById = new Map<number, number>()
+      itemProductIds.forEach((id, i) => costById.set(id, prods[i]?.purchasePrice ?? 0))
+      for (const it of monthItems) {
+        monthGrossProfit += (it.price - (costById.get(it.productId) ?? 0)) * it.quantity
       }
     }
 

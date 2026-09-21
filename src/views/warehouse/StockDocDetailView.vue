@@ -361,7 +361,6 @@ watch(() => route.fullPath, load)
   flex: 1; height: 44px; border: 1px solid var(--c-danger); border-radius: 10px;
   background: #fff; color: var(--c-danger); font-size: 14px; cursor: pointer;
 }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -370,3 +369,4 @@ watch(() => route.fullPath, load)
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

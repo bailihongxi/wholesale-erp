@@ -98,13 +98,17 @@
             </tr>
           </tbody>
           <tfoot v-if="form.items.length">
+            <!-- 合计行必须与表头逐列对齐：数量落在「数量」列、金额落在「金额」列。
+                 原先 colspan=6 把「数量」列也占了，导致整行右移一格（数量显示在
+                 「单价」列下、金额显示在「赠品」列下）。 -->
             <tr>
-              <td colspan="6" class="total-label">
+              <td colspan="5" class="total-label">
                 合计<span class="t-note">{{ form.items.length }} 项商品{{ giftQty ? `，含赠品 ${giftQty} 件` : '' }}</span>
               </td>
               <td class="num t-qty">{{ totalQty }}</td>
               <td class="num"></td>
               <td class="num t-amount">¥{{ money(total) }}</td>
+              <td></td>
               <td></td>
             </tr>
           </tfoot>
@@ -309,12 +313,14 @@ onMounted(async () => {
 .mini-input:disabled { background: #f7f9fc; color: var(--c-muted); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 .warn-line { margin-top: 8px; font-size: 13px; color: var(--c-danger); }
-</style>
 
 /* === 手机端：已选商品表改卡片式布局 === */
 @media (max-width: 767px) {
   .tb-scroll { overflow-x: visible; }
   .data-table thead { display: none; }
+  /* 卡片模式下不再需要「表格至少 640px 宽 + 横向滚动」那套（见 theme.css），
+     否则卡片会被撑到 640px、比屏幕还宽。原表格列宽约束一并解除。 */
+  .data-table, .data-table tbody { min-width: 0; }
   .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
   .data-table tbody tr {
     background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
@@ -359,3 +365,4 @@ onMounted(async () => {
   .data-table tfoot td.t-qty { font-size: 18px; }
   .data-table tfoot td.t-amount { font-size: 20px; margin-left: auto; }
 }
+</style>

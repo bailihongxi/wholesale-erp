@@ -287,7 +287,6 @@ watch(tab, v => { if (v === 'history') void loadHistory() })
 .detail-pop { margin-top: 14px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
 .dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .dp-sub { font-size: 12px; color: var(--c-muted); }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -296,3 +295,4 @@ watch(tab, v => { if (v === 'history') void loadHistory() })
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

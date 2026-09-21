@@ -246,7 +246,6 @@ onMounted(loadFlow)
 @media (max-width: 767px) {
   .f-kind, .f-date { width: 100%; }
 }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -255,3 +254,4 @@ onMounted(loadFlow)
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

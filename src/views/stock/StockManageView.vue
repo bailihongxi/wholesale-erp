@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
@@ -87,7 +87,17 @@ const locations = ref<Location[]>([])
 const distByProduct = ref<Record<number, Record<number, number>>>({})
 const loadingDetail = ref(true)
 
-async function load(): Promise<void> {
+/**
+ * 明细 / 预警用的商品 + 库存是**整表拉取**（几千条商品 + 几千行库存，云端要
+ * 7 次 Range 请求），而本页默认落在「库存作业」Tab。以前一进页面就 Promise.all
+ * 拉两份全表，只想做个入库的用户也得先干等两秒 —— 现在改成：
+ *   · 切到「库存明细 / 库存预警」才拉；
+ *   · 只拉一次，切回来直接用内存里的数据，后续 Tab 切换是瞬时的。
+ */
+const heavyLoaded = ref(false)
+async function loadHeavy(): Promise<void> {
+  if (heavyLoaded.value) return
+  heavyLoaded.value = true
   try {
     // 一次性取全部商品与库存，避免逐个商品查库（商品上千时会非常慢）
     const [list, smap] = await Promise.all([
@@ -113,7 +123,10 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+// 按需加载：默认 Tab（库存作业）不碰全量数据，切到明细/预警才在此时拉一次
+watch(tab, v => {
+  if (v === 'detail' || v === 'alert') void loadHeavy()
+}, { immediate: true })
 </script>
 
 <style scoped>

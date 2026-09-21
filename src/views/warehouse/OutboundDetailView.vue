@@ -401,7 +401,6 @@ async function handleOutbound(): Promise<void> {
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 .link-btn.danger { color: var(--c-danger); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -410,3 +409,4 @@ async function handleOutbound(): Promise<void> {
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

@@ -315,7 +315,6 @@ watch(() => route.params.id, loadOrder)
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
 }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -324,3 +323,4 @@ watch(() => route.params.id, loadOrder)
   .data-table tfoot td { display: inline-block; width: auto; }
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
 }
+</style>

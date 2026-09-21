@@ -14,7 +14,19 @@
 import { ref, computed } from 'vue'
 import { ALL_MODULES, ROLE_LABELS, type NavItem } from '../router/navConfig'
 
-import { touchSetting, onSettingsReloaded } from './settingsSync'
+/**
+ * settingsSync 是通往 Supabase 的入口，而 supabase-js 光压缩后就有 200KB 上下。
+ * 品牌配置属于首屏模块，如果在这里静态 import，就会把整个 supabase-js 拖进
+ * 首屏主包 —— 打开速度直接受影响（实测主包 726KB → 505KB 就是这一处加 Vant）。
+ * 所以一律惰性加载：首屏只读本机 localStorage，云端的事用到时再去拿。
+ */
+function withSettings(use: (m: typeof import('./settingsSync')) => void): void {
+  import('./settingsSync')
+    .then(use)
+    .catch(() => {
+      /* 云端不可用：本机配置照常工作 */
+    })
+}
 
 const STORAGE_KEY = 'erp_brand_config'
 
@@ -157,7 +169,7 @@ async function persist(): Promise<void> {
   }
   syncDocumentTitle(config.value.loginTitle)
   // 推到云端，手机和电脑共用同一套品牌配置（V2.0-6）
-  touchSetting(STORAGE_KEY)
+  withSettings(m => m.touchSetting(STORAGE_KEY))
 }
 
 /**
@@ -172,7 +184,7 @@ export function reloadBrand(): void {
 }
 
 // 云端设置被拉下来之后，自动把内存里的品牌配置刷新成最新值
-onSettingsReloaded(reloadBrand)
+withSettings(m => m.onSettingsReloaded(reloadBrand))
 
 /**
  * 启动时同步品牌配置（多设备共享，V2.0-6）。

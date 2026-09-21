@@ -515,7 +515,6 @@ onMounted(async () => {
   .f-dir, .f-cat, .f-date { width: 100%; }
   .cs-row { grid-template-columns: 92px 1fr 76px; }
 }
-</style>
 
 /* 手机端：合计行通栏 */
 @media (max-width: 767px) {
@@ -526,3 +525,4 @@ onMounted(async () => {
   .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
   .data-table tfoot td.ui-hint { display: none; }
 }
+</style>
