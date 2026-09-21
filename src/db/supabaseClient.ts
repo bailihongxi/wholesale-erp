@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
  * anon/publishable key 设计为前端公开使用，第一版暂未开 RLS，
  * 应用层自有登录保护；后续接入 Supabase Auth 后改 RLS 行级权限。
  */
-const SUPABASE_URL = 'https://athxdnxyqwgkolxggras.supabase.co'
+export const SUPABASE_URL = 'https://athxdnxyqwgkolxggras.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_jHWjftj73zm80eZKLxZOCg_SgdZ8aCu'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

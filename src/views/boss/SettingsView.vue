@@ -35,11 +35,25 @@
         </span>
       </div>
       <div v-else class="sync-state warn">
-        <strong>⚠️ 云端设置尚未启用</strong>
+        <strong>⚠️ 云端设置尚未启用（差最后一步）</strong>
         <span>
-          当前设置只保存在这台设备。需在 Supabase 控制台的 SQL Editor 执行一次
-          <code>supabase/migrate_v2.0-6_system_settings.sql</code>，刷新后即可多设备同步。
+          「立即同步」要把设置传到云端，得先有那张表。表属于建表操作（DDL），
+          浏览器里用的公开密钥没有这个权限，所以需要你用 Supabase 账号做一次，
+          <b>全程 1 分钟、只需做一次</b>：
         </span>
+        <ol class="sync-steps">
+          <li>点下面的「📋 复制建表 SQL」，SQL 会进剪贴板</li>
+          <li>点「打开 Supabase SQL Editor」（新标签页），用你自己的 Supabase 账号登录</li>
+          <li>在空白输入框里粘贴（Ctrl / ⌘ + V），点右下角 <b>Run</b>；
+            看到结果里有一行 <code>systemSettings</code> 就是成功</li>
+          <li>回到本页点「🔄 刷新页面」，「⚠️」会变成「✅ 已连接云端」，
+            此后「立即同步」可用，手机和电脑共用同一份设置</li>
+        </ol>
+        <div class="btn-row">
+          <button class="primary-btn sm" type="button" @click="copySetupSql">📋 复制建表 SQL</button>
+          <a class="ghost-btn sm" :href="sqlEditorUrl" target="_blank" rel="noopener">打开 Supabase SQL Editor</a>
+          <button class="ghost-btn sm" type="button" @click="reloadPage">🔄 刷新页面</button>
+        </div>
       </div>
       <div class="btn-row">
         <button class="ghost-btn" type="button" :disabled="resyncing" @click="resyncSettings">
@@ -312,6 +326,7 @@ import { migrateToCloud } from '../../utils/cloudMigrate'
 import {
   touchSetting, getSyncSummary, getLastSync, initSettingSync
 } from '../../utils/settingsSync'
+import { SYSTEM_SETTINGS_SQL, SUPABASE_SQL_EDITOR_URL, copyText } from '../../utils/settingsSql'
 
 const migrating = ref(false)
 
@@ -319,6 +334,26 @@ const migrating = ref(false)
 const syncState = ref(getLastSync())
 const resyncing = ref(false)
 const syncCount = computed(() => getSyncSummary().count)
+
+/** Supabase 控制台 → 本项目 SQL Editor（由 supabaseClient 里的项目地址推导） */
+const sqlEditorUrl = SUPABASE_SQL_EDITOR_URL
+
+/**
+ * 把建表 SQL 放进剪贴板。
+ * 部署出去的网站里没有 supabase/*.sql 文件，用户在手机上根本找不到这段 SQL，
+ * 所以直接把原文喂给剪贴板，用户只要「打开 SQL Editor → 粘贴 → Run」。
+ */
+async function copySetupSql(): Promise<void> {
+  const ok = await copyText(SYSTEM_SETTINGS_SQL)
+  showToast(ok
+    ? '建表 SQL 已复制，去 Supabase SQL Editor 粘贴执行'
+    : '复制失败，请手动选中下面的 SQL 复制')
+}
+
+/** 建完表回来点一下，重新拉一次状态（不必让用户去找浏览器刷新键） */
+function reloadPage(): void {
+  location.reload()
+}
 
 async function resyncSettings(): Promise<void> {
   resyncing.value = true
@@ -718,5 +753,17 @@ function logout(): void {
 .sync-state code {
   background: rgba(0, 0, 0, .06); border-radius: 4px;
   padding: 1px 5px; font-size: 12px; word-break: break-all;
+}
+/* 首次启用云端设置的四步指引（V2.0-10） */
+.sync-steps {
+  margin: 6px 0 2px; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sync-steps li { font-size: 12.5px; line-height: 1.7; }
+.sync-state .btn-row { margin-top: 8px; }
+/* <a> 默认是行内元素，height 不生效，得先撑成 flex 才和按钮一样高 */
+.sync-state a.ghost-btn {
+  display: inline-flex; align-items: center;
+  text-decoration: none; box-sizing: border-box;
 }
 </style>

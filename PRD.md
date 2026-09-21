@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.8　|　**产品版本：V2.0-9（首屏加载页跟随系统名称）**
+> 文档版本：V2.9　|　**产品版本：V2.0-10（云端设置一键自助启用）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-9'`，`package.json` → `version: "2.0.9"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-10'`，`package.json` → `version: "2.0.10"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2029,3 +2029,30 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 - 实机（本地 5173）：把系统名称改成「百利鸿禧商贸ERP」后刷新，
   首屏加载页与标签页标题同时显示新名字；登录页正常。
 - `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 579 全绿 / 51 文件。
+## V2.0-10（2026-09-22）：云端设置一键自助启用
+
+### 问题
+设置页「🔄 设置同步（多设备）」在云端表未建时只提示
+「需执行 `supabase/migrate_v2.0-6_system_settings.sql`」——
+但部署出去的网站里**没有这个文件**，用户在手机上根本找不到、也拷不出来，
+「立即同步」点了自然没反应，等于把一步人工操作丢回给了用户。
+
+### 修法（设置页自解释、自服务）
+1. 新增 `src/utils/settingsSql.ts`：
+   - `SYSTEM_SETTINGS_SQL`：把建表脚本原文内嵌进前端（与
+     `supabase/migrate_v2.0-6_system_settings.sql` 逐字符一致，测试全程比对）；
+   - `SUPABASE_SQL_EDITOR_URL`：由 `supabaseClient` 的项目地址推导出本项目的
+     SQL Editor 直达链接；
+   - `copyText()`：优先 `navigator.clipboard`，不可用/被拒时回退 `execCommand`，
+     两条路都不行返回 `false`，由调用方提示手动复制。
+2. 设置页未连云端时改为**四步指引 + 三个按钮**：
+   「📋 复制建表 SQL」「打开 Supabase SQL Editor」（新标签页）「🔄 刷新页面」，
+   并明确告知「全程 1 分钟、只需做一次」「看到结果里有一行 systemSettings 就是成功」。
+
+### 验证
+- 新增 `tests/settings-sql-help.test.ts`（12 例）：内嵌 SQL 与迁移脚本逐字符一致、
+  关键语句齐全（建表 + 索引 + 两条 GRANT + 幂等 IF NOT EXISTS）、
+  SQL Editor 链接正确、剪贴板三条分支（可用 / 回退 / 双失败 / 被拒）、
+  页面上按钮与四步指引真的渲染、复制内容与脚本一致、复制失败有提示、
+  以及「立即同步」按钮与设置计数不被挤掉的回归。
+- `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 全绿。
