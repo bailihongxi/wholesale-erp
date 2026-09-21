@@ -40,7 +40,13 @@ function makeBuilder(): any {
   let payload: any = null
 
   function exec(): any {
-    if (g.__settingsTableBroken) return { data: null, count: null, error: { message: 'relation does not exist' } }
+    if (g.__settingsTableBroken) {
+      // 真实 PostgREST 行为：表不存在时 head 请求 **不报错**，
+      // 只是 count 为 null（普通 select 才返回 PGRST205 错误）。
+      // 这里必须如实还原，否则测不出「表没建却显示已连接」的误判。
+      if (mode === 'select' && headOnly) return { data: null, count: null, error: null }
+      return { data: null, count: null, error: { message: 'relation does not exist' } }
+    }
     if (mode === 'upsert') {
       rows().set(payload.key, { key: payload.key, value: payload.value, updatedAt: payload.updatedAt })
       return { data: null, error: null }
@@ -260,6 +266,23 @@ describe('系统设置云端同步（V2.0-6）', () => {
 
   // ---------------- E. 优雅降级 ----------------
   describe('云端不可用时不拖垮本机', () => {
+    it('表不存在（head 请求不报错、只是 count 为 null）时不能误判成已连接', async () => {
+      // 这是线上真实踩过的坑：表没执行迁移 SQL 时 UI 显示「✅ 已连接云端」，
+      // 用户以为在同步，结果各设备还是各存各的。
+      breakTable()
+      const res = await initSettingSync()
+      expect(res.cloudReady).toBe(false)
+      // 表不可用就不该产生任何同步动作
+      expect(res.pulled).toBe(0)
+      expect(res.pushed).toBe(0)
+    })
+
+    it('云端为空表（count = 0）才算真正就绪', async () => {
+      // 表建了但一条数据都没有：count 是数字 0，仍应判定为可用
+      const res = await initSettingSync()
+      expect(res.cloudReady).toBe(true)
+    })
+
     it('表不存在：标记未就绪，本机数据原样保留', async () => {
       localStorage.setItem('erp_company', JSON.stringify({ name: '本机抬头' }))
       breakTable()

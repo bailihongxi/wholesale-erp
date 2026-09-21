@@ -303,9 +303,14 @@ export interface SyncResult {
 async function isTableReady(sb: Awaited<ReturnType<typeof getClient>>): Promise<boolean> {
   if (!sb) return false
   try {
-    // head + count 必须写在 from().select() 这一步，链式之后再 select 会被静默忽略
+    // head + count 必须写在 from().select() 这一步，链式之后再 select 会被静默忽略。
+    //
+    // 判据只能用 count，**不能**用 error：表不存在时 PostgREST 对 head 请求
+    // 返回的是 `{ error: null, count: null }`（不是报错！），普通 select 才抛 PGRST205。
+    // 实测踩过：写成 `!res.error` 会在表没建时误判成「已连接云端」，
+    // 用户以为在同步，实际各设备还是各存各的。
     const res = await sb.from(TABLE).select('key', { count: 'exact', head: true })
-    return !res.error
+    return res.error == null && typeof res.count === 'number'
   } catch {
     return false
   }
