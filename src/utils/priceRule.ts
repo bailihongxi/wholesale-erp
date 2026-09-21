@@ -7,6 +7,8 @@
  *   零售价 = 成本价 × (1 + 零售加价率 / 100)
  * 例：成本 2000，批发加价 15% → 批发价 2300；零售加价 30% → 零售价 2600。
  */
+import { touchSetting } from './settingsSync'
+
 const STORAGE_KEY = 'erp_price_rule'
 
 export interface PriceRule {
@@ -58,7 +60,14 @@ export function getPriceRule(): PriceRule {
 }
 
 export function savePriceRule(rule: PriceRule): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rule))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rule))
+  } catch {
+    /* 隐私模式：本机不落盘，云端推送也没意义 */
+    return
+  }
+  // 推到云端：换设备开单用的仍是同一套加价率（V2.0-6）
+  touchSetting(STORAGE_KEY)
 }
 
 /** 由成本推算批发价 */

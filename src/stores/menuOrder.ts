@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getNav, navConfig } from '../router/navConfig'
+import { touchSetting, forgetSetting, onSettingsReloaded } from '../utils/settingsSync'
 
 // 侧边栏菜单自定义排序：按角色把「顺序（路由数组）」持久化到 localStorage。
 // 设计要点：
@@ -33,6 +34,8 @@ function writeSaved(role: string, routes: string[]): void {
   } catch {
     /* 忽略持久化异常（如隐私模式） */
   }
+  // 推到云端：手机上排好的菜单顺序，电脑上也一样（V2.0-6）
+  touchSetting(storageKey(role))
 }
 
 /** 预载入所有已知角色的自定义顺序，避免首次渲染时在 computed 内写入状态 */
@@ -113,7 +116,13 @@ export const useMenuOrderStore = defineStore('menuOrder', () => {
     } catch {
       /* 忽略 */
     }
+    forgetSetting(storageKey(role))
   }
+
+  // 云端拉回新的菜单顺序后，重新读一遍本机缓存
+  onSettingsReloaded(() => {
+    orders.value = preloadOrders()
+  })
 
   return { defaultRoutes, getOrder, hasCustomOrder, setOrder, moveItem, resetOrder }
 })

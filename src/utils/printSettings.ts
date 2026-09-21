@@ -9,6 +9,8 @@
  * 设置持久化在 localStorage，所有单据共用一份。
  */
 
+import { touchSetting } from './settingsSync'
+
 export type PaperSize = 'A5' | 'A4'
 
 /**
@@ -149,6 +151,8 @@ export function savePrintSettings(s: PrintSettings): void {
   } catch {
     // 忽略写入失败（隐私模式等）
   }
+  // 推到云端：手机 / 电脑共用同一套打印模板（V2.0-6）
+  touchSetting(STORAGE_KEY)
 }
 
 /** 计算实际每页行数：用户指定优先，否则按纸张推荐 */

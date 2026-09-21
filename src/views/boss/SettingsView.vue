@@ -285,6 +285,7 @@ import AppIconPanel from '../../components/AppIconPanel.vue'
 import AuditLogPanel from '../../components/AuditLogPanel.vue'
 import { APP_VERSION, APP_RELEASE_DATE, APP_NAME } from '../../version'
 import { migrateToCloud } from '../../utils/cloudMigrate'
+import { touchSetting, getSyncSummary } from '../../utils/settingsSync'
 
 const migrating = ref(false)
 import {
@@ -490,8 +491,14 @@ async function clearData(): Promise<void> {
 }
 
 function saveCompany(): void {
-  localStorage.setItem('erp_company', JSON.stringify(company.value))
-  showToast('已保存')
+  try {
+    localStorage.setItem('erp_company', JSON.stringify(company.value))
+  } catch {
+    showToast('保存失败：本机存储不可用')
+    return
+  }
+  touchSetting('erp_company')
+  showToast('已保存，其他设备刷新后同步生效')
 }
 
 function savePrint(): void {

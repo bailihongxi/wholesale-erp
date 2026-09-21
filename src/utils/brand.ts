@@ -14,6 +14,8 @@
 import { ref, computed } from 'vue'
 import { ALL_MODULES, ROLE_LABELS, type NavItem } from '../router/navConfig'
 
+import { touchSetting, onSettingsReloaded } from './settingsSync'
+
 const STORAGE_KEY = 'erp_brand_config'
 
 /** 图标可以是 emoji / 短文字，也可以是一张图片（dataURL） */
@@ -133,44 +135,37 @@ async function persist(): Promise<void> {
   } catch {
     /* 隐私模式 / 配额满：内存里仍然生效，只是不落盘 */
   }
-  // 云端同步：登录后写 systemSettings 表，多设备共享
-  try {
-    const { supabase } = await import('../db/supabaseClient')
-    if (!supabase) return
-    await supabase.from('systemSettings').upsert({
-      id: 1,
-      key: 'brand_config',
-      value: config.value,
-      updatedAt: new Date().toISOString()
-    })
-  } catch {
-    /* 表不存在或网络问题：本地仍然生效 */
-  }
+  // 推到云端，手机和电脑共用同一套品牌配置（V2.0-6）
+  touchSetting(STORAGE_KEY)
 }
 
-/** 启动时从云端加载品牌配置（覆盖本地旧值） */
+/**
+ * 重新从本机缓存（localStorage）读一遍品牌配置。
+ * 启动时云端拉取会把新值写进 localStorage，但 config 这个模块级 ref
+ * 在 import 时就已经初始化过了，不会自动感知 —— 所以必须显式重载一次。
+ */
+export function reloadBrand(): void {
+  config.value = read()
+}
+
+// 云端设置被拉下来之后，自动把内存里的品牌配置刷新成最新值
+onSettingsReloaded(reloadBrand)
+
+/**
+ * 启动时同步品牌配置（多设备共享，V2.0-6）。
+ *
+ * 说明：云端读写已统一交给 settingsSync 引擎，这里不再单独发请求 ——
+ * initSettingSync() 一次拉完全部设置写进 localStorage，本函数只负责
+ * 把最新的 localStorage 重新灌进内存 ref。
+ */
 export async function loadBrandFromCloud(): Promise<void> {
   try {
-    const { supabase } = await import('../db/supabaseClient')
-    if (!supabase) return
-    const { data } = await supabase.from('systemSettings').select('value').eq('key', 'brand_config').single()
-    if (data?.value) {
-      const saved = data.value as Partial<BrandConfig>
-      const base = defaultConfig()
-      config.value = {
-        ...base,
-        ...saved,
-        loginLogo: { ...base.loginLogo, ...(saved.loginLogo ?? {}) },
-        sideLogo: { ...base.sideLogo, ...(saved.sideLogo ?? {}) },
-        roleAvatars: { ...base.roleAvatars, ...(saved.roleAvatars ?? {}) },
-        moduleIcons: { ...base.moduleIcons, ...(saved.moduleIcons ?? {}) },
-        appIcon: { ...base.appIcon, ...(saved.appIcon ?? {}) },
-        appIconBg: saved.appIconBg ?? base.appIconBg
-      }
-    }
+    const { initSettingSync } = await import('./settingsSync')
+    await initSettingSync()
   } catch {
-    /* 表不存在或网络问题：用本地默认值 */
+    /* 云端不可用：保留本机设置 */
   }
+  reloadBrand()
 }
 
 /** 模块快捷图标：用户改过就用改过的，否则用 navConfig 的默认 emoji */
