@@ -104,6 +104,7 @@ export const useUserStore = defineStore('user', () => {
       currentUser.value = fresh
       if (user.id) saveSession(user.id, 'staff')
       sessionExpired.value = false
+      db.warmUp() // 后台预拉常用表，不阻塞登录
       return { ok: true, message: '登录成功' }
     }
 
@@ -118,6 +119,7 @@ export const useUserStore = defineStore('user', () => {
       currentUser.value = dealerAsUser(dealer)
       if (dealer.id) saveSession(dealer.id, 'dealer')
       sessionExpired.value = false
+      db.warmUp()
       return { ok: true, message: '登录成功' }
     }
 
@@ -158,6 +160,7 @@ export const useUserStore = defineStore('user', () => {
       }
       currentUser.value = dealerAsUser(dealer)
       touchSession()
+      db.warmUp()
       return
     }
 
@@ -169,6 +172,7 @@ export const useUserStore = defineStore('user', () => {
     }
     currentUser.value = user
     touchSession()
+    db.warmUp()
   }
 
   async function createUser(input: CreateUserInput): Promise<{ ok: boolean; message: string }> {

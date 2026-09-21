@@ -1,9 +1,31 @@
-import { supabase } from './supabaseClient'
+import { supabase, USE_CLOUD } from './supabaseClient'
 
 /**
  * 模仿 Dexie Table 的常用 API，让业务代码（db.products.toArray() 等）零改动。
  * 只实现项目里实际用到的方法，缺什么补什么。
  */
+
+/** orderBy 链式：reverse()/limit(n) 可链式，最终 toArray() 走 CloudTable.toArray 缓存 */
+type OrderChain<T> = {
+  reverse: () => OrderChain<T>
+  limit: (n: number) => OrderChain<T>
+  toArray: () => Promise<T[]>
+}
+
+/** 服务端分页查询选项 */
+export interface QueryPageOpts {
+  page?: number
+  pageSize?: number
+  eq?: Record<string, any>
+  search?: { fields: string[]; keyword: string }
+  orderBy?: string
+  ascending?: boolean
+}
+
+/** 转义 PostgREST .or() 语法里的特殊字符，避免关键词破坏查询 */
+function escapeOr(kw: string): string {
+  return kw.replace(/([\\*,()%])/g, '\\$1')
+}
 
 class CloudQuery {
   private eqVal: any = undefined
@@ -71,6 +93,7 @@ const CACHED_TABLES = new Set([
 export class CloudTable<T = any> {
   private _cache: T[] | null = null
   private _cachePromise: Promise<T[]> | null = null
+  private _countCache: number | null = null
 
   constructor(
     private client: typeof supabase,
@@ -84,6 +107,7 @@ export class CloudTable<T = any> {
   invalidate() {
     this._cache = null
     this._cachePromise = null
+    this._countCache = null
   }
 
   async toArray(): Promise<T[]> {
@@ -192,32 +216,83 @@ export class CloudTable<T = any> {
   }
 
   async count(): Promise<number> {
+    // 缓存表：count 跟随 toArray 同一生命周期，避免首页/设置页每次重发请求
+    if (this.useCache && this._countCache !== null) return this._countCache
+    if (this.useCache && this._cache) {
+      this._countCache = (this._cache as T[]).length
+      return this._countCache
+    }
     const { count, error } = await this.client.from(this.name).select('*', { count: 'exact', head: true })
     if (error) throw new Error(`${this.name}.count: ${error.message}`)
-    return count || 0
+    const n = count || 0
+    if (this.useCache) this._countCache = n
+    return n
   }
 
   where(field: string): CloudQuery {
     return new CloudQuery(this.client, this.name, field)
   }
 
-  /** Dexie 兼容：按字段排序（在内存里排，因为数据量小） */
-  orderBy(field: string): { reverse: () => { toArray: () => Promise<T[]> } } {
-    return {
-      reverse: () => ({
-        toArray: async () => {
-          const all = await this._fetchAll()
-          return all.slice().sort((a: any, b: any) => {
-            const av = a[field], bv = b[field]
-            if (av == null) return 1
-            if (bv == null) return -1
-            if (av < bv) return -1
-            if (av > bv) return 1
-            return 0
-          }).reverse()
-        }
-      })
+  /** Dexie 兼容：按字段排序（走 toArray 缓存，大表也不会每次重拉全量）；reverse()/limit(n) 可链式 */
+  orderBy(field: string): OrderChain<T> {
+    const self = this
+    const builder: any = {
+      _reversed: false,
+      _lim: Infinity,
+      reverse() { this._reversed = true; return this },
+      limit(n: number) { this._lim = n; return this },
+      async toArray() {
+        const all = await self.toArray()
+        const sorted = (all as any[]).slice().sort((a: any, b: any) => {
+          const av = a[field], bv = b[field]
+          if (av == null) return 1
+          if (bv == null) return -1
+          if (av < bv) return -1
+          if (av > bv) return 1
+          return 0
+        })
+        if (this._reversed) sorted.reverse()
+        return this._lim === Infinity ? sorted : sorted.slice(0, this._lim)
+      },
     }
+    return builder as OrderChain<T>
+  }
+
+  /** 服务端分页：只拉当前页 + 带总数，支持等值过滤与多字段模糊搜索。大表列表首屏专用。 */
+  async queryPage(opts: QueryPageOpts = {}): Promise<{ rows: T[]; total: number }> {
+    const page = Math.max(1, opts.page ?? 1)
+    const pageSize = opts.pageSize ?? 20
+    const start = (page - 1) * pageSize
+    const end = start + pageSize - 1
+    let q: any = this.client.from(this.name).select('*', { count: 'exact' } as any)
+    if (opts.eq) {
+      for (const [k, v] of Object.entries(opts.eq)) {
+        if (v !== '' && v !== null && v !== undefined) q = q.eq(k, v)
+      }
+    }
+    if (opts.search && opts.search.keyword) {
+      const kw = opts.search.keyword.trim()
+      if (kw) {
+        const parts = (opts.search.fields ?? []).map(f => `${f}.ilike.*${escapeOr(kw)}*`)
+        if (parts.length) q = q.or(parts.join(','))
+      }
+    }
+    if (opts.orderBy) q = q.order(opts.orderBy, { ascending: !!opts.ascending })
+    const { data, error, count } = await q.range(start, end)
+    if (error) throw new Error(`${this.name}.queryPage: ${error.message}`)
+    return { rows: (data as T[]) || [], total: count ?? 0 }
+  }
+
+  /** 取某字段的去重值列表（用于分类下拉等），窄字段全量拉一次前端去重 */
+  async distinct(field: string): Promise<string[]> {
+    const { data, error } = await this.client.from(this.name).select(field)
+    if (error) throw new Error(`${this.name}.distinct: ${error.message}`)
+    const set = new Set<string>()
+    for (const r of (data as any[]) || []) {
+      const v = r[field]
+      if (v) set.add(String(v))
+    }
+    return [...set].sort()
   }
 }
 
@@ -241,5 +316,18 @@ export function createCloudDb() {
 
   const db: Record<string, CloudTable> = {}
   for (const t of tables) db[t] = new CloudTable(supabase, t)
-  return db as any
+
+  /** 登录后预拉常用缓存表到内存，后续切页面命中缓存秒开（不阻塞首屏）。失败静默忽略。 */
+  async function warmUp(): Promise<void> {
+    if (!USE_CLOUD) return
+    const warm = ['products', 'customers', 'suppliers', 'users', 'locations', 'rolePerms']
+    await Promise.allSettled(
+      warm.map(t => {
+        const tbl = (db as Record<string, CloudTable>)[t]
+        return tbl ? tbl.toArray().catch(() => {}) : Promise.resolve()
+      })
+    )
+  }
+
+  return Object.assign(db, { warmUp }) as any
 }

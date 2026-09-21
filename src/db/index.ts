@@ -11,6 +11,9 @@ import type {
 } from '../types'
 
 class ERPDatabase extends Dexie {
+  /** 云端模式由 cloudDb 注入真实实现；本地 Dexie 模式为空操作（不会发请求） */
+  async warmUp(): Promise<void> {}
+
   users!: Table<User, number>
   customers!: Table<Customer, number>
   suppliers!: Table<Supplier, number>

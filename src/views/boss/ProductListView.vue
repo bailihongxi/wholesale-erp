@@ -8,13 +8,13 @@
         class="grow"
         placeholder="搜索名称 / 型号 / 分类 / 规格"
         :debounce="0"
-        @search="pager.reset()"
+        @search="onFilterChange()"
       />
-      <select v-model="category" class="sel" @change="pager.reset()">
+      <select v-model="category" class="sel">
         <option value="">全部分类</option>
-        <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+        <option v-for="c in categoriesList" :key="c" :value="c">{{ c }}</option>
       </select>
-      <select v-model="status" class="sel" @change="pager.reset()">
+      <select v-model="status" class="sel">
         <option value="">全部状态</option>
         <option value="active">在售</option>
         <option value="inactive">停售</option>
@@ -60,14 +60,14 @@
       </thead>
       <tbody>
         <tr
-          v-for="(p, i) in pager.paged.value"
+          v-for="(p, i) in pageRows"
           :key="p.id"
           :class="{ 'is-selected': isSelected(p.id!), 'is-warn': isWarn(p) }"
         >
           <td class="center">
             <input type="checkbox" :checked="isSelected(p.id!)" :aria-label="`选择 ${p.brand} ${p.model}`" @change="toggleOne(p.id!)" />
           </td>
-          <td class="center">{{ pager.startIndex.value + i }}</td>
+          <td class="center">{{ startIndex + i }}</td>
           <td>{{ productName(p) }}</td>
           <td>{{ p.category || '-' }}</td>
           <td>{{ p.spec || '-' }}</td>
@@ -88,7 +88,7 @@
             <button class="link-btn" type="button" @click="go(`/boss/products/edit/${p.id}`)">编辑</button>
           </td>
         </tr>
-        <tr v-if="!pager.paged.value.length">
+        <tr v-if="!pageRows.length">
           <td :colspan="colspan" class="empty">没有符合条件的商品</td>
         </tr>
       </tbody>
@@ -97,7 +97,7 @@
     <!-- 手机端：卡片列表，同样支持多选 -->
     <ul v-else class="card-list zebra-list">
       <li
-        v-for="p in pager.paged.value"
+        v-for="p in pageRows"
         :key="p.id"
         class="prod-card"
         :class="{ 'is-selected': isSelected(p.id!), 'is-warn': isWarn(p) }"
@@ -123,16 +123,17 @@
           <button class="link-btn" type="button" @click="go(`/boss/products/edit/${p.id}`)">编辑</button>
         </div>
       </li>
-      <li v-if="!pager.paged.value.length" class="empty">没有符合条件的商品</li>
+      <li v-if="!pageRows.length" class="empty">没有符合条件的商品</li>
     </ul>
 
     <TablePager
-      v-model:page="pageProxy"
-      :total="pager.total.value"
-      :page-count="pager.pageCount.value"
-      :size="pager.size.value"
+      :page="page"
+      :total="total"
+      :page-count="pageCount"
+      :size="PAGE_SIZE_PRODUCT"
       :size-options="[100, 200, 500]"
       show-jump
+      @update:page="onPage"
     />
 
     <button v-if="!loading && isMobile" class="fab" type="button" @click="go('/boss/products/new')">＋</button>
@@ -274,7 +275,7 @@ import { useProductStore } from '../../stores/product'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
-import { usePagination, PAGE_SIZE_PRODUCT } from '../../composables/usePagination'
+import { PAGE_SIZE_PRODUCT } from '../../composables/usePagination'
 import { getPriceRule, calcWholesale, calcRetail, type PriceRule } from '../../utils/priceRule'
 import {
   buildProductCSV, buildProductTemplate, downloadTextFile, csvToProducts,
@@ -284,6 +285,8 @@ import {
 import { writeLog, AUDIT_ACTIONS } from '../../utils/audit'
 import type { Product } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
+import { db } from '../../db'
+import { USE_CLOUD } from '../../db/supabaseClient'
 
 const router = useRouter()
 const productStore = useProductStore()
@@ -304,59 +307,66 @@ watch(keyword, v => {
 })
 onUnmounted(() => clearTimeout(kwTimer))
 
-const all = ref<Product[]>([])
 const stockMap = ref<Record<number, number>>({})
-const selected = ref<number[]>([])
+interface SelItem { id: number; key: string }
+const selected = ref<SelItem[]>([])
 
 const rule = ref<PriceRule>(getPriceRule())
 
 // ---------------------------------------------------------------- 列表数据
 
 const loading = ref(true)
+const page = ref(1)
+const total = ref(0)
+const pageRows = ref<Product[]>([])
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE_PRODUCT)))
+const startIndex = computed(() => (page.value - 1) * PAGE_SIZE_PRODUCT + 1)
 
+/** 服务端分页：只拉当前页商品 + 当前页库存，首屏不再全量拉 6281 条 */
 async function reload(): Promise<void> {
+  loading.value = true
   try {
-    const [list, smap] = await Promise.all([productStore.listAll(true), productStore.stockMap()])
-    all.value = list
-    stockMap.value = smap
+    const res = await productStore.listPage({
+      page: page.value,
+      pageSize: PAGE_SIZE_PRODUCT,
+      status: status.value,
+      category: category.value,
+      keyword: kwDebounced.value.trim(),
+    })
+    pageRows.value = res.rows
+    total.value = res.total
+    // 库存：云端按当前页商品 id 精准拉取；本地（测试 / 离线）用整表聚合（与既有测试行为一致）
+    stockMap.value = USE_CLOUD
+      ? await loadStockMap(res.rows.map(r => r.id!))
+      : await productStore.stockMap()
+  } catch (e: any) {
+    showToast('加载失败：' + (e?.message || '未知错误'))
   } finally {
-    // 无论成功失败都要收起骨架，否则页面会停在占位状态
     loading.value = false
   }
 }
 
-const filtered = computed<Product[]>(() => {
-  const kw = kwDebounced.value.trim().toLowerCase()
-  return all.value.filter(p => {
-    if (status.value && p.status !== status.value) return false
-    if (category.value && p.category !== category.value) return false
-    if (!kw) return true
-    return (
-      p.brand.toLowerCase().includes(kw) ||
-      p.model.toLowerCase().includes(kw) ||
-      (p.category ?? '').toLowerCase().includes(kw) ||
-      (p.spec ?? '').toLowerCase().includes(kw) ||
-      `${p.brand} ${p.model}`.toLowerCase().includes(kw)
-    )
-  })
-})
+/** 当前页商品的库存汇总：按 id 批量查 stock，而非全表 */
+async function loadStockMap(ids: number[]): Promise<Record<number, number>> {
+  if (!ids.length) return {}
+  const rows = await db.stock.where('productId').anyOf(ids).toArray()
+  const m: Record<number, number> = {}
+  for (const s of rows) m[s.productId] = (m[s.productId] ?? 0) + s.quantity
+  return m
+}
 
-const pager = usePagination(filtered, PAGE_SIZE_PRODUCT)
-// 筛选条件变化回到第一页，避免停在越界页码
-watch([category, status], () => pager.reset())
-// 防抖后的关键字变化也回第一页，避免搜索结果变少后停在空白页
-watch(kwDebounced, () => pager.reset())
+// 筛选 / 搜索变化：回到第一页并重新从服务端拉取
+function onFilterChange(): void { page.value = 1; reload() }
+watch([category, status], onFilterChange)
+watch(kwDebounced, onFilterChange)
+// 翻页
+function onPage(p: number): void { page.value = p; reload() }
 
-const pageProxy = computed({
-  get: () => pager.page.value,
-  set: v => pager.go(v)
-})
-
-const categories = computed(() => {
-  const s = new Set<string>()
-  for (const p of all.value) if (p.category) s.add(p.category)
-  return [...s].sort()
-})
+const categoriesList = ref<string[]>([])
+async function loadCategories(): Promise<void> {
+  try { categoriesList.value = await productStore.distinctCategories() }
+  catch { categoriesList.value = [] }
+}
 
 const colspan = computed(() => 8 + (canSeePurchasePrice.value ? 1 : 0) + (canSeeAnyPrice.value ? 2 : 0))
 
@@ -374,39 +384,42 @@ function go(p: string): void { router.push(p) }
 
 // ---------------------------------------------------------------- 多选
 
-function isSelected(id: number): boolean { return selected.value.includes(id) }
+function isSelected(id: number): boolean { return selected.value.some(s => s.id === id) }
 function toggleOne(id: number): void {
-  selected.value = isSelected(id) ? selected.value.filter(x => x !== id) : [...selected.value, id]
+  const p = pageRows.value.find(x => x.id === id)
+  if (!p) return
+  if (isSelected(id)) selected.value = selected.value.filter(s => s.id !== id)
+  else selected.value = [...selected.value, { id, key: productKeyOf(p) }]
 }
 function clearSelection(): void { selected.value = [] }
-const pageIds = computed(() => (pager.paged.value as Product[]).map(p => p.id!))
+const selectedIds = computed(() => selected.value.map(s => s.id))
+const pageIds = computed(() => pageRows.value.map(p => p.id!))
 const allChecked = computed(() => pageIds.value.length > 0 && pageIds.value.every(id => isSelected(id)))
 const someChecked = computed(() => !allChecked.value && pageIds.value.some(id => isSelected(id)))
 function toggleAll(): void {
-  selected.value = allChecked.value
-    ? selected.value.filter(id => !pageIds.value.includes(id))
-    : [...new Set([...selected.value, ...pageIds.value])]
+  const cur = pageRows.value.map(p => ({ id: p.id!, key: productKeyOf(p) }))
+  const allSel = cur.every(c => isSelected(c.id))
+  selected.value = allSel
+    ? selected.value.filter(s => !pageIds.value.includes(s.id))
+    : [...new Set([...selected.value, ...cur])]
 }
 
 /** 所选商品是否「重名」——只有重名才允许合并 */
 const canMergeSelected = computed(() => {
   if (selected.value.length < 2) return false
-  const keys = new Set(
-    all.value.filter(p => selected.value.includes(p.id!)).map(p => productKeyOf(p))
-  )
-  return keys.size === 1
+  return new Set(selected.value.map(s => s.key)).size === 1
 })
 
 async function mergeSelected(): Promise<void> {
-  await mergeProducts(selected.value[0], selected.value)
+  await mergeProducts(selectedIds.value[0], selectedIds.value)
   showToast('已合并')
   clearSelection()
   await reload()
 }
 
 async function removeSelected(): Promise<void> {
-  await showConfirmDialog({ title: '删除商品', message: `确认删除所选 ${selected.value.length} 个商品？已被单据引用的会自动保留。` })
-  const r = await deleteProducts(selected.value)
+  await showConfirmDialog({ title: '删除商品', message: `确认删除所选 ${selectedIds.value.length} 个商品？已被单据引用的会自动保留。` })
+  const r = await deleteProducts(selectedIds.value)
   showToast(`删除 ${r.deleted} 个${r.blocked ? `，${r.blocked} 个已被单据引用不能删` : ''}`)
   clearSelection()
   await reload()
@@ -469,13 +482,28 @@ async function doImport(): Promise<void> {
 
 async function exportAll(): Promise<void> {
   const stamp = new Date().toISOString().slice(0, 10)
-  const csv = buildProductCSV(filtered.value.map(p => ({
+  // 导出是显式操作，不在首屏：一次性拉全量再按当前筛选条件过滤
+  const all = await productStore.listAll(true)
+  const kw = kwDebounced.value.trim().toLowerCase()
+  const list = all.filter(p => {
+    if (status.value && p.status !== status.value) return false
+    if (category.value && p.category !== category.value) return false
+    if (!kw) return true
+    return (
+      p.brand.toLowerCase().includes(kw) ||
+      p.model.toLowerCase().includes(kw) ||
+      (p.category ?? '').toLowerCase().includes(kw) ||
+      (p.spec ?? '').toLowerCase().includes(kw) ||
+      `${p.brand} ${p.model}`.toLowerCase().includes(kw)
+    )
+  })
+  const csv = buildProductCSV(list.map(p => ({
     brand: p.brand, model: p.model, category: p.category, spec: p.spec, unit: p.unit,
     purchasePrice: p.purchasePrice, wholesalePrice: p.wholesalePrice, retailPrice: p.retailPrice,
     warnStock: p.warnStock, status: p.status, remark: p.remark, stock: stockOf(p.id!)
   })))
   downloadTextFile(`商品档案_${stamp}.csv`, csv)
-  showToast(`已导出 ${filtered.value.length} 条`)
+  showToast(`已导出 ${list.length} 条`)
 }
 
 // ---------------------------------------------------------------- 重复检测
@@ -547,12 +575,12 @@ async function doBulkEdit(): Promise<void> {
   if (bulk.status.on) patch.status = bulk.status.value
   if (bulk.warnStock.on) patch.warnStock = Number(bulk.warnStock.value)
 
-  if (Object.keys(patch).length) await bulkUpdateProducts(selected.value, patch)
+  if (Object.keys(patch).length) await bulkUpdateProducts(selectedIds.value, patch)
 
   // 按加价率重算：每件商品按自己的成本分别计算
   if (bulk.reprice.on) {
     const targets = await productStore.listAll(true)
-    for (const p of targets.filter(x => selected.value.includes(x.id!))) {
+    for (const p of targets.filter(x => selectedIds.value.includes(x.id!))) {
       await productStore.updateProduct(p.id!, {
         wholesalePrice: calcWholesale(p.purchasePrice, rule.value),
         retailPrice: calcRetail(p.purchasePrice, rule.value)
@@ -570,6 +598,8 @@ async function doBulkEdit(): Promise<void> {
   await reload()
 }
 
+onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
+
 // 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
 function onKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Escape') return
@@ -580,7 +610,7 @@ function onKeydown(e: KeyboardEvent): void {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
-onMounted(reload)
+// 初始加载已合并到上方 onMounted（reload + loadCategories）
 </script>
 
 <style scoped>
