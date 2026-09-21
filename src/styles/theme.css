@@ -849,6 +849,19 @@ body {
 
   /* 手机端：顶部模块名已由 MobileTopNav 显示，页面头只保留操作按钮，
      标题（含副标题）藏掉，消除与顶栏的重复。操作按钮仍在，不丢失功能。 */
+  /* 手机端：所有表格允许横向滚动，防止列太多溢出屏幕 */
+  .app-layout.is-mobile .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .app-layout.is-mobile .data-table > thead,
+  .app-layout.is-mobile .data-table > tbody {
+    display: table;
+    width: 100%;
+    min-width: 640px;
+  }
   .app-layout.is-mobile .ui-page-main { display: none; }
   .app-layout.is-mobile .ui-page-head {
     align-items: center;

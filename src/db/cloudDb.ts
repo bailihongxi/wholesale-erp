@@ -141,6 +141,25 @@ export class CloudTable<T = any> {
   where(field: string): CloudQuery {
     return new CloudQuery(this.client, this.name, field)
   }
+
+  /** Dexie 兼容：按字段排序（在内存里排，因为数据量小） */
+  orderBy(field: string): { reverse: () => { toArray: () => Promise<T[]> } } {
+    return {
+      reverse: () => ({
+        toArray: async () => {
+          const all = await this._fetchAll()
+          return all.slice().sort((a: any, b: any) => {
+            const av = a[field], bv = b[field]
+            if (av == null) return 1
+            if (bv == null) return -1
+            if (av < bv) return -1
+            if (av > bv) return 1
+            return 0
+          }).reverse()
+        }
+      })
+    }
+  }
 }
 
 /**

@@ -80,7 +80,7 @@ export const ALL_MODULE_ROUTES: string[] = ALL_MODULES.map(m => m.route)
 export const DEFAULT_ROLE_PERMS: Record<string, string[]> = {
   boss: [
     '/boss/home', '/boss/products', '/stock',
-    '/purchase/orders', '/sales/orders', '/customers', '/purchase/suppliers',
+    '/purchase/orders', '/purchase/quotes', '/sales/orders', '/customers', '/purchase/suppliers',
     '/finance', '/boss/users', '/boss/settings'
   ],
   purchaser: ['/purchase/home', '/purchase/orders', '/purchase/quotes', '/purchase/suppliers'],
