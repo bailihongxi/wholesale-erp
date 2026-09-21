@@ -41,6 +41,9 @@ class CloudQuery {
 /** 基础档案表：变化少，启用内存缓存，切页面秒开 */
 const CACHED_TABLES = new Set([
   'products', 'customers', 'suppliers', 'locations', 'users', 'rolePerms',
+  // 业务主表也缓存：用户在页面间切换时不用重复拉全表
+  // 写操作（增删改）会自动 invalidate，所以数据不会脏
+  'saleOrders', 'purchaseOrders', 'quoteOrders',
 ])
 
 export class CloudTable<T = any> {

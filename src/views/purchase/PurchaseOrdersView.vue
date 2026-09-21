@@ -1,6 +1,10 @@
 <template>
   <div class="orders" :class="isMobile ? 'is-mobile' : 'is-desktop'">
     <PageHeader title="采购单" sub="采购开单、审核与入库进度" />
+    <div class="orders-tabs">
+      <button type="button" class="active">采购单</button>
+      <button type="button" @click="go('/purchase/quotes')">预采询价</button>
+    </div>
     <!-- 筛选条：搜索放大，其余控件紧凑排在一行（电脑端） -->
     <div class="toolbar">
       <SearchInput
@@ -152,8 +156,10 @@ function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
   try {
-    suppliers.value = await purchaseStore.listSuppliers()
-    await reload()
+    await Promise.all([
+      purchaseStore.listSuppliers().then(r => suppliers.value = r),
+      reload()
+    ])
   } catch {
     /* 数据库未就绪时保持空表，不让骨架卡住 */
   } finally {
@@ -163,6 +169,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.orders-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.orders-tabs button {
+  height: 36px; padding: 0 18px; border: 1px solid var(--c-border-strong);
+  border-radius: 18px; background: #fff; color: var(--c-muted); font-size: 14px; cursor: pointer;
+}
+.orders-tabs button.active { background: var(--c-primary); border-color: var(--c-primary); color: #fff; font-weight: 600; }
 .orders { max-width: 1100px; margin: 0 auto; }
 .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
 .tb-search { flex: 1 1 320px; min-width: 200px; }

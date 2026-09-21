@@ -160,8 +160,10 @@ function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
   try {
-    customers.value = await salesStore.listCustomers()
-    await reload()
+    await Promise.all([
+      salesStore.listCustomers().then(r => customers.value = r),
+      reload()
+    ])
   } catch {
     /* 数据库未就绪时保持空表，不让骨架卡住 */
   } finally {

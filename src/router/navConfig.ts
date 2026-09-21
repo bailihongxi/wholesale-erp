@@ -47,7 +47,6 @@ export const ALL_MODULES: NavItem[] = [
   // ===== 业务 =====
   { label: '商品档案', icon: '📦', route: '/boss/products', group: '业务', desc: '商品增删改查与导入导出' },
   { label: '采购管理', icon: '🛒', route: '/purchase/orders', group: '业务', desc: '采购单新建与跟踪' },
-  { label: '预采询价', icon: '📋', route: '/purchase/quotes', group: '业务', desc: '多家供应商比价，确定后一键转采购单' },
   { label: '销售管理', icon: '💰', route: '/sales/orders', group: '业务', desc: '销售单新建与跟踪' },
   { label: '客户管理', icon: '👥', route: '/customers', group: '业务', desc: '客户档案与经销商' },
   { label: '供应商', icon: '🏭', route: '/purchase/suppliers', group: '业务', desc: '供应商档案' },
