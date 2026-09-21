@@ -321,7 +321,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     if (delta === 0) return
     const exist = await db.locationStock
       .where('productId').equals(productId)
-      .and(r => r.locationId === locationId)
+      .filter((r: any) => r.locationId === locationId)
       .first()
     if (exist) {
       const next = Math.max(0, exist.quantity + delta)

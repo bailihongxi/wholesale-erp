@@ -100,7 +100,7 @@ export const useProductStore = defineStore('product', () => {
   // operatorId 可选：传入时会记录操作日志
   async function createProduct(data: Omit<Product, 'id'>, operatorId?: number): Promise<{ ok: boolean; message: string }> {
     if (!data.brand || !data.model) return { ok: false, message: '品牌和型号不能为空' }
-    const existing = await db.products.where('brand').equals(data.brand).and(p => p.model === data.model).first()
+    const existing = await db.products.where('brand').equals(data.brand).filter((p: any) => p.model === data.model).first()
     if (existing) return { ok: false, message: '相同品牌+型号的商品已存在' }
     const id = await db.products.add(data)
     clearPickerCache()
