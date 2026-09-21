@@ -192,6 +192,9 @@ export function csvToProducts(text: string): {
  * @param mode 命中库里同名商品时：skip=跳过保留旧数据，overwrite=用新数据覆盖
  * @param allowInactive 是否连「停售」商品也一起比对重复（默认只比对在售，停售的历史档案可同名）
  */
+/**
+ * 批量导入商品。5000 条数据时分批 insert，每批 500 条，避免 5000 次串行请求。
+ */
 export async function importProducts(
   rows: Array<Omit<Product, 'id'>>,
   mode: DuplicateMode = 'skip',
@@ -206,13 +209,14 @@ export async function importProducts(
   for (const p of existing) byKey.set(p.id!, productKeyOf(p))
 
   const seenInFile = new Set<string>()
+  const toInsert: Array<Omit<Product, 'id'>> = []
+  const toUpdate: Array<{ id: number; row: Omit<Product, 'id'> }> = []
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     const key = productKeyOf(row)
     const line = i + 2
 
-    // 1) 同一份文件内部重复：后面的直接跳过，避免一次导入造出两条一样的数据
     if (seenInFile.has(key)) {
       report.skipped++
       report.duplicated.push({ line, name: `${row.brand} ${row.model}（文件内重复）` })
@@ -220,13 +224,11 @@ export async function importProducts(
     }
     seenInFile.add(key)
 
-    // 2) 与库里已有商品重名
     const hit = [...byKey.entries()].find(([, k]) => k === key)
     if (hit) {
       const id = hit[0]
       if (mode === 'overwrite') {
-        await db.products.update(id, { ...row, id: undefined } as Partial<Product>)
-        report.updated++
+        toUpdate.push({ id, row })
       } else {
         report.skipped++
         report.duplicated.push({ line, name: `${row.brand} ${row.model}（已存在）` })
@@ -234,14 +236,43 @@ export async function importProducts(
       continue
     }
 
-    // 3) 全新商品
-    const id = await db.products.add(row)
-    byKey.set(id as number, key)
-    const hasStock = await db.stock.where('productId').equals(id as number).count()
-    if (!hasStock) {
-      await db.stock.add({ productId: id as number, quantity: 0, updatedAt: new Date().toISOString() })
+    toInsert.push(row)
+  }
+
+  // 批量更新
+  if (toUpdate.length) {
+    const updates = toUpdate.map(({ id, row }) => ({ ...row, id }))
+    await db.products.bulkPut(updates as any)
+    report.updated = toUpdate.length
+  }
+
+  // 批量插入新商品：分批，每批 500 条
+  const BATCH = 500
+  const insertedIds: number[] = []
+  for (let i = 0; i < toInsert.length; i += BATCH) {
+    const batch = toInsert.slice(i, i + BATCH)
+    // 云端模式 bulkAdd 不返回 id，所以 insert 后再 select 回来
+    await (db.products as any).bulkAdd(batch)
+    // 从数据库拉最新插入的商品（按 brand+model 匹配）
+    const keys = new Set(batch.map(r => productKeyOf(r)))
+    const allNew = await db.products.toArray()
+    for (const p of allNew) {
+      if (keys.has(productKeyOf(p)) && !byKey.has(p.id!)) {
+        insertedIds.push(p.id!)
+        byKey.set(p.id!, productKeyOf(p))
+      }
     }
-    report.created++
+  }
+  report.created = insertedIds.length
+
+  // 批量建 stock 记录
+  if (insertedIds.length) {
+    const now = new Date().toISOString()
+    const stockRows = insertedIds.map(productId => ({ productId, quantity: 0, updatedAt: now }))
+    // 分批插 stock
+    for (let i = 0; i < stockRows.length; i += BATCH) {
+      await (db.stock as any).bulkAdd(stockRows.slice(i, i + BATCH))
+    }
   }
 
   return report
