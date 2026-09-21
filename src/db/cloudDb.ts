@@ -27,9 +27,19 @@ class CloudQuery {
   }
 
   async toArray<T = any>(): Promise<T[]> {
-    const { data, error } = await this.build()
-    if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
-    return (data as T[]) || []
+    // Supabase select 默认只返回前 1000 行，自动分页拉完
+    const PAGE = 1000
+    const all: T[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await this.build().range(from, from + PAGE - 1)
+      if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
+      const rows = (data as T[]) || []
+      all.push(...rows)
+      if (rows.length < PAGE) break
+      from += PAGE
+    }
+    return all
   }
 
   async first<T = any>(): Promise<T | undefined> {
@@ -81,9 +91,19 @@ export class CloudTable<T = any> {
   }
 
   private async _fetchAll(): Promise<T[]> {
-    const { data, error } = await this.client.from(this.name).select('*')
-    if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
-    return (data as T[]) || []
+    // Supabase select 默认只返回前 1000 行，自动分页拉完
+    const PAGE = 1000
+    const all: T[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await this.client.from(this.name).select('*').range(from, from + PAGE - 1)
+      if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
+      const rows = (data as T[]) || []
+      all.push(...rows)
+      if (rows.length < PAGE) break
+      from += PAGE
+    }
+    return all
   }
 
   async get(id: number | string): Promise<T | undefined> {
