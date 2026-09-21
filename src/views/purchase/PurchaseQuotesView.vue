@@ -169,7 +169,8 @@
 
       <!-- 选商品：预采询价单不占库存，未上架/无库存商品也可以询价 -->
       <ProductPicker
-        :rows="rows"
+        :loader="loadPicker"
+        :categories="pickerCats"
         :selected="selectedMap"
         :price-mode="priceMode"
         :show-price="true"
@@ -264,7 +265,7 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
-import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
 import { useQuotesStore } from '../../stores/quotes'
@@ -357,7 +358,12 @@ function partyName(q: QuoteOrder): string {
 }
 
 // ---- 新建 ----
-const rows = ref<PickerRow[]>([])
+const pickerCats = ref<string[]>([])
+/**
+ * 选商品走服务端分页：商品档案已有 6281 条，旧实现进页面就先拉全量商品 + 全量库存
+ * （12562 行）到浏览器。现在只拉当前页 20 条 + 这 20 条的库存 + 总数。
+ */
+const loadPicker: PickerLoader = args => productStore.pickerPage(args)
 const submitting = ref(false)
 interface Line { product: Product; quantity: number; price: number }
 const form = reactive({
@@ -527,8 +533,7 @@ function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
   suppliers.value = await purchaseStore.listSuppliers()
-  const list = await productStore.search('')
-  rows.value = list.map(p => ({ product: p, stock: 0 }))
+  pickerCats.value = await productStore.pickerCategories()
 })
 </script>
 

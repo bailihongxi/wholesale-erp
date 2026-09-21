@@ -281,12 +281,16 @@ async function loadOrder(): Promise<void> {
   totalAmount.value = order?.totalAmount ?? 0
   items.value = await salesStore.getOrderItems(oid)
 
-  const products = await productStore.search('')
+  // 只查这张单真正用到的商品：旧实现 search('') 会把 6281 条商品全拉进来，
+  // 而单据明细通常只有几行，属于白搬 6000+ 行数据。
+  const pids = [...new Set(items.value.map(it => it.productId))]
+  const products = await db.products.bulkGet(pids)
   const nm: Record<number, string> = {}
   const um: Record<number, string> = {}
   for (const p of products) {
-    nm[p.id!] = productStore.productName(p)
-    um[p.id!] = p.unit
+    if (!p?.id) continue
+    nm[p.id] = productStore.productName(p)
+    um[p.id] = p.unit
   }
   nameMap.value = nm
   unitMap.value = um

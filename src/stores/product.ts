@@ -4,7 +4,9 @@ import { db } from '../db'
 import { USE_CLOUD } from '../db/supabaseClient'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import type { Product } from '../types'
-import { PAGE_SIZE_PRODUCT } from '../composables/usePagination'
+import { PAGE_SIZE_PRODUCT, PAGE_SIZE_LIST } from '../composables/usePagination'
+import { serverPage } from '../db/serverPage'
+import { escapeOr } from '../db/cloudDb'
 
 export const useProductStore = defineStore('product', () => {
   const products = ref<Product[]>([])
@@ -101,6 +103,7 @@ export const useProductStore = defineStore('product', () => {
     const existing = await db.products.where('brand').equals(data.brand).and(p => p.model === data.model).first()
     if (existing) return { ok: false, message: '相同品牌+型号的商品已存在' }
     const id = await db.products.add(data)
+    clearPickerCache()
     // 初始化库存为 0
     await db.stock.add({ productId: id as number, quantity: 0, updatedAt: new Date().toISOString() })
     if (operatorId) {
@@ -112,6 +115,7 @@ export const useProductStore = defineStore('product', () => {
   // operatorId 可选：传入时会记录操作日志
   async function updateProduct(id: number, data: Partial<Product>, operatorId?: number): Promise<void> {
     await db.products.update(id, data)
+    clearPickerCache()
     if (operatorId) {
       await writeLog(operatorId, AUDIT_ACTIONS.PRODUCT_UPDATE, `修改商品 #${id}`)
     }
@@ -137,8 +141,123 @@ export const useProductStore = defineStore('product', () => {
       .filter(x => x.quantity <= x.product.warnStock)
   }
 
+  // ==================== 「选商品」服务端取数（V2.0-5）====================
+  //
+  // 背景：商品已到 6281 条、stock 表同样 6281 行。旧实现（V2.0-4 及以前）是
+  // 「进开单页 -> search('') 拉全量商品 + stockMap() 拉全量库存」，一次开单要先搬
+  // 12562 行数据到浏览器，还得踩 Supabase 单请求 1000 行的上限（见 db/cloudDb.ts）。
+  // 现在改成「按页取」：任何一页都只发 2 个请求、几十行数据。
+
+  /** 「选商品」弹窗的分类下拉：全表窄字段扫一次后缓存（分类几乎不变） */
+  let catCache: string[] | null = null
+
+  /** 商品导入 / 新增 / 改名后调用，让分类下拉重新扫一遍 */
+  function clearPickerCache(): void { catCache = null }
+
+  /** 分类集合（带缓存），供 ProductPicker 的 categories 用 */
+  async function pickerCategories(): Promise<string[]> {
+    if (catCache) return catCache
+    catCache = await distinctCategories()
+    return catCache
+  }
+
+  /**
+   * 按商品 id 批量取库存（只查这几个商品的行）。
+   * 一个商品多库位各一行，这里汇总；不再为了 20 行数据拉整张 stock 表。
+   */
+  async function stockOf(productIds: number[]): Promise<Record<number, number>> {
+    const map: Record<number, number> = {}
+    const ids = productIds.filter(n => Number.isFinite(n))
+    if (!ids.length) return map
+    const rows = (await (db.stock as any).where('productId').anyOf(ids).toArray()) as Array<{ productId: number; quantity: number }>
+    for (const s of rows) map[s.productId] = (map[s.productId] ?? 0) + (Number(s.quantity) || 0)
+    return map
+  }
+
+  /**
+   * 有货商品 id 集合（quantity > 0）。
+   * 云端只把 productId 一列并行翻页扫下来（窄字段，比 toArray 全字段省一个数量级），
+   * 供「只看有货」下推成 in 过滤；本地直接读 stock 表。
+   */
+  async function inStockProductIds(): Promise<number[]> {
+    if (USE_CLOUD) {
+      const rows = (await (db.stock as any)
+        .scanNarrow('productId,quantity', (q: any) => q.gt('quantity', 0))) as Array<{ productId: number }>
+      return [...new Set(rows.map(r => Number(r.productId)))]
+    }
+    const all = await db.stock.toArray()
+    return [...new Set(all.filter(s => (Number(s.quantity) || 0) > 0).map(s => s.productId))]
+  }
+
+  /**
+   * 关键词 -> 查询条件（云端 orExpr / 本地 extraFilter，两种模式语义完全一致）。
+   * 规则：按空格切成多个词，**词内 AND、字段间 OR**——
+   * 所以「海尔 H9」能同时命中品牌与型号，比原来只按整串匹配更符合直觉。
+   */
+  function keywordCond(kw: string): { orExpr?: string; extraFilter?: (r: any) => boolean } {
+    const fields = ['brand', 'model', 'category', 'spec']
+    const tokens = kw.trim().split(/\s+/).filter(Boolean)
+    if (!tokens.length) return {}
+    const groups = tokens.map(
+      t => `or(${fields.map(f => `${f}.ilike.*${escapeOr(t)}*`).join(',')})`
+    )
+    const orExpr = groups.length === 1 ? groups[0].slice(3, -1) : `and(${groups.join(',')})`
+    const lc = tokens.map(t => t.toLowerCase())
+    const extraFilter = (r: any): boolean =>
+      lc.every(t => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+    return { orExpr, extraFilter }
+  }
+
+  /**
+   * 「选商品」弹窗的服务端分页取数：当前页商品 + 这页商品的库存 + 过滤后总数。
+   * 关键词 / 分类 / 只看有货全部下推到服务端，前端内存里永远只有一页。
+   */
+  async function pickerPage(opts: {
+    page?: number
+    pageSize?: number
+    keyword?: string
+    category?: string
+    onlyInStock?: boolean
+    /** 是否只要在售商品（默认 true；调拨/盘点场景可放开） */
+    activeOnly?: boolean
+  } = {}): Promise<{ rows: Array<{ product: Product; stock: number }>; total: number }> {
+    const page = Math.max(1, opts.page ?? 1)
+    const pageSize = opts.pageSize ?? PAGE_SIZE_LIST
+    const activeOnly = opts.activeOnly !== false
+
+    // 「只看有货」：先把有货商品 id 集合拿到，下推成 id in (...)
+    let ids: number[] | undefined
+    if (opts.onlyInStock) {
+      ids = await inStockProductIds()
+      if (!ids.length) return { rows: [], total: 0 }
+    }
+
+    const cond = keywordCond(opts.keyword ?? '')
+    const res = await serverPage<Product>(db.products, {
+      page,
+      pageSize,
+      eq: {
+        ...(activeOnly ? { status: 'active' } : {}),
+        ...(opts.category ? { category: opts.category } : {}),
+      },
+      // 固定按 id 升序：翻页必须有稳定顺序，否则每页可能重复或漏项
+      orderBy: 'id',
+      ascending: true,
+      orExpr: cond.orExpr,
+      extraFilter: cond.extraFilter,
+      inFilter: ids ? { id: ids } : undefined,
+    })
+
+    const stock = await stockOf(res.rows.map(p => Number(p.id)))
+    return {
+      rows: res.rows.map(p => ({ product: p, stock: stock[Number(p.id)] ?? 0 })),
+      total: res.total,
+    }
+  }
+
   return {
     products, productName, loadAll, search, createProduct, listAll, listPage, distinctCategories, stockMap,
-    updateProduct, getProduct, getStock, getLowStockProducts
+    updateProduct, getProduct, getStock, getLowStockProducts,
+    pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache
   }
 })

@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V2.6　|　**产品版本：V2.0-4（列表服务端分页推广版）**
+> 文档版本：V2.7　|　**产品版本：V2.0-5（选商品 1000 条修复 + 选商品服务端分页）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-4'`，`package.json` → `version: "2.0.4"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-5'`，`package.json` → `version: "2.0.5"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -1887,3 +1887,48 @@ Vue 不报错（模板里未定义属性静默取 `undefined`），结果是**�
 - **已转换**：销售单、采购单、销售报价单、预采询价单、客户档案、供应商档案、出入库流水、操作日志。跨表搜索（按客户名 / 供应商名找单）云端用 `orExpr`，本地用 `extraFilter` 同一套条件兜底。
 - **未转换（有原因）**：出入库单据、库存明细 / 预警、经营报表、财务收支流水、对账 —— 这些页的行是**多表聚合**出来的（单据由 `stockRecords` 按批次号分组、流水由 `payments` + `ledgerEntries` 合并），`queryPage` 不支持 group by，需先落库单据表才能分页；商品选择器 `ProductPicker` 由调用方传 `rows`，改造要连带改所有下单页，另开一轮。
 - 验证：`npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 522 全绿。
+
+## 三十四、V2.0-5（2026-09-21）：修复「选商品只显示 1000 条」+ 选商品服务端分页
+
+### 线上阻断性缺陷
+
+商品档案有 6281 条，但采购单 / 销售单 / 报价单的「选择商品」弹窗**永远只显示 1000 条**，第 2 页之后翻不出来，导致无法正常做单。
+
+**根因**：Supabase 的 PostgREST 单次请求最多返回 1000 行（服务端 `db-max-rows`），并且 `count` 这个选项**只在 `from(table).select(cols, { count })` 这一步生效**；一旦链式进入 FilterBuilder，再调 `.select('*', { count: 'exact' })` 只会替换列名，`{ count }` / `{ head }` 被**静默忽略、不报错**。`cloudDb` 的 `CloudQuery` 当时正是后一种写法，于是：
+
+- `toArray()` 拿到的 `count` 恒为 `null` → 退化成 `rows.length = 1000` → `total <= 1000` 直接 return，第 2 页永不拉取；
+- `count()` 的 `head` 失效 → 恒返回 0。
+
+`db.products.toArray()`（走 `CloudTable._fetchAll`）写法当时是正确的，所以出现了「商品档案显示 6281、选商品显示 1000」这种两边不一致的现象。
+
+### 修复
+
+- `CloudQuery` 改为按需从 `client.from()` 重建（`build({ count, head })`）：`toArray` 用带 count 的构建 + `Range` 并行翻页，`count()` 用 `head: true` 的构建。
+- 新增 `CloudTable.scanNarrow(fields, apply)`：窄字段、带总数、并行翻页，用于「分类下拉」「有货商品 id」这类只需一两列却可能超过 1000 行的集合。
+- `distinct(field)` 改用 `scanNarrow`：修复前只看得到前 1000 行里的分类（实测商品表的 52 个分类会漏项）。
+- 新增 `CloudTable.bulkGet(ids)` —— 云端原先**缺失**该方法，而生产路径有 6 处调用它（出入库流水、报价单详情、报价转单、商品批量清理），运行时必抛 `TypeError`（TS 因 Dexie 类型能编译通过，掩盖了这个问题）。实现为只发 `id in (...)` 查询、**严格保持入参顺序**（报价单转销售单靠 `products[i]` 与 `ids[i]` 对位）、缺失 id 返回 `undefined`、超过 1000 个时分批。
+
+### 优化：选商品改服务端分页
+
+- `ProductPicker` 新增可选 `loader`：传入即进入服务端模式，关键词 / 分类 / 只看有货全部下推，内存里只保留当前页；不传则保持原 `rows` 客户端模式（既有调用方与 522 条既有用例零改动）。
+- `ProductPicker` 的 `pick` 事件带上该行库存，开单页据此不再调用 `stockMap()` 全量拉库存表。
+- `productStore.pickerPage()`：`serverPage(db.products)` 取当前页 + 按当前页 id 批量取库存 + 分类集合缓存。
+- 关键词规则升级为「空格分词、词内 AND、字段间 OR」：`海尔 H9` 现在能同时命中品牌与型号（旧实现只按整串匹配）。
+- 已切换：销售开单、采购开单、销售报价单、预采询价单 4 页。
+- 出入库单据明细页：原先为几行明细拉全表 6281 条商品，改为 `bulkGet` 只查本单商品。
+- 未切换（有意保留）：调拨、盘点 —— 其「加入全部商品」按钮需要全量商品列表。
+
+### 效果（真实数据实测）
+
+| 路径 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 选商品取数 | 全量 12562 行（商品 6281 + 库存 6281） | 当前页 20 行 + 20 行库存 |
+| `where('status').equals('active').toArray()` | 1000 条 | 6281 条 |
+| `where(...).count()` | 0 | 6281 |
+| 分类下拉 | 仅前 1000 行内的分类 | 全部 52 个分类 |
+| 末页可达 | 第 2 页就翻不出 | 第 315 页正常返回 |
+
+### 验证
+
+- 新增 `tests/cloud-page-limit.test.ts`（23 例）：用一个忠实复刻 PostgREST 语义的假客户端守住 1000 行上限与 count 语义。**已实测：把实现换回旧写法，该文件必红 5 例**（`toArray` 回 1000、`count` 回 0、`distinct` 漏分类）。
+- `npm run build`（`vue-tsc -b`）0 错误；`npx vitest run` 545 全绿。

@@ -40,6 +40,16 @@ export function escapeOr(kw: string): string {
   return kw.replace(/([\\*,()%])/g, '\\$1')
 }
 
+/**
+ * Supabase/PostgREST 单次请求最多返回 1000 行（服务的 db-max-rows 上限）。
+ * 实测：即使 `.range(0, 9999)` 也只回 1000 行；但 `.range(1000, 1999)` 能正常取到第 2 页，
+ * 所以「超过 1000 就必须靠 Range 并行翻页」，没有别的办法一次拿全。
+ */
+const ROW_PAGE = 1000
+
+/**
+ * 按字段等值 / in 过滤的查询链（Dexie `where().equals()` 的云端对应物）。
+ */
 class CloudQuery {
   private eqVal: any = undefined
   private inVals: any[] | undefined = undefined
@@ -54,25 +64,39 @@ class CloudQuery {
   anyOf(arr: any[]): this { this.inVals = arr; return this }
   startsWithAnyOf(arr: string[]): this { this.inVals = arr; return this }
 
-  private build() {
-    let q = this.client.from(this.table).select('*')
+  /**
+   * ⚠️ 铁律：`{ count }` / `{ head }` 必须在 `client.from().select()` 这一次调用里传。
+   *
+   * PostgREST 的 select 选项只在这一层生效。一旦链式变成 FilterBuilder（`.eq()` 之后），
+   * 再调 `.select('*', { count: 'exact' })` 只会替换列名，**选项被静默忽略、不报错**，
+   * count 回 null、head 失效。
+   *
+   * 历史实现正是 `this.build().select('*', { count: 'exact' })` 这种链式二次 select：
+   *   → toArray 拿到的 count 恒为 null，退化成 rows.length = 1000，
+   *     于是 `total <= 1000` 直接 return，第 2 页永远不拉 ——「选商品只显示 1000 条」的根因；
+   *   → count() 的 head 失效，恒返回 0。
+   * 所以这里必须按需从 from() 重新构建，绝不能改回链式二次 select。
+   */
+  private build(opts: { count?: boolean; head?: boolean } = {}) {
+    let q: any = opts.count || opts.head
+      ? this.client.from(this.table).select('*', { count: 'exact', head: !!opts.head } as any)
+      : this.client.from(this.table).select('*')
     if (this.eqVal !== undefined) q = q.eq(this.field, this.eqVal)
     if (this.inVals) q = q.in(this.field, this.inVals)
     return q
   }
 
   async toArray<T = any>(): Promise<T[]> {
-    // Supabase select 默认只返回前 1000 行，自动并行分页拉完
-    const PAGE = 1000
-    const { data: firstPage, error, count } = await (this.build() as any).select('*', { count: 'exact' }).range(0, PAGE - 1)
+    const { data: firstPage, error, count } = await this.build({ count: true }).range(0, ROW_PAGE - 1)
     if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
     const rows = (firstPage as T[]) || []
     const total = count ?? rows.length
-    if (total <= PAGE) return rows
-    const pages = Math.ceil(total / PAGE) - 1
+    if (total <= ROW_PAGE) return rows
+    // 并行拉剩余页：6281 行 = 1 + 6 个请求，而不是 7 次串行
+    const pages = Math.ceil(total / ROW_PAGE) - 1
     const promises = []
     for (let i = 1; i <= pages; i++) {
-      promises.push(this.build().range(i * PAGE, (i + 1) * PAGE - 1))
+      promises.push(this.build().range(i * ROW_PAGE, (i + 1) * ROW_PAGE - 1))
     }
     const results = await Promise.all(promises)
     const all = [...rows]
@@ -89,7 +113,7 @@ class CloudQuery {
   }
 
   async count(): Promise<number> {
-    const { count, error } = await (this.build() as any).select("*", { count: "exact", head: true })
+    const { count, error } = await this.build({ count: true, head: true })
     if (error) throw new Error(`CloudQuery.count: ${error.message}`)
     return count || 0
   }
@@ -134,9 +158,9 @@ export class CloudTable<T = any> {
   }
 
   private async _fetchAll(): Promise<T[]> {
-    // Supabase select 默认只返回前 1000 行，自动并行分页拉完
-    const PAGE = 1000
-    // 先拉第1页 + 总数
+    // Supabase 单次请求最多 1000 行，自动并行分页拉完
+    const PAGE = ROW_PAGE
+    // 先拉第 1 页 + 总数（count 必须在 from().select() 这一步传入才生效）
     const { data: firstPage, error, count } = await this.client
       .from(this.name).select('*', { count: 'exact' } as any).range(0, PAGE - 1)
     if (error) throw new Error(`${this.name}.toArray: ${error.message}`)
@@ -162,6 +186,30 @@ export class CloudTable<T = any> {
     const { data, error } = await this.client.from(this.name).select('*').eq('id', id).single()
     if (error) return undefined
     return data as T
+  }
+
+  /**
+   * Dexie 兼容：按 id 批量取（只发 `id in (...)` 查询，不拉全表）。
+   *
+   * ⚠️ 必须保持**入参顺序**——调用方用 `products[i]` 与 `ids[i]` 一一对齐
+   * （见 stores/quotes.ts 报价单转销售单）。顺序一错就会把 A 商品的名字/进价
+   * 挂到 B 行的 id 上，属于静默串数据的严重问题。
+   * 找不到的 id 返回 undefined，与 Dexie 行为一致。
+   *
+   * id 多于 1000 个时分批（每批 500），绕开单请求 1000 行上限。
+   */
+  async bulkGet(ids: (number | string)[]): Promise<(T | undefined)[]> {
+    const list = ids ?? []
+    if (!list.length) return []
+    const byId = new Map<string, T>()
+    const want = list.filter(v => v !== null && v !== undefined)
+    for (let i = 0; i < want.length; i += 500) {
+      const chunk = want.slice(i, i + 500)
+      const { data, error } = await this.client.from(this.name).select('*').in('id', chunk as any)
+      if (error) throw new Error(`${this.name}.bulkGet: ${error.message}`)
+      for (const row of (data as T[]) || []) byId.set(String((row as any).id), row)
+    }
+    return list.map(id => byId.get(String(id)))
   }
 
   /** put：有 id 就 upsert（覆盖），没 id 就 insert */
@@ -308,12 +356,48 @@ export class CloudTable<T = any> {
     return { rows: (data as T[]) || [], total: count ?? 0 }
   }
 
-  /** 取某字段的去重值列表（用于分类下拉等），窄字段全量拉一次前端去重 */
+  /**
+   * 窄字段扫描：只取指定列、按 Range 并行翻页拉完（绕过单次 1000 行上限）。
+   *
+   * 用于「分类下拉」「有货商品 id」这类只需要一两列、却可能超过 1000 行的集合：
+   * 相比 toArray() 拉全字段全量，传输量与内存占用小一个数量级。
+   */
+  async scanNarrow<R = any>(fields: string, apply?: (q: any) => any): Promise<R[]> {
+    const build = (withCount: boolean) => {
+      // 同 CloudQuery：count 只能在 from().select() 这一步开
+      let q: any = withCount
+        ? this.client.from(this.name).select(fields, { count: 'exact' } as any)
+        : this.client.from(this.name).select(fields)
+      if (apply) q = apply(q)
+      return q
+    }
+    const { data, error, count } = await build(true).range(0, ROW_PAGE - 1)
+    if (error) throw new Error(`${this.name}.scanNarrow: ${error.message}`)
+    const rows = (data as R[]) || []
+    const total = count ?? rows.length
+    if (total <= ROW_PAGE) return rows
+    const pages = Math.ceil(total / ROW_PAGE) - 1
+    const results = await Promise.all(
+      Array.from({ length: pages }, (_, i) =>
+        build(false).range((i + 1) * ROW_PAGE, (i + 2) * ROW_PAGE - 1)
+      )
+    )
+    const all = [...rows]
+    for (const r of results) {
+      if (r.error) throw new Error(`${this.name}.scanNarrow: ${r.error.message}`)
+      all.push(...((r.data as R[]) || []))
+    }
+    return all
+  }
+
+  /**
+   * 取某字段的去重值列表（用于分类下拉等）。
+   * 窄字段并行翻页，商品 6281 条时也不会只看到前 1000 条里的那几个分类。
+   */
   async distinct(field: string): Promise<string[]> {
-    const { data, error } = await this.client.from(this.name).select(field)
-    if (error) throw new Error(`${this.name}.distinct: ${error.message}`)
+    const rows = await this.scanNarrow<Record<string, any>>(field)
     const set = new Set<string>()
-    for (const r of (data as any[]) || []) {
+    for (const r of rows) {
       const v = r[field]
       if (v) set.add(String(v))
     }

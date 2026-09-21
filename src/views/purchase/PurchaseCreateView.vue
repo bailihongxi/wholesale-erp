@@ -82,7 +82,8 @@
 
     <!-- 选商品：搜索 + 库存 + 20 条分页 -->
     <ProductPicker
-      :rows="rows"
+      :loader="loadPicker"
+      :categories="pickerCats"
       :selected="selectedMap"
       price-mode="purchase"
       :show-price="canSeePurchasePrice"
@@ -107,7 +108,7 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import PageActions from '../../components/PageActions.vue'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useProductStore } from '../../stores/product'
@@ -136,7 +137,12 @@ const form = reactive({
   items: [] as Line[]
 })
 const suppliers = ref<Supplier[]>([])
-const rows = ref<PickerRow[]>([])
+const pickerCats = ref<string[]>([])
+/**
+ * 选商品走服务端分页：商品档案已有 6281 条，旧实现进页面就先拉全量商品 + 全量库存
+ * （12562 行）到浏览器。现在只拉当前页 20 条 + 这 20 条的库存 + 总数。
+ */
+const loadPicker: PickerLoader = args => productStore.pickerPage(args)
 const submitting = ref(false)
 
 /** 合计只统计非赠品行；赠品单独计数展示 */
@@ -155,7 +161,7 @@ function productName(p: Product): string { return productStore.productName(p) }
 function money(n: number): string { return Number(n ?? 0).toLocaleString() }
 function stockClass(s: number): string { return s <= 0 ? 'stock-out' : 'stock-ok' }
 
-function addItem(p: Product): void {
+function addItem(p: Product, stock = 0): void {
   const existing = form.items.find(it => it.product.id === p.id)
   if (existing) {
     existing.quantity += 1
@@ -166,7 +172,7 @@ function addItem(p: Product): void {
     product: p,
     quantity: 1,
     price: Number(p.purchasePrice) || 0,
-    stock: rows.value.find(r => r.product.id === p.id)?.stock ?? 0,
+    stock,
     isGift: false
   })
 }
@@ -208,13 +214,12 @@ async function handleSubmit(): Promise<void> {
 }
 
 onMounted(async () => {
-  const [supList, list, smap] = await Promise.all([
+  const [supList, cats] = await Promise.all([
     purchaseStore.listSuppliers(),
-    productStore.search(''),
-    productStore.stockMap()
+    productStore.pickerCategories()
   ])
   suppliers.value = supList
-  rows.value = list.map(p => ({ product: p, stock: smap[p.id!] ?? 0 }))
+  pickerCats.value = cats
 })
 </script>
 

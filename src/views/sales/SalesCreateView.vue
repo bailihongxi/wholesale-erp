@@ -115,7 +115,8 @@
 
     <!-- 选商品：搜索 + 库存 + 20 条分页，库存为 0 的禁止加入 -->
     <ProductPicker
-      :rows="rows"
+      :loader="loadPicker"
+      :categories="pickerCats"
       :selected="selectedMap"
       :price-mode="priceMode"
       :block-no-stock="true"
@@ -139,7 +140,7 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import PageActions from '../../components/PageActions.vue'
 import { useSalesStore } from '../../stores/sales'
 import { useProductStore } from '../../stores/product'
@@ -168,7 +169,12 @@ const form = reactive({
   items: [] as Line[]
 })
 const customers = ref<Customer[]>([])
-const rows = ref<PickerRow[]>([])
+const pickerCats = ref<string[]>([])
+/**
+ * 选商品走服务端分页：商品档案已有 6281 条，旧实现进页面就先拉全量商品 + 全量库存
+ * （12562 行）到浏览器。现在只拉当前页 20 条 + 这 20 条的库存 + 总数。
+ */
+const loadPicker: PickerLoader = args => productStore.pickerPage(args)
 const submitting = ref(false)
 const priceMode = ref<PriceMode>('wholesale')
 
@@ -207,8 +213,7 @@ function switchMode(mode: PriceMode): void {
   showToast(mode === 'retail' ? '已切换到零售价' : '已切换到批发价')
 }
 
-function addItem(p: Product): void {
-  const stock = rows.value.find(r => r.product.id === p.id)?.stock ?? 0
+function addItem(p: Product, stock = 0): void {
   const existing = form.items.find(it => it.product.id === p.id)
   if (existing) {
     if (existing.quantity + 1 > existing.stock) {
@@ -254,9 +259,7 @@ async function handleSubmit(): Promise<void> {
 
 onMounted(async () => {
   customers.value = await salesStore.listCustomers()
-  const list = await productStore.search('')
-  const smap = await productStore.stockMap()
-  rows.value = list.map(p => ({ product: p, stock: smap[p.id!] ?? 0 }))
+  pickerCats.value = await productStore.pickerCategories()
 })
 </script>
 

@@ -4,6 +4,11 @@
     固定三件套：顶部搜索框、列表显示可用库存、底部分页（默认 20 条/页）。
     商品多了以后靠搜索定位，避免在一长串里翻找；库存直接列出来，
     开单前就能看出哪些不能卖，不必等到提交被拦才知道。
+
+    两种取数模式（商品上万条时务必用后者）：
+      1) 客户端模式：调用方把 rows 一次性算好传进来，本组件只做前端过滤 + 分页。
+      2) 服务端模式：传 loader，本组件自己按页拉（关键词/分类/只看有货都下推到服务端），
+         内存里永远只有当前页这 20 条。
   -->
   <section class="picker">
     <header class="pk-head">
@@ -13,13 +18,12 @@
       </h4>
       <div class="data-toolbar pk-tools">
         <SearchInput
-          v-model="kw"
+          v-model="keyword"
           class="grow"
-          :placeholder="`搜索商品名称 / 型号 / 分类（共 ${products.length} 条）`"
+          :placeholder="`搜索商品名称 / 型号 / 分类（共 ${pager.total.value} 条）`"
           :debounce="0"
-          @search="pager.reset()"
         />
-        <select v-model="cat" class="pk-sel" @change="pager.reset()">
+        <select v-model="cat" class="pk-sel">
           <option value="">全部分类</option>
           <option v-for="c in cats" :key="c" :value="c">{{ c }}</option>
         </select>
@@ -47,7 +51,7 @@
         <tbody>
           <tr
             v-for="(p, i) in pager.paged.value"
-            :key="p.id"
+            :key="p.product.id"
             :class="{
               'row-disabled': p.stock <= 0 && blockNoStock,
               'row-picked': selectedCount(p.product.id!) > 0
@@ -71,14 +75,16 @@
                 type="button"
                 :disabled="blockNoStock && p.stock <= 0"
                 :title="blockNoStock && p.stock <= 0 ? '无库存，无法销售' : ''"
-                @click="emit('pick', p.product)"
+                @click="pickRow(p)"
               >{{ addLabel(p.product.id!) }}</button>
             </td>
           </tr>
-          <tr v-if="!pager.paged.value.length">
-            <td :colspan="colCount" class="empty">
-              {{ products.length ? '没有匹配的商品，换个关键词试试' : '暂无商品，请先在商品档案中添加' }}
-            </td>
+          <!-- 服务端模式首屏骨架：与「空数据」用不同 class，避免被当成空态影响既有断言 -->
+          <tr v-if="showSkeleton">
+            <td :colspan="colCount" class="pk-loading">商品加载中…</td>
+          </tr>
+          <tr v-else-if="!pager.paged.value.length">
+            <td :colspan="colCount" class="empty">{{ emptyHint }}</td>
           </tr>
         </tbody>
       </table>
@@ -94,22 +100,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import SearchInput from './SearchInput.vue'
 import TablePager from './TablePager.vue'
-import { usePagination, PAGE_SIZE_LIST } from '../composables/usePagination'
+import { PAGE_SIZE_LIST } from '../composables/usePagination'
+import { useServerPager } from '../composables/useServerPager'
 import { useResponsive } from '../composables/useResponsive'
 import type { Product } from '../types'
 
-/** 带库存的商品行，调用方一次性算好传入，避免逐条查询拖慢列表 */
+/** 带库存的商品行，调用方一次性算好传入（客户端模式），避免逐条查询拖慢列表 */
 export interface PickerRow {
   product: Product
   stock: number
 }
 
+/** 服务端模式的取数入参：翻页与筛选条件全部下推给调用方 */
+export interface PickerLoadArgs {
+  page: number
+  pageSize: number
+  keyword: string
+  category: string
+  onlyInStock: boolean
+}
+export type PickerLoader = (args: PickerLoadArgs) => Promise<{ rows: PickerRow[]; total: number }>
+
 const props = withDefaults(
   defineProps<{
-    rows: PickerRow[]
+    /** 客户端模式的数据源（调用方一次性算好）。商品上千条时请改用 loader */
+    rows?: PickerRow[]
+    /** 服务端模式：传了它就按页拉，rows 被忽略 */
+    loader?: PickerLoader
+    /** 服务端模式的分类下拉数据（rows 只有当前页，推导不出全部分类） */
+    categories?: string[]
     /** 已选商品 → 数量，用于行尾提示 */
     selected?: Record<number, number>
     /** 单价取值口径：进价 / 批发价 / 零售价 */
@@ -121,6 +143,7 @@ const props = withDefaults(
     pageSize?: number
   }>(),
   {
+    rows: () => [],
     selected: () => ({}),
     priceMode: 'wholesale',
     showPrice: true,
@@ -130,46 +153,88 @@ const props = withDefaults(
   }
 )
 
-const emit = defineEmits<{ (e: 'pick', p: Product): void }>()
+/** 服务端模式判定：loader 在组件生命周期内不变，直接取一次即可 */
+const isServer = typeof props.loader === 'function'
+
+const emit = defineEmits<{ (e: 'pick', p: Product, stock?: number): void }>()
 
 const { isMobile } = useResponsive()
 /** 表格列数：手机端隐藏「型号/规格」列（与商品名重复），空行 colspan 要跟着减 */
 const colCount = computed(() => (isMobile.value ? 6 : 7) + (props.showPrice ? 1 : 0))
 
-const kw = ref('')
+const keyword = ref('')
+/** 真正参与查询的关键词：服务端模式必须防抖，否则每敲一个字就发一次请求 */
+const appliedKeyword = ref('')
 const cat = ref('')
 const onlyInStock = ref(false)
 
-const products = computed(() => props.rows)
+let kwTimer: ReturnType<typeof setTimeout> | null = null
+watch(keyword, v => {
+  if (kwTimer !== null) clearTimeout(kwTimer)
+  if (!isServer) { appliedKeyword.value = v; return }
+  kwTimer = setTimeout(() => { appliedKeyword.value = v }, 300)
+})
+onBeforeUnmount(() => { if (kwTimer !== null) clearTimeout(kwTimer) })
 
-const filtered = computed<PickerRow[]>(() => {
-  const k = kw.value.trim().toLowerCase()
-  return products.value.filter(r => {
+/** 客户端模式的行过滤：与服务端 search(四字段 ilike) / eq(category) 语义保持一致 */
+function filterRows(rows: PickerRow[]): PickerRow[] {
+  const k = appliedKeyword.value.trim().toLowerCase()
+  return rows.filter(r => {
     if (cat.value && r.product.category !== cat.value) return false
     if (onlyInStock.value && r.stock <= 0) return false
     if (!k) return true
     const p = r.product
     return (
-      p.brand.toLowerCase().includes(k) ||
-      p.model.toLowerCase().includes(k) ||
+      (p.brand ?? '').toLowerCase().includes(k) ||
+      (p.model ?? '').toLowerCase().includes(k) ||
       (p.category ?? '').toLowerCase().includes(k) ||
       (p.spec ?? '').toLowerCase().includes(k) ||
       `${p.brand} ${p.model}`.toLowerCase().includes(k)
     )
   })
-})
+}
 
-const pager = usePagination(filtered, props.pageSize)
-watch([kw, cat, onlyInStock], () => pager.reset())
+/**
+ * 统一走 useServerPager：服务端模式交给 loader，客户端模式在内存里过滤切片。
+ * 客户端模式额外 watch `props.rows`——历史调用方是在自己的 onMounted 里异步把
+ * rows 填进来的，子组件首次挂载时还是空数组，不重新加载就会一直显示「暂无商品」。
+ */
+const pager = useServerPager<PickerRow>({
+  size: props.pageSize,
+  watch: isServer ? [appliedKeyword, cat, onlyInStock] : [appliedKeyword, cat, onlyInStock, () => props.rows],
+  loader: async (page, size) => {
+    if (isServer) {
+      return await props.loader!({
+        page,
+        pageSize: size,
+        keyword: appliedKeyword.value.trim(),
+        category: cat.value,
+        onlyInStock: onlyInStock.value
+      })
+    }
+    const all = filterRows(props.rows)
+    return { rows: all.slice((page - 1) * size, page * size), total: all.length }
+  }
+})
 
 const pageProxy = computed({
   get: () => pager.page.value,
   set: v => pager.go(v)
 })
 
+/** 服务端模式首屏才显示骨架；客户端模式数据就在内存里，闪一下反而突兀 */
+const showSkeleton = computed(() => isServer && pager.loading.value && !pager.paged.value.length)
+
+/** 空态文案的「有没有数据」口径：服务端看服务端总数，客户端看传入的 rows */
+const sourceTotal = computed(() => (isServer ? pager.total.value : props.rows.length))
+const emptyHint = computed(() =>
+  sourceTotal.value ? '没有匹配的商品，换个关键词试试' : '暂无商品，请先在商品档案中添加'
+)
+
 const cats = computed(() => {
+  if (props.categories) return props.categories
   const s = new Set<string>()
-  for (const r of products.value) if (r.product.category) s.add(r.product.category)
+  for (const r of props.rows) if (r.product.category) s.add(r.product.category)
   return [...s].sort()
 })
 
@@ -194,6 +259,8 @@ function addLabel(id: number): string {
   if (n <= 0) return '＋ 添加'
   return n > 1 ? `已选 ×${n}` : '已选'
 }
+/** 把该行库存一并抛出：服务端模式下调用方手里只有当前页，拿不到别的商品库存 */
+function pickRow(r: PickerRow): void { emit('pick', r.product, r.stock) }
 function stockClass(r: PickerRow): string {
   if (r.stock <= 0) return 'stock-out'
   if (r.stock <= r.product.warnStock) return 'stock-low'
@@ -232,6 +299,7 @@ function stockClass(r: PickerRow): string {
 }
 .pk-add.pk-added:hover { background: #f06a06; border-color: #f06a06; }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
+.pk-loading { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 /* 手机端：商品名已是「品牌+型号」，型号/规格列信息重复，藏掉让本行更宽松 */
 @media (max-width: 767px) {
   .col-spec { display: none; }
