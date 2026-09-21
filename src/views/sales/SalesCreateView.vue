@@ -310,3 +310,52 @@ onMounted(async () => {
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 .warn-line { margin-top: 8px; font-size: 13px; color: var(--c-danger); }
 </style>
+
+/* === 手机端：已选商品表改卡片式布局 === */
+@media (max-width: 767px) {
+  .tb-scroll { overflow-x: visible; }
+  .data-table thead { display: none; }
+  .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
+  .data-table tbody tr {
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  }
+  .data-table tbody td { padding: 2px 0; border: none; width: auto; }
+  .data-table tbody td:nth-child(1) { display: none; } /* 序号 */
+  .data-table tbody td:nth-child(2) { /* 商品名 */
+    width: 100%; font-size: 15px; font-weight: 600; order: 1;
+  }
+  .data-table tbody td:nth-child(3) { /* 类别 */
+    order: 2; font-size: 12px; color: var(--c-muted);
+  }
+  .data-table tbody td:nth-child(4) { display: none; } /* 单位 */
+  .data-table tbody td:nth-child(5) { /* 库存 */
+    order: 3; font-size: 12px; color: var(--c-muted);
+  }
+  .data-table tbody td:nth-child(6) { /* 数量 */
+    order: 4; margin-left: auto;
+  }
+  .data-table tbody td:nth-child(7) { /* 单价 */
+    order: 5;
+  }
+  .data-table tbody td:nth-child(8) { /* 金额 */
+    order: 6; font-weight: 700; color: var(--c-danger);
+  }
+  .data-table tbody td:nth-child(9) { /* 赠品 */
+    order: 7;
+  }
+  .data-table tbody td:nth-child(10) { /* 移除 */
+    order: 8;
+  }
+  .mini-input { width: 64px; height: 30px; font-size: 14px; }
+  .mini-input.price { width: 80px; }
+  /* 合计行通栏 */
+  .data-table tfoot tr {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .data-table tfoot td { border: none; padding: 0; width: auto; }
+  .data-table tfoot td.total-label { text-align: left; }
+  .data-table tfoot td.t-qty { font-size: 18px; }
+  .data-table tfoot td.t-amount { font-size: 20px; margin-left: auto; }
+}
