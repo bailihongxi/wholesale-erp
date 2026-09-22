@@ -9,6 +9,7 @@
           <span class="d-badge pay" :class="order?.receiveStatus">{{ recvText(order?.receiveStatus ?? '') }}</span>
         </div>
         <div class="d-actions">
+          <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="startEdit">✏️ 修改</button>
           <button class="btn" type="button" @click="openPreview">🖨 打印送货单</button>
         </div>
       </div>
@@ -123,6 +124,24 @@
       <div v-else class="empty">尚未登记收款</div>
     </section>
 
+    <!-- 编辑弹窗 -->
+    <div v-if="showEdit" class="modal-mask" @click.self="showEdit = false">
+      <div class="modal-box">
+        <h3>修改销售单</h3>
+        <div class="edit-list">
+          <div v-for="(it, i) in editItems" :key="i" class="edit-row">
+            <span class="edit-name">{{ nameOf(it.productId) }}</span>
+            <input v-model.number="it.quantity" type="number" class="mini-input" placeholder="数量" />
+            <input v-model.number="it.price" type="number" class="mini-input" placeholder="单价" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="showEdit = false">取消</button>
+          <button class="btn primary" type="button" :disabled="saving" @click="saveEdit">保存</button>
+        </div>
+      </div>
+    </div>
+
     <PageActions cancel-text="返回" @cancel="goBack" />
 
     <PrintPreview
@@ -165,6 +184,42 @@ const shippedMap = ref<Record<number, number>>({})
 const userMap = ref<Record<number, string>>({})
 const showPrice = ref(true)
 const showPreview = ref(false)
+
+// 编辑功能
+const showEdit = ref(false)
+const saving = ref(false)
+const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean }>>([])
+
+function startEdit(): void {
+  editItems.value = items.value.map(it => ({
+    productId: it.productId,
+    quantity: it.quantity,
+    price: it.price,
+    isGift: it.isGift
+  }))
+  showEdit.value = true
+}
+
+async function saveEdit(): Promise<void> {
+  if (!order.value) return
+  saving.value = true
+  try {
+    const res = await salesStore.updateOrder(
+      Number(route.params.id),
+      editItems.value,
+      order.value.remark
+    )
+    if (res.ok) {
+      showToast('已保存')
+      showEdit.value = false
+      await loadOrder()
+    } else {
+      showToast(res.message)
+    }
+  } finally {
+    saving.value = false
+  }
+}
 
 const colspan = computed(() => (canSeeAnyPrice.value ? 6 : 4))
 const totalQty = computed(() => items.value.filter(it => !it.isGift).reduce((s, it) => s + it.quantity, 0))
@@ -321,3 +376,14 @@ watch(() => route.params.id, loadOrder)
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
 </style>
+
+/* 编辑弹窗 */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.modal-box { background: #fff; border-radius: 12px; padding: 20px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+.modal-box h3 { margin: 0 0 16px; font-size: 16px; }
+.edit-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.edit-row { display: flex; align-items: center; gap: 8px; }
+.edit-name { flex: 1; font-size: 13px; }
+.mini-input { width: 80px; height: 32px; border: 1px solid var(--c-border); border-radius: 6px; padding: 0 8px; text-align: right; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.btn.primary { background: var(--c-accent); color: #fff; border: none; }

@@ -230,9 +230,41 @@ export const useSalesStore = defineStore('sales', () => {
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
   }
 
+  /** 修改销售单（仅未出库状态） */
+  async function updateOrder(
+    orderId: number,
+    items: Array<{ productId: number; quantity: number; price: number; isGift?: boolean }>,
+    remark?: string
+  ): Promise<{ ok: boolean; message: string }> {
+    const order = await db.saleOrders.get(orderId)
+    if (!order) return { ok: false, message: '销售单不存在' }
+    if (order.status !== 'pending') return { ok: false, message: '该单已出库，不能修改' }
+    if (!items.length) return { ok: false, message: '明细不能为空' }
+
+    // 删除旧明细，插入新明细
+    await db.saleOrderItems.where('saleOrderId').equals(orderId).delete()
+    await db.saleOrderItems.bulkAdd(items.map(it => ({
+      saleOrderId: orderId,
+      productId: it.productId,
+      quantity: it.quantity,
+      price: it.price,
+      subtotal: it.isGift ? 0 : it.quantity * it.price,
+      isGift: it.isGift ?? false
+    })))
+
+    // 更新订单总额
+    const totalAmount = items.reduce((s, it) => s + (it.isGift ? 0 : it.quantity * it.price), 0)
+    await db.saleOrders.update(orderId, {
+      totalAmount,
+      remark: remark ?? order.remark
+    })
+
+    return { ok: true, message: '已保存' }
+  }
+
   return {
     listCustomers, createCustomer, getCustomer,
-    createOrder, listOrders, getOrder, getOrderItems,
+    createOrder, listOrders, getOrder, getOrderItems, updateOrder,
     outbound, listPendingOutbound, listOutboundHistory
   }
 })
