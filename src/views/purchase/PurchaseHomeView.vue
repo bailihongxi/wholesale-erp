@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRouter } from 'vue-router'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useFinanceStore } from '../../stores/finance'
@@ -93,6 +94,10 @@ async function reload(): Promise<void> {
 }
 
 onMounted(reload)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(reload)
 </script>
 
 <style scoped>

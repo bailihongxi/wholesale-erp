@@ -91,6 +91,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute } from 'vue-router'
 import { db } from '../../db'
 import { useFinanceStore } from '../../stores/finance'
@@ -234,6 +235,10 @@ async function loadFlow(): Promise<void> {
 }
 
 onMounted(loadFlow)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(loadFlow)
 </script>
 
 <style scoped>

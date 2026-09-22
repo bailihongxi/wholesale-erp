@@ -19,6 +19,7 @@
  */
 import { ref, computed, watch, onMounted, type Ref, type WatchSource } from 'vue'
 import { PAGE_SIZE_LIST, type Pagination } from './usePagination'
+import { useReloadOnActivate } from './useReloadOnActivate'
 
 export interface ServerPagerOpts<T> {
   /** 每页条数，默认 PAGE_SIZE_LIST(20) */
@@ -76,6 +77,13 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
   // （骨架占位）之后再拉数据并切到列表——与历史 onMounted(async(){await reload()})
   // 的时序一致，避免测试里 flushPromises 后骨架未切回列表的问题。
   onMounted(() => { void load() })
+
+  // 全站路由组件被 App.vue 的 <keep-alive> 缓存：从列表页进新建页再跳回来时，
+  // 组件是「复活」而非「重新挂载」，onMounted 不会再跑，列表就一直是旧数据
+  // （表现为「新建的单子要整页刷新才出现」）。这里统一在回到本页时重拉一次。
+  // 首次挂载不会触发（由 useReloadOnActivate 内部的「离开过」标志挡掉），
+  // 且非 keep-alive 环境（如测试里直接 mount）完全不触发。
+  useReloadOnActivate(() => { void load() })
 
   return {
     page, size, pageCount, total, paged, startIndex, hasPrev, hasNext, loading,

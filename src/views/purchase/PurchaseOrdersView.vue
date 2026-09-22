@@ -170,7 +170,9 @@ onMounted(async () => {
   } catch {
     /* 数据库未就绪时保持空表，不让骨架卡住 */
   }
-  pager.reload()
+  // 不再额外 pager.reload()：useServerPager 自身已在 onMounted 首拉一次，
+  // 这里再调会让首屏发两遍同样的请求（云端慢时尤其明显）。
+  // 回到本页时的刷新由 useServerPager 内置的 useReloadOnActivate 负责。
 })
 </script>
 

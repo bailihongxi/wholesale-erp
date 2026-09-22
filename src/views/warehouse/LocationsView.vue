@@ -110,6 +110,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { showToast, showConfirmDialog } from 'vant'
 import { useInventoryStore } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
@@ -212,6 +213,10 @@ async function remove(l: Location): Promise<void> {
 }
 
 onMounted(load)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(load)
 </script>
 
 <style scoped>

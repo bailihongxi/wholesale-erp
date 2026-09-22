@@ -123,6 +123,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useFinanceStore } from '../../stores/finance'
 import { useProductStore } from '../../stores/product'
 import { useResponsive } from '../../composables/useResponsive'
@@ -214,6 +215,10 @@ onMounted(async () => {
   await reload()
   await reloadLowStock()
 })
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(async () => { await reload(); await reloadLowStock() })
 
 watch([startDate, endDate], reload)
 </script>

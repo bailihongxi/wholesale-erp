@@ -266,6 +266,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
@@ -617,6 +618,10 @@ async function doBulkEdit(): Promise<void> {
 }
 
 onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(reload)
 
 // 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
 function onKeydown(e: KeyboardEvent): void {

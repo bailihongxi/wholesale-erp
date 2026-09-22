@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute } from 'vue-router'
 import InboundView from './InboundView.vue'
 import OutboundView from './OutboundView.vue'
@@ -82,6 +83,10 @@ async function loadBadges(): Promise<void> {
 
 watch(tab, loadBadges)
 onMounted(loadBadges)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(loadBadges)
 </script>
 
 <style scoped>

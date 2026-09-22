@@ -177,6 +177,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { useSalesStore } from '../../stores/sales'
@@ -343,6 +344,10 @@ async function onLocationChange(): Promise<void> {
 }
 
 onMounted(loadOrder)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(loadOrder)
 watch(() => route.params.id, loadOrder)
 
 async function handleOutbound(): Promise<void> {

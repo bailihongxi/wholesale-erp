@@ -196,6 +196,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -394,6 +395,10 @@ async function loadOrder(): Promise<void> {
 }
 
 onMounted(loadOrder)
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(loadOrder)
 // 同一路由只换单据 id 时组件会被复用，必须监听 id 变化重新加载，避免显示上一张单据
 watch(() => route.params.id, loadOrder)
 </script>

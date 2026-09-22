@@ -70,6 +70,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { db } from '../../db'
@@ -139,6 +140,10 @@ onMounted(async () => {
     console.debug('[工作台] 统计加载失败，页面保持空态：', e)
   }
 })
+
+// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
+// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
+useReloadOnActivate(async () => { try { await refreshDashboard(); await refreshEmpty() } catch { /* 保持空态 */ } })
 
 /** 改完密码后重新判定，提醒条应立刻消失 */
 async function onPwdChanged(): Promise<void> {
