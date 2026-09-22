@@ -367,7 +367,7 @@ async function handleInbound(): Promise<void> {
   padding: 0 8px; text-align: right; font-size: 14px;
 }
 .mini-input.bad { border-color: var(--c-danger); color: var(--c-danger); }
-.total-label { text-align: right; }
+.total-label { text-align: left; }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 .link-btn.danger { color: var(--c-danger); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
