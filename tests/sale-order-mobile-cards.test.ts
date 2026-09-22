@@ -83,14 +83,40 @@ describe('销售单详情 · 商品明细卡片化（手机 / 电脑共用）', 
   })
 })
 
-describe('销售单详情 · 电脑端多列网格铺开', () => {
-  it('内容短的列表（编辑明细 / 流水 / 收款）在电脑端用多列网格提高密度', () => {
+describe('销售单详情 · 电脑端网格 / 单行排布', () => {
+  it('内容短的列表（流水 / 收款）在电脑端用多列网格提高密度', () => {
     expect(desktopCss, '缺少电脑端媒体查询').not.toBe('')
-    for (const cls of ['.ec-list', '.rc-list']) {
-      const re = new RegExp(`${cls.replace('.', '\\.')}\\s*\\{[^}]*display:\\s*grid`)
-      expect(desktopCss, `${cls} 在电脑端应为多列网格`).toMatch(re)
-      expect(desktopCss, `${cls} 应定义可自适应列宽`).toMatch(/grid-template-columns:\s*repeat\(auto-fill/)
-    }
+    expect(desktopCss, '.rc-list 在电脑端应为多列网格').toMatch(/\.rc-list\s*\{[^}]*display:\s*grid/)
+    expect(desktopCss, '.rc-list 应定义可自适应列宽').toMatch(/grid-template-columns:\s*repeat\(auto-fill/)
+  })
+
+  it('编辑明细在电脑端单列铺满整行（要一行排完，不能再切成多列网格）', () => {
+    // V2.0-24：电脑端要求「序号 + 商品名 + 数量 + 单价 + 金额」同排一行，
+    // 卡片内部要吃满整行宽度，切成多列网格会把输入框挤到下一行。
+    expect(desktopCss, '.ec-list 电脑端应为单列铺满').toMatch(/\.ec-list\s*\{[^}]*display:\s*block/)
+    expect(desktopCss, '.ec-list 不应再定义多列网格').not.toMatch(/\.ec-list\s*\{[^}]*grid-template-columns/)
+    expect(desktopCss, '.ec-item 不应再定义多列网格列数').not.toMatch(/\.ec-item[^{]*\{[^}]*grid-template-columns/)
+  })
+
+  it('电脑端编辑明细卡片内容排成一行（数量/单价输入框不再另起一行）', () => {
+    expect(desktopCss, '卡片本体应为横向 flex').toMatch(/\.ec-item\s*\{[^}]*display:\s*flex/)
+    expect(desktopCss, '.ec-top 这层要拆开，序号/名称/金额才能参与本行排布').toMatch(
+      /\.ec-item\s+\.ec-top\s*\{[^}]*display:\s*contents/
+    )
+    expect(desktopCss, '输入行要并到本行（去掉上边距）').toMatch(/\.ec-item\s+\.ec-row\s*\{[^}]*margin-top:\s*0/)
+    expect(desktopCss, '金额挪到行尾').toMatch(/\.ec-item\s+\.ec-amount\s*\{[^}]*order:\s*1/)
+    expect(desktopCss, '商品名吃掉剩余宽度').toMatch(/\.ec-item\s+\.ec-name\s*\{[^}]*flex:\s*1/)
+    expect(desktopCss, '输入框固定宽度，不被挤压').toMatch(/\.ec-item\s+\.ec-field\s*\{[^}]*width:\s*152px/)
+  })
+
+  it('手机端编辑明细仍是上下两行（宽度有限，单行放不下）', () => {
+    expect(mobileCss, '手机端不应套用电脑端单行 flex').not.toMatch(/\.ec-item\s*\{[^}]*display:\s*flex/)
+    expect(mobileCss, '手机端不应把 .ec-top 拆成 contents').not.toMatch(
+      /\.ec-item\s+\.ec-top\s*\{[^}]*display:\s*contents/
+    )
+    expect(mobileCss, '手机端输入行要保留上边距（与上一行分开）').not.toMatch(
+      /\.ec-item\s+\.ec-row\s*\{[^}]*margin-top:\s*0/
+    )
   })
 
   it('商品明细在电脑端单列铺满整行（宽度够，不需要切成多列）', () => {

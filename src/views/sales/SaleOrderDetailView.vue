@@ -458,9 +458,9 @@ watch(() => route.params.id, loadOrder)
 .p-num { width: 90px; text-align: right; color: var(--c-muted, #64748b); }
 .empty { text-align: center; color: var(--c-muted, #64748b); padding: 18px; }
 
-/* ── 电脑端（≥768px）：与手机端共用同一套卡片 DOM，改为多列网格铺开 ──────
-   屏幕宽了就把卡片排成多列，信息密度不输原来的表格，同时保留
-   「数量 × 单价 = 金额」一行读清的优点。不要再为电脑端单独维护一套表格。 */
+/* ── 电脑端（≥768px）：与手机端共用同一套卡片 DOM，只改排布方式 ──────────
+   屏幕宽就把卡片内容横向铺开（商品明细、编辑明细都排成一行，信息密度不输原来的
+   表格），内容短的流水 / 收款列表排成多列网格。不要再为电脑端单独维护一套表格。 */
 @media (min-width: 768px) {
   /* 电脑端宽度够：商品明细单列铺满整行，卡片内容排成一行
      （序号 + 商品名 …… 数量 × 单价 = 金额），不再像手机端那样拆上下两行。
@@ -473,10 +473,32 @@ watch(() => route.params.id, loadOrder)
   .mc-item:hover { border-color: var(--c-accent); }
   .mc-item .mc-top { flex: 1; min-width: 0; }
   .mc-item .mc-calc { margin-top: 0; margin-left: auto; flex: none; }
-  .ec-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
   .rc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-  .ec-item, .rc-item { margin-bottom: 0; }
+  .rc-item { margin-bottom: 0; }
   .rc-item:hover { border-color: var(--c-accent); }
+
+  /* 编辑明细：电脑端一行排完 —— 序号 + 商品名 + 数量 + 单价 + 金额 同排一行
+     （原来是上下两行：上行序号/名称/金额，下行两个输入框）。
+     做法是用 display:contents 把 .ec-top 这层「拆开」，让序号 / 商品名 / 金额
+     直接参与本行的 flex 排布；金额再靠 order:1 挪到最右。这样手机端依旧靠
+     .ec-top / .ec-row 保持上下两行 —— 两端共用同一份 DOM，不另开模板。 */
+  .ec-list { display: block; }
+  .ec-item {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 8px; padding: 8px 12px;
+  }
+  .ec-item:last-child { margin-bottom: 0; }
+  .ec-item:hover { border-color: var(--c-accent); }
+  .ec-item .ec-top { display: contents; }
+  .ec-item .ec-name {
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ec-item .ec-row { flex: none; margin-top: 0; gap: 8px; }
+  .ec-item .ec-field { flex: none; width: 152px; height: 40px; padding: 0 8px; }
+  .ec-item .ec-amount {
+    order: 1; margin-left: 0; flex: none; min-width: 112px; text-align: right;
+  }
   .mc-total {
     margin-top: 12px; padding: 12px 14px;
     background: var(--c-bg, #f8fafc); border: 1px solid var(--c-border);

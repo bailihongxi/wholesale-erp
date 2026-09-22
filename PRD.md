@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V3.0　|　**产品版本：V2.0-23（电脑端销售单详情页 / 修改销售单同步改卡片式，表格退场）**
+> 文档版本：V3.0　|　**产品版本：V2.0-24（电脑端「修改销售单」商品明细卡片内改为单行排列）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-23'`，`package.json` → `version: "2.0.23"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-24'`，`package.json` → `version: "2.0.24"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2405,3 +2405,23 @@ V2.0-22 是 `v-if="isMobile"` 卡片 / `v-else` 表格两支并存。这次两�
 **待用户确认的遗留**：`src/views/purchase/PurchaseOrderDetailView.vue`（采购单详情 / 修改采购单）
 是与销售单**同源同结构**的页面，同样存在「编辑页 CSS 写在 `</style>` 之外（从未生效）」
 与「明细用 `nth-child` 拆表」。本次未动（用户只点名销售单），修它需要用户确认。
+
+## V2.0-24（2026-09-23）：电脑端「修改销售单」商品明细卡片内改为单行排列
+
+**用户诉求**：电脑端「修改销售单」页的商品明细卡片，原来是上下两行（上行序号 + 商品名 + 金额，下行「数量 / 单价」两个带标签输入框），要求改成**单行排列**——「序号 + 商品名 + 数量 + 单价 + 金额」一行读完。手机端不变（窄屏仍上下两行）。
+
+**改动**：仅调整电脑端（`min-width: 768px`）`.ec-list` 的排布，**DOM 不动**，仍是 V2.0-23 那套 `ul.ec-list > li.ec-item`（`.ec-top` 序号/名称/金额 + `.ec-row` 两个输入框）。
+
+- `.ec-list` 由「多列网格 `repeat(auto-fill, minmax(340px, 1fr))`」改为**单列铺满**（`display: block`），卡片不再被切成多列。
+- `.ec-item` 改 `display: flex` 横向一行；用 **`display: contents` 把 `.ec-top` 这层拆开**，让序号 / 商品名 / 金额直接作为本行 flex 子项参与排布——商品名 `flex: 1` 吃掉剩余宽度（超长省略号），输入框固定宽 `152px`、高 `40px`。
+- `.ec-row`（`margin-top: 0`、`flex: none`）并到本行；`.ec-amount` 用 `order: 1` 挪到行尾右对齐。于是顺序为「序号 商品名 [数量 单位] [单价] 金额」。
+- 实测 1280px 视口：单行高度约 56px（原两行约 77px），信息一行读清、密度不输原表格。
+
+**防回归**：`tests/sale-order-mobile-cards.test.ts` 改写原「`.ec-list` 必须多列网格」断言（需求变更，非放宽）——
+改为断言「`.ec-list` 电脑端 `display: block` 且不再有 `grid-template-columns`」「`.ec-item` 横向 flex」「`.ec-top { display: contents }」「`.ec-row { margin-top: 0 }」「`.ec-amount { order: 1 }」「`.ec-field { width: 152px }」，
+并新增「手机端不得套用电脑端单行 flex / 不得拆 `.ec-top` / 输入行保留上边距」。该文件 **29 例全绿**。
+自检：删 `.ec-top { display: contents }`、`.ec-field` width 改回、`.ec-amount` 去掉 `order: 1` → 对应断言报红。
+
+`npx vitest run tests/sale-order-mobile-cards.test.ts` **29 例全绿**；全量测试与 `npm run build`（`vue-tsc -b`）未引入新红。
+
+**本次仅本地收口、未部署**：按用户要求，改动已提交为 `V2.0-24`（`package.json` → `2.0.24`，SW 缓存名随之变化），待用户下令后再 `push` + 部署 GitHub Pages。
