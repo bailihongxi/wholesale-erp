@@ -308,7 +308,34 @@ function stockClass(r: PickerRow): string {
    表现为「明明右边有列却怎么也滑不出来」。与开单页 `.tb-scroll { overflow-x: visible }`
    的处理保持一致，全站只保留一层滚动容器。 */
 @media (max-width: 767px) {
-  .col-spec { display: none; }
-  .pk-scroll { overflow-x: visible; }
+  .picker .col-spec { display: none; }
+  .picker .pk-scroll { overflow-x: visible; }
+  /* 卡片式布局：跟新建单已选商品表一致 */
+  .picker .data-table thead { display: none; }
+  .picker .data-table, .picker .data-table tbody { min-width: 0; }
+  .picker .data-table, .picker .data-table tbody, .picker .data-table tr, .picker .data-table td { display: block; width: 100%; }
+  .picker .data-table tbody tr {
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  }
+  .picker .data-table tbody td { padding: 2px 0; border: none; width: auto; }
+  .picker .data-table tbody td:nth-child(1) { display: none; } /* 序号 */
+  .picker .data-table tbody td:nth-child(2) { /* 商品名 */
+    width: 100%; font-size: 15px; font-weight: 600; order: 1;
+  }
+  .picker .data-table tbody td:nth-child(3) { /* 类别 */
+    order: 2; font-size: 12px; color: var(--c-muted);
+  }
+  .picker .data-table tbody td:nth-child(4) { display: none; } /* 型号 */
+  .picker .data-table tbody td:nth-child(5) { display: none; } /* 单位 */
+  .picker .data-table tbody td:nth-child(6) { /* 库存 */
+    order: 3; font-size: 12px; color: var(--c-muted);
+  }
+  .picker .data-table tbody td:nth-child(7) { /* 价格 */
+    order: 4; font-weight: 600; margin-left: auto;
+  }
+  .picker .data-table tbody td:nth-child(8) { /* 操作 */
+    order: 5;
+  }
 }
 </style>
