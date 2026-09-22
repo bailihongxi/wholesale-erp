@@ -170,6 +170,7 @@ onMounted(async () => {
   } catch {
     /* 数据库未就绪时保持空表，不让骨架卡住 */
   }
+  pager.reload()
 })
 </script>
 
