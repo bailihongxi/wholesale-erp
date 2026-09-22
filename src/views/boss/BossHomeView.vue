@@ -6,7 +6,7 @@
     <div v-if="showPwdTip" class="pwd-tip">
       <span class="pt-text">🔐 您当前仍在使用系统初始密码，建议尽快在「我的 → 修改密码」中修改，避免账号被冒用。</span>
       <span class="pt-acts">
-        <button class="ui-btn ui-btn-sm" type="button" @click="pwdOpen = true">去修改</button>
+        <button class="ui-btn ui-btn-sm btn-edit" type="button" @click="pwdOpen = true">去修改</button>
         <button class="pt-x" type="button" @click="showPwdTip = false">✕</button>
       </span>
     </div>

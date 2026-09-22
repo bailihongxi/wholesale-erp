@@ -9,6 +9,7 @@
   <div class="page-actions">
     <button
       class="pa-btn pa-cancel"
+      :class="isCancelText ? 'tone-cancel' : 'tone-back'"
       type="button"
       :disabled="cancelDisabled"
       @click="emit('cancel')"
@@ -28,7 +29,8 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+const props = withDefaults(
   defineProps<{
     /** 取消/返回按钮文案。详情页传「返回」，表单页传「取消」 */
     cancelText?: string
@@ -49,6 +51,14 @@ withDefaults(
     loading: false
   }
 )
+
+/**
+ * 左侧键到底是「返回」还是「取消」，由调用方传的文案决定：
+ *   详情页传「返回」→ 橘（tone-back）
+ *   表单页传「取消」→ 红（tone-cancel）
+ * 底色由 theme.css 的统一按钮配色段给出，这里只负责挂 tone 类。
+ */
+const isCancelText = computed(() => (props.cancelText ?? '').includes('取消'))
 
 const emit = defineEmits<{
   (e: 'cancel'): void

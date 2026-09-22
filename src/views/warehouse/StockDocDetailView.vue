@@ -4,7 +4,7 @@
       :title="`${isIn ? '入库单' : '出库单'} · ${doc?.batchNo ?? batchNo}`"
       :badge="isIn ? '收货入库' : '发货出库'"
       :badge-tone="isIn ? 'success' : 'info'"
-      :sub="isIn ? '可修改数量并重算库存，也可整单撤回；备注随单据保存与打印' : '可修改数量并重算库存，也可整单撤销'"
+      :sub="'可修改数量并重算库存；备注随单据保存与打印'"
     />
 
     <!-- 单据头：一眼看清这张单的来源、往来单位、经手人 -->
@@ -129,12 +129,13 @@
       @confirm="onPrimary"
     />
     <div class="extra-actions">
-      <button class="ghost-btn" type="button" @click="showPreview = true">🖨 打印{{ isIn ? '入库' : '出库' }}单</button>
-      <button v-if="!editing" class="danger-btn" type="button" @click="handleRevert">↩ 撤回本单</button>
-      <!-- 删除本单：仅老板 / 系统管理员。库存会原路退回，单据彻底删除 -->
+      <button class="ghost-btn btn-print" type="button" @click="showPreview = true">🖨 打印{{ isIn ? '入库' : '出库' }}单</button>
+      <!-- 删除本单：仅老板 / 系统管理员。库存会原路退回，单据彻底删除。
+           原「↩ 撤回」按钮与它底层都是 revertDoc（效果完全相同），V2.0-29 起合并为本按钮，
+           统一收进 canDeleteDoc 权限闸 —— 否则库房点撤回就等于删单，权限闸形同虚设。 -->
       <button
         v-if="canDeleteDoc && !editing"
-        class="danger-btn"
+        class="danger-btn btn-delete"
         type="button"
         :disabled="removing"
         @click="handleRemove"
@@ -297,17 +298,6 @@ async function handleSave(): Promise<void> {
   showToast('已保存')
   editing.value = false
   await load()
-}
-
-async function handleRevert(): Promise<void> {
-  await showConfirmDialog({
-    title: '撤回单据',
-    message: `撤回后库存会原路退回，来源${isIn.value ? '采购' : '销售'}单恢复为待${isIn.value ? '入库' : '出库'}状态。`
-  })
-  const res = await docStore.revertDoc(type.value, batchNo.value, userStore.currentUser?.id ?? 1)
-  if (!res.ok) { showToast(res.message); return }
-  showToast('已撤回')
-  router.push(isIn.value ? '/warehouse/inbound' : '/warehouse/outbound')
 }
 
 /**

@@ -200,8 +200,8 @@
             <span v-if="quote.convertedSaleNo" class="d-badge conv">→ {{ quote.convertedSaleNo }}</span>
           </div>
           <div class="d-actions">
-            <button v-if="quote.status !== 'converted'" class="btn primary" type="button" @click="beginEdit">✏️ 修改</button>
-            <button class="btn" type="button" @click="openPreview">🖨 打印</button>
+            <button v-if="quote.status !== 'converted'" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
+            <button class="btn btn-print" type="button" @click="openPreview">🖨 打印</button>
             <button v-if="quote.status !== 'converted'" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为采购单' }}
             </button>

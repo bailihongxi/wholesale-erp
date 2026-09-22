@@ -1123,3 +1123,117 @@ body {
   line-height: 1;
   opacity: .45;
 }
+
+/* ============================================================
+   全站按钮配色统一（V2.0-29 · 用户硬性规范）
+
+   只设定五类动作按钮的底色：
+     打印 = 绿    删除 / 取消 = 红    返回 = 橘    修改 = 蓝
+   其余按钮（保存 / 确认 / 新增 / 查看 / 搜索 / 转换 ……）一律不动，
+   保证整个系统按钮颜色语义一致。
+
+   只覆盖 background / border-color / color 三项 ——
+   字体、字号、圆角、内边距、高度全部沿用各页原样（「风格和字体样式不变」）。
+
+   用 !important 的原因：各页这些按钮的底色写在 <style scoped> 里，
+   带属性选择器后特异性高于全局单类，不用 !important 会被页面样式盖回去。
+   ============================================================ */
+:root {
+  --c-btn-print: #16a34a;
+  --c-btn-print-hover: #15803d;
+  --c-btn-delete: #ef4444;
+  --c-btn-delete-hover: #dc2626;
+  --c-btn-back: #f97316;
+  --c-btn-back-hover: #ea580c;
+  --c-btn-edit: #2f6bff;
+  --c-btn-edit-hover: #1e5bef;
+}
+
+/* 打印 → 绿 */
+.btn-print {
+  background: var(--c-btn-print) !important;
+  border-color: var(--c-btn-print) !important;
+  color: #fff !important;
+}
+.btn-print:hover:not(:disabled) {
+  background: var(--c-btn-print-hover) !important;
+  border-color: var(--c-btn-print-hover) !important;
+  color: #fff !important;
+}
+
+/* 删除 → 红 */
+.btn-delete,
+.btn.danger {
+  background: var(--c-btn-delete) !important;
+  border-color: var(--c-btn-delete) !important;
+  color: #fff !important;
+}
+.btn-delete:hover:not(:disabled),
+.btn.danger:hover:not(:disabled) {
+  background: var(--c-btn-delete-hover) !important;
+  border-color: var(--c-btn-delete-hover) !important;
+  color: #fff !important;
+}
+
+/* 取消 → 红（与删除同色：都是「放弃 / 撤销」语义） */
+.btn-cancel,
+.cancel,
+.cancel-btn,
+.ui-btn-cancel {
+  background: var(--c-btn-delete) !important;
+  border-color: var(--c-btn-delete) !important;
+  color: #fff !important;
+}
+.btn-cancel:hover:not(:disabled),
+.cancel:hover:not(:disabled),
+.cancel-btn:hover:not(:disabled),
+.ui-btn-cancel:hover:not(:disabled) {
+  background: var(--c-btn-delete-hover) !important;
+  border-color: var(--c-btn-delete-hover) !important;
+  color: #fff !important;
+}
+
+/* 返回 → 橘 */
+.btn-back {
+  background: var(--c-btn-back) !important;
+  border-color: var(--c-btn-back) !important;
+  color: #fff !important;
+}
+.btn-back:hover:not(:disabled) {
+  background: var(--c-btn-back-hover) !important;
+  border-color: var(--c-btn-back-hover) !important;
+  color: #fff !important;
+}
+/* PageActions 的左侧键：文案是「取消」时按取消红，是「返回」时按返回橘 */
+.pa-cancel.tone-cancel {
+  background: var(--c-btn-delete) !important;
+  border-color: var(--c-btn-delete) !important;
+  color: #fff !important;
+}
+.pa-cancel.tone-cancel:hover:not(:disabled) {
+  background: var(--c-btn-delete-hover) !important;
+  border-color: var(--c-btn-delete-hover) !important;
+  color: #fff !important;
+}
+.pa-cancel.tone-back {
+  background: var(--c-btn-back) !important;
+  border-color: var(--c-btn-back) !important;
+  color: #fff !important;
+}
+.pa-cancel.tone-back:hover:not(:disabled) {
+  background: var(--c-btn-back-hover) !important;
+  border-color: var(--c-btn-back-hover) !important;
+  color: #fff !important;
+}
+
+/* 修改 → 蓝（主色，与「保存 / 确认」区分开） */
+.btn-edit {
+  background: var(--c-btn-edit) !important;
+  border-color: var(--c-btn-edit) !important;
+  color: #fff !important;
+}
+.btn-edit:hover:not(:disabled) {
+  background: var(--c-btn-edit-hover) !important;
+  border-color: var(--c-btn-edit-hover) !important;
+  color: #fff !important;
+}

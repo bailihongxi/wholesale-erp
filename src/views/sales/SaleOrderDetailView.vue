@@ -9,8 +9,8 @@
           <span class="d-badge pay" :class="order?.receiveStatus">{{ recvText(order?.receiveStatus ?? '') }}</span>
         </div>
         <div class="d-actions">
-          <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="startEdit">✏️ 修改</button>
-          <button class="btn" type="button" @click="openPreview">🖨 打印送货单</button>
+          <button v-if="order?.status === 'pending'" class="btn primary btn-edit" type="button" @click="startEdit">✏️ 修改</button>
+          <button class="btn btn-print" type="button" @click="openPreview">🖨 打印送货单</button>
           <!-- 删除：仅老板 / 系统管理员可见，且只限于「待出库」的单据 -->
           <button
             v-if="canDeleteDoc && order?.status === 'pending'"

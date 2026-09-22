@@ -94,8 +94,8 @@
           打印含单价
         </label>
         <div class="pp-btns">
-          <button class="pp-btn ghost" type="button" @click="onCancel">取消</button>
-          <button class="pp-btn primary" type="button" @click="onPrint">🖨 打印</button>
+          <button class="pp-btn ghost btn-cancel" type="button" @click="onCancel">取消</button>
+          <button class="pp-btn primary btn-print" type="button" @click="onPrint">🖨 打印</button>
         </div>
       </div>
     </div>

@@ -30,9 +30,9 @@
       已选 <b>{{ selected.length }}</b> 项
       <button class="bulk-btn" type="button" @click="openBulkEdit">✎ 批量编辑</button>
       <button class="bulk-btn" type="button" :disabled="!canMergeSelected" @click="mergeSelected">⧉ 合并同名</button>
-      <button class="bulk-btn danger" type="button" @click="removeSelected">🗑 删除</button>
+      <button class="bulk-btn danger btn-delete" type="button" @click="removeSelected">🗑 删除</button>
       <span v-if="!canMergeSelected && selected.length > 1" class="bulk-tip">合并要求所选商品名称一致</span>
-      <button class="link-btn" type="button" @click="clearSelection">取消选择</button>
+      <button class="link-btn btn-cancel" type="button" @click="clearSelection">取消选择</button>
     </div>
 
     <!-- 首次拉数据期间骨架占位，不闪空态 -->
@@ -224,7 +224,7 @@
         </p>
 
         <div class="modal-actions">
-          <button class="ghost-btn dismiss" type="button" @click="showBulk = false">取消</button>
+          <button class="ghost-btn dismiss btn-cancel" type="button" @click="showBulk = false">取消</button>
           <button class="primary-btn" type="button" @click="doBulkEdit">应用</button>
         </div>
       </div>
@@ -252,7 +252,7 @@
           </ul>
           <div class="dg-actions">
             <button class="ghost-btn sm" type="button" @click="mergeGroup(g)">合并（库存累加 + 单据改指向）</button>
-            <button class="ghost-btn sm danger" type="button" @click="deleteGroup(g)">删除多余</button>
+            <button class="ghost-btn sm danger btn-delete" type="button" @click="deleteGroup(g)">删除多余</button>
           </div>
         </div>
         <div class="modal-actions">

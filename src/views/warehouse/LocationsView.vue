@@ -70,7 +70,7 @@
               <span class="op-cell">
                 <template v-if="editingId === l.id">
                   <button class="link-btn" type="button" :disabled="busy" @click="saveEdit(l)">保存</button>
-                  <button class="link-btn muted" type="button" @click="cancelEdit">取消</button>
+                  <button class="link-btn muted btn-cancel" type="button" @click="cancelEdit">取消</button>
                 </template>
                 <template v-else>
                   <button class="link-btn" type="button" @click="startEdit(l)">改名</button>

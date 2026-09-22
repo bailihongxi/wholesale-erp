@@ -21,7 +21,7 @@
       </li>
     </ul>
 
-    <button class="pwd-btn" type="button" @click="pwdOpen = true">🔑 修改密码</button>
+    <button class="pwd-btn btn-edit" type="button" @click="pwdOpen = true">🔑 修改密码</button>
     <button class="logout-btn" type="button" @click="handleLogout">退出登录</button>
 
     <ChangePasswordModal v-model:open="pwdOpen" />
