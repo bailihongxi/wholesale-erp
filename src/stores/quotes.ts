@@ -79,6 +79,50 @@ export const useQuotesStore = defineStore('quotes', () => {
     return await db.quoteOrderItems.where('quoteOrderId').equals(quoteOrderId).toArray()
   }
 
+  /**
+   * 修改报价单 / 预采询价单（数量、单价、备注）。
+   *
+   * 与销售单、采购单的 updateOrder 同套约定：
+   *  - 已转成正式单据（converted）的单子不允许再改，避免与已生成的销售/采购单对不上；
+   *  - 明细整单替换（先删后加），金额按明细重算，保证单头 totalAmount 与明细一致；
+   *  - 写审计日志。
+   */
+  async function updateQuote(
+    quoteId: number,
+    items: Array<{ productId: number; quantity: number; price: number }>,
+    remark: string,
+    operatorId: number
+  ): Promise<{ ok: boolean; message: string }> {
+    const q = await db.quoteOrders.get(quoteId)
+    if (!q) return { ok: false, message: '报价单不存在' }
+    if (q.status === 'converted') return { ok: false, message: '已转销售单/采购单的报价单不能修改' }
+    if (!items.length) return { ok: false, message: '明细不能为空' }
+
+    await db.quoteOrderItems.where('quoteOrderId').equals(quoteId).delete()
+    let totalAmount = 0
+    for (const it of items) {
+      const quantity = Number(it.quantity) || 0
+      const price = Number(it.price) || 0
+      const subtotal = quantity * price
+      totalAmount += subtotal
+      await db.quoteOrderItems.add({
+        quoteOrderId: quoteId,
+        productId: it.productId,
+        quantity,
+        price,
+        subtotal
+      })
+    }
+
+    await db.quoteOrders.update(quoteId, { totalAmount, remark: remark ?? '' })
+    await writeLog(
+      operatorId,
+      AUDIT_ACTIONS.QUOTE_UPDATE,
+      `修改报价单 ${q.orderNo}，共 ${items.length} 项，金额 ¥${totalAmount}`
+    )
+    return { ok: true, message: '已保存' }
+  }
+
   async function removeQuote(id: number, operatorId: number): Promise<{ ok: boolean; message: string }> {
     const q = await db.quoteOrders.get(id)
     if (!q) return { ok: false, message: '报价单不存在' }
@@ -211,6 +255,6 @@ export const useQuotesStore = defineStore('quotes', () => {
   }
 
   return {
-    createQuote, listQuotes, getQuote, getQuoteItems, removeQuote, convertToSale, convertToPurchase
+    createQuote, listQuotes, getQuote, getQuoteItems, updateQuote, removeQuote, convertToSale, convertToPurchase
   }
 })

@@ -41,6 +41,7 @@ export const AUDIT_ACTIONS = {
   LEDGER_ADD: '记一笔',
   LEDGER_DELETE: '删除记一笔',
   QUOTE_CREATE: '创建报价单',
+  QUOTE_UPDATE: '修改报价单',
   QUOTE_DELETE: '删除报价单',
   QUOTE_CONVERT: '报价转销售单',
   PERM_UPDATE: '配置角色权限',

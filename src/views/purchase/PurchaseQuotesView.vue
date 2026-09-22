@@ -200,6 +200,7 @@
             <span v-if="quote.convertedSaleNo" class="d-badge conv">→ {{ quote.convertedSaleNo }}</span>
           </div>
           <div class="d-actions">
+            <button v-if="quote.status !== 'converted'" class="btn primary" type="button" @click="beginEdit">✏️ 修改</button>
             <button class="btn" type="button" @click="openPreview">🖨 打印</button>
             <button v-if="quote.status !== 'converted'" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为采购单' }}
@@ -243,6 +244,59 @@
         <div v-else class="empty">暂无明细</div>
       </section>
 
+      <!-- 编辑模式：与销售单同一套做法 —— 电脑端内联在详情页下方（普通卡片），
+           手机端整屏覆盖；底部只留「取消 / 保存修改」。 -->
+      <EditModePanel :model-value="showEdit" :saving="saving"
+                     @cancel="closeEdit" @save="onSaveEdit">
+        <section class="block">
+          <div class="d-head">
+            <h3 class="d-no">修改预采询价单</h3>
+          </div>
+          <div class="d-meta remark-row">
+            <div class="rm-label"><i>备注</i></div>
+            <div class="rm-input">
+              <textarea
+                v-model="editRemark"
+                class="edit-remark-input"
+                rows="2"
+                placeholder="选填"
+                @input="onRemarkInput"
+              ></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <h4 class="block-title"><span class="bar"></span>询价明细（{{ editItems.length }}）</h4>
+          <ul class="ec-list">
+            <li v-for="(it, i) in editItems" :key="i" class="ec-item">
+              <div class="ec-top">
+                <span class="ec-idx">{{ i + 1 }}</span>
+                <span class="ec-name">{{ nameOf(it.productId) }}</span>
+                <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
+              </div>
+              <div class="ec-row">
+                <label class="ec-field">
+                  <i>数量</i>
+                  <input v-model.number="it.quantity" type="number" min="1" inputmode="numeric" class="ec-input" />
+                  <em>{{ unitOf(it.productId) }}</em>
+                </label>
+                <label class="ec-field">
+                  <i>询价</i>
+                  <input v-model.number="it.price" type="number" min="0" inputmode="decimal" class="ec-input" />
+                </label>
+              </div>
+            </li>
+            <li v-if="!editItems.length" class="empty">暂无明细</li>
+          </ul>
+          <div v-if="editItems.length" class="mc-total">
+            <span>合计</span>
+            <span class="mt-qty">{{ editItems.reduce((s, it) => s + (it.quantity || 0), 0) }} 件</span>
+            <b class="mt-amount">¥{{ money(editItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)) }}</b>
+          </div>
+        </section>
+      </EditModePanel>
+
       <p class="tip-line">预采询价单不占库存、不生成应收；供应商确认后点「转为采购单」，明细与价格自动带过去。</p>
     </template>
 
@@ -258,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -268,6 +322,8 @@ import TablePager from '../../components/TablePager.vue'
 import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
+import { useEditMode } from '../../composables/useEditMode'
+import EditModePanel from '../../components/EditModePanel.vue'
 import { useQuotesStore } from '../../stores/quotes'
 import { useProductStore } from '../../stores/product'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -441,6 +497,61 @@ const quote = ref<QuoteOrder | null>(null)
 const detailItems = ref<QuoteOrderItem[]>([])
 const converting = ref(false)
 const productMap = ref<Record<number, Product>>({})
+
+// ---- 修改：与销售单同一套（useEditMode 管状态与滚动，EditModePanel 管排版） ----
+const { showEdit, saving, startEdit, closeEdit } = useEditMode({ scrollSelectorOnStart: '.edit-page' })
+const editRemark = ref('')
+const editItems = ref<Array<{ productId: number; quantity: number; price: number }>>([])
+
+/** 备注框随内容自增高度：文字超过两行时不再挤在固定高度里滚动 */
+function autoGrowRemark(el: HTMLTextAreaElement | null): void {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 56)}px`
+}
+function onRemarkInput(e: Event): void {
+  autoGrowRemark(e.target as HTMLTextAreaElement)
+}
+
+/** 点「修改」：先拷出可编辑副本，再进入编辑态 */
+async function beginEdit(): Promise<void> {
+  if (!quote.value) return
+  editItems.value = detailItems.value.map(it => ({
+    productId: it.productId,
+    quantity: it.quantity,
+    price: it.price
+  }))
+  editRemark.value = quote.value.remark || ''
+  await startEdit()
+  await nextTick()
+  autoGrowRemark(document.querySelector<HTMLTextAreaElement>('.edit-remark-input'))
+}
+
+/** 点「保存修改」：成功后关闭模块，刷新详情与列表 */
+async function onSaveEdit(): Promise<void> {
+  if (!quote.value) return
+  const id = quote.value.id!
+  saving.value = true
+  try {
+    const res = await quotesStore.updateQuote(
+      id,
+      editItems.value,
+      editRemark.value,
+      userStore.currentUser?.id ?? 2
+    )
+    if (res.ok) {
+      showToast('已保存')
+      await closeEdit()
+      quote.value = (await quotesStore.getQuote(id)) ?? null
+      detailItems.value = await quotesStore.getQuoteItems(id)
+      await pager.reload()
+    } else {
+      showToast(res.message)
+    }
+  } finally {
+    saving.value = false
+  }
+}
 
 async function openDetail(id: number): Promise<void> {
   quote.value = (await quotesStore.getQuote(id)) ?? null

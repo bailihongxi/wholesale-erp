@@ -9,7 +9,7 @@
           <span class="d-badge pay" :class="order?.payStatus">{{ payText(order?.payStatus ?? '') }}</span>
         </div>
         <div class="d-actions">
-          <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="startEdit">✏️ 修改</button>
+          <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="beginEdit">✏️ 修改</button>
           <button class="btn" type="button" @click="openPreview">🖨 打印</button>
         </div>
       </div>
@@ -126,53 +126,60 @@
       <div v-else class="empty">尚未登记付款</div>
     </section>
 
-<!-- 编辑模式：页面级 -->
-    <div v-if="showEdit" class="edit-page">
-      <div class="edit-header">
-        <h3>修改采购单</h3>
-      </div>
-      <div class="edit-items">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th class="center" style="width:48px">#</th>
-              <th>商品名称</th>
-              <th class="center" style="width:56px">单位</th>
-              <th class="num" style="width:90px">数量</th>
-              <th class="num" style="width:100px">单价</th>
-              <th class="num" style="width:100px">金额</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(it, i) in editItems" :key="i">
-              <td class="center">{{ i + 1 }}</td>
-              <td>{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</td>
-              <td class="center">{{ unitOf(it.productId) }}</td>
-              <td class="num"><input v-model.number="it.quantity" type="number" min="1" class="mini-input" /></td>
-              <td class="num"><input v-model.number="it.price" type="number" min="0" class="mini-input" /></td>
-              <td class="num">¥{{ money((it.quantity||0) * (it.price||0)) }}</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="edit-total-label">合计</td>
-              <td class="num">{{ editItems.reduce((s, it) => s + (it.quantity||0), 0) }}</td>
-              <td></td>
-              <td class="num">¥{{ money(editItems.reduce((s, it) => s + (it.quantity||0) * (it.price||0), 0)) }}</td>
-            </tr>
-          </tfoot>
-        </table>
-        <div class="edit-note-row">
-          <label>备注</label>
-          <input v-model="editRemark" type="text" placeholder="选填" class="f-input" />
+<!-- 编辑模式：与销售单同一套做法 —— 电脑端内联在详情页里（普通卡片，与其它卡片同宽），
+     手机端整屏覆盖；底部只留「取消 / 保存修改」，返回语义交给详情页的橘色「返回」键
+     （编辑时它被 v-if 收起，模块一关就自动回来）。 -->
+    <EditModePanel :model-value="showEdit" :saving="saving"
+                   @cancel="closeEdit" @save="onSaveEdit">
+      <section class="block">
+        <div class="d-head">
+          <h3 class="d-no">修改采购单</h3>
         </div>
-      </div>
-      <div class="edit-footer">
-        <button class="btn btn-back" type="button" @click="goBack">← 返回</button>
-        <button class="btn btn-cancel" type="button" @click="showEdit = false">取消</button>
-        <button class="btn btn-save" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
-      </div>
-    </div>
+        <div class="d-meta remark-row">
+          <div class="rm-label"><i>备注</i></div>
+          <div class="rm-input">
+            <textarea
+              v-model="editRemark"
+              class="edit-remark-input"
+              rows="2"
+              placeholder="选填"
+              @input="onRemarkInput"
+            ></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h4 class="block-title"><span class="bar"></span>商品明细（{{ editItems.length }}）</h4>
+        <ul class="ec-list">
+          <li v-for="(it, i) in editItems" :key="i" class="ec-item">
+            <div class="ec-top">
+              <span class="ec-idx">{{ i + 1 }}</span>
+              <span class="ec-name">{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</span>
+              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+              <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
+            </div>
+            <div class="ec-row">
+              <label class="ec-field">
+                <i>数量</i>
+                <input v-model.number="it.quantity" type="number" min="1" inputmode="numeric" class="ec-input" />
+                <em>{{ unitOf(it.productId) }}</em>
+              </label>
+              <label class="ec-field">
+                <i>单价</i>
+                <input v-model.number="it.price" type="number" min="0" inputmode="decimal" class="ec-input" />
+              </label>
+            </div>
+          </li>
+          <li v-if="!editItems.length" class="empty">暂无明细</li>
+        </ul>
+        <div v-if="editItems.length" class="mc-total">
+          <span>合计</span>
+          <span class="mt-qty">{{ editItems.reduce((s, it) => s + (it.quantity || 0), 0) }} 件</span>
+          <b class="mt-amount">¥{{ money(editItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)) }}</b>
+        </div>
+      </section>
+    </EditModePanel>
 
     <PageActions v-if="!showEdit" cancel-text="返回" @cancel="goBack" />
 
@@ -188,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -198,6 +205,8 @@ import { db } from '../../db'
 import { getCompanyName, type PrintOrderData } from '../../utils/printTemplate'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
+import { useEditMode } from '../../composables/useEditMode'
+import EditModePanel from '../../components/EditModePanel.vue'
 import type { PurchaseOrder, PurchaseOrderItem, Supplier, Payment, Product, StockRecord } from '../../types'
 
 const route = useRoute()
@@ -217,13 +226,23 @@ const userMap = ref<Record<number, string>>({})
 const showPrice = ref(true)
 const showPreview = ref(false)
 
-// 编辑功能
-const showEdit = ref(false)
-const saving = ref(false)
+// 编辑功能：与销售单同一套（useEditMode 管状态与滚动，EditModePanel 管排版）
+const { showEdit, saving, startEdit, closeEdit } = useEditMode({ scrollSelectorOnStart: '.edit-page' })
 const editRemark = ref('')
 const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean }>>([])
 
-function startEdit(): void {
+/** 备注框随内容自增高度：文字超过两行时不再挤在固定高度里滚动 */
+function autoGrowRemark(el: HTMLTextAreaElement | null): void {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 56)}px`
+}
+function onRemarkInput(e: Event): void {
+  autoGrowRemark(e.target as HTMLTextAreaElement)
+}
+
+/** 点「修改」：先拷出可编辑副本，再进入编辑态 */
+async function beginEdit(): Promise<void> {
   editItems.value = items.value.map(it => ({
     productId: it.productId,
     quantity: it.quantity,
@@ -231,10 +250,13 @@ function startEdit(): void {
     isGift: it.isGift
   }))
   editRemark.value = order.value?.remark || ''
-  showEdit.value = true
+  await startEdit()
+  await nextTick()
+  autoGrowRemark(document.querySelector<HTMLTextAreaElement>('.edit-remark-input'))
 }
 
-async function saveEdit(): Promise<void> {
+/** 点「保存修改」：成功后关闭模块（橘色「返回」键自动回来）并重新加载 */
+async function onSaveEdit(): Promise<void> {
   if (!order.value) return
   saving.value = true
   try {
@@ -245,7 +267,7 @@ async function saveEdit(): Promise<void> {
     )
     if (res.ok) {
       showToast('已保存')
-      showEdit.value = false
+      await closeEdit()
       await loadOrder()
     } else {
       showToast(res.message)
@@ -420,41 +442,8 @@ watch(() => route.params.id, loadOrder)
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
 
-/* 编辑模式 */
-.edit-page { position: fixed; inset: 0; background: var(--c-bg, #f4f6fa); z-index: 90; display: flex; flex-direction: column; overflow-y: auto; }
-.edit-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--c-surface, #fff); border-bottom: 1px solid #e8eaef; }
-.edit-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--c-primary, #16325c); }
-.edit-items { flex: 1; padding: 16px 20px; overflow-y: auto; }
-.edit-footer { display: flex; gap: 12px; padding: 12px 20px; background: var(--c-surface, #fff); border-top: 1px solid #e8eaef; position: sticky; bottom: 0; }
-.edit-footer button { height: 46px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
-.edit-footer .btn-back { flex: 1; background: var(--c-amber, #f97316); color: #fff; }
-.edit-footer .btn-cancel { flex: 1; background: #ef4444; color: #fff; }
-.edit-footer .btn-save { flex: 2; background: var(--c-accent, #2563eb); color: #fff; }
-.edit-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
-.edit-total-label { font-weight: 600; text-align: right; padding-right: 16px; }
-.edit-note-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 0 4px; }
-.edit-note-row label { font-size: 14px; color: #666; flex-shrink: 0; width: 50px; }
-.edit-note-row .f-input { flex: 1; height: 38px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 12px; font-size: 14px; }
+/* 编辑模式：排版（电脑端内联 / 手机端整屏）与底部「取消 / 保存修改」按钮条
+   统一由 <EditModePanel> 提供（与销售单同一套），这里不再写 .edit-page /
+   .edit-footer / .btn-back 等规则 —— 留着会和组件样式打架。 */
 .btn.primary { background: var(--c-accent, #2563eb); color: #fff; border: none; }
 </style>
-
-/* 编辑弹窗 */
-.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
-.modal-box { background: #fff; border-radius: 12px; width: 92%; max-width: 420px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--c-border); }
-.modal-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
-.modal-close { font-size: 22px; color: #999; cursor: pointer; line-height: 1; padding: 0 4px; }
-.modal-close:hover { color: #333; }
-.modal-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
-.edit-card { background: #f7f8fa; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
-.edit-card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.edit-card-model { font-size: 12px; color: #999; font-weight: 400; margin-left: 4px; }
-.edit-card-fields { display: flex; gap: 10px; margin-bottom: 6px; }
-.field { flex: 1; }
-.field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
-.field-input { display: flex; align-items: center; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0 8px; }
-.field-input input { flex: 1; border: none; outline: none; height: 32px; font-size: 14px; text-align: right; }
-.field-unit { font-size: 12px; color: #999; margin-left: 4px; }
-.edit-card-total { font-size: 13px; color: #333; text-align: right; }
-.modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--c-border); }
-.btn.primary { background: var(--c-accent); color: #fff; border: none; }
