@@ -149,8 +149,9 @@ async function initForm() {
   const { db } = await import('../../db')
   const all: any[] = await db.products.toArray()
   categories.value = [...new Set(all.map((p: any) => p.category).filter(Boolean))].sort()
-  if (isEdit.value) {
-    const p = await productStore.getProduct(Number(id))
+  const editId = route.params.id
+  if (editId) {
+    const p = await productStore.getProduct(Number(editId))
     if (p) {
       form.brand = p.brand
       form.model = p.model
