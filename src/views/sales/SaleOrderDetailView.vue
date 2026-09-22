@@ -127,17 +127,35 @@
     <!-- 编辑弹窗 -->
     <div v-if="showEdit" class="modal-mask" @click.self="showEdit = false">
       <div class="modal-box">
-        <h3>修改销售单</h3>
-        <div class="edit-list">
-          <div v-for="(it, i) in editItems" :key="i" class="edit-row">
-            <span class="edit-name">{{ nameOf(it.productId) }}</span>
-            <input v-model.number="it.quantity" type="number" class="mini-input" placeholder="数量" />
-            <input v-model.number="it.price" type="number" class="mini-input" placeholder="单价" />
+        <div class="modal-header">
+          <h3>修改销售单</h3>
+          <button class="modal-close" type="button" @click="showEdit = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-for="(it, i) in editItems" :key="i" class="edit-card">
+            <div class="edit-card-head">
+              <span class="edit-brand">{{ productMap[it.productId]?.brand || '商品#' + it.productId }}</span>
+              <span class="edit-model">{{ productMap[it.productId]?.model || '' }}</span>
+            </div>
+            <div class="edit-card-row">
+              <label>数量</label>
+              <input v-model.number="it.quantity" type="number" class="edit-input" />
+              <span class="edit-unit">{{ unitOf(it.productId) }}</span>
+            </div>
+            <div class="edit-card-row">
+              <label>单价</label>
+              <input v-model.number="it.price" type="number" class="edit-input" />
+              <span class="edit-unit">元</span>
+            </div>
+            <div class="edit-card-row">
+              <label>金额</label>
+              <span class="edit-amount">¥{{ money((it.quantity||0) * (it.price||0)) }}</span>
+            </div>
           </div>
         </div>
-        <div class="modal-actions">
+        <div class="modal-footer">
           <button class="btn" type="button" @click="showEdit = false">取消</button>
-          <button class="btn primary" type="button" :disabled="saving" @click="saveEdit">保存</button>
+          <button class="btn primary" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
         </div>
       </div>
     </div>
@@ -379,11 +397,20 @@ watch(() => route.params.id, loadOrder)
 
 /* 编辑弹窗 */
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
-.modal-box { background: #fff; border-radius: 12px; padding: 20px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
-.modal-box h3 { margin: 0 0 16px; font-size: 16px; }
-.edit-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
-.edit-row { display: flex; align-items: center; gap: 8px; }
-.edit-name { flex: 1; font-size: 13px; }
-.mini-input { width: 80px; height: 32px; border: 1px solid var(--c-border); border-radius: 6px; padding: 0 8px; text-align: right; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal-box { background: #fff; border-radius: 16px; width: 92%; max-width: 480px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--c-border); }
+.modal-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.modal-close { border: none; background: none; font-size: 18px; color: var(--c-muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.modal-close:hover { background: var(--c-bg); }
+.modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.edit-card { background: var(--c-bg, #f8f9fa); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.edit-card-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.edit-brand { font-weight: 600; font-size: 14px; }
+.edit-model { font-size: 12px; color: var(--c-muted); }
+.edit-card-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.edit-card-row label { width: 40px; font-size: 13px; color: var(--c-muted); flex-shrink: 0; }
+.edit-input { flex: 1; height: 36px; border: 1px solid var(--c-border); border-radius: 8px; padding: 0 10px; font-size: 14px; text-align: right; }
+.edit-unit { font-size: 12px; color: var(--c-muted); width: 24px; }
+.edit-amount { font-size: 14px; font-weight: 600; color: var(--c-primary); }
+.modal-footer { display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--c-border); }
 .btn.primary { background: var(--c-accent); color: #fff; border: none; }
