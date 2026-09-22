@@ -163,6 +163,20 @@ onMounted(async () => {
       form.warnStock = p.warnStock
       form.status = p.status
     }
+  } else {
+    // 新建：清空表单，避免残留上一个商品的数据
+    form.brand = ''
+    form.model = ''
+    form.category = ''
+    form.spec = ''
+    form.unit = '台'
+    form.purchasePrice = 0
+    form.wholesalePrice = 0
+    form.retailPrice = 0
+    form.warnStock = 0
+    form.status = 'active'
+    manual.wholesale = false
+    manual.retail = false
   }
 })
 
