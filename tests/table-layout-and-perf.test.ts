@@ -121,16 +121,22 @@ describe('手机端表格：表头/表体/表尾必须同进同出', () => {
     expect(mobile).toMatch(/> tfoot > tr[\s\S]{0,200}display: flex/)
   })
 
-  it('布局类规则用 :where() 降权，页面自己的手机端样式能覆盖', () => {
+  it('表格/表头/表体的 display 仍用 :where() 降权，页面自己的手机端样式能覆盖', () => {
     // 页面（如开单页把明细表改成卡片）必须能压过全局的 display/min-width；
     // 之前用 .app-layout.is-mobile .data-table（权重 0,3,0）把页面样式全盖住了。
-    // ⚠️ overflow 是**唯一例外**，它必须提权（理由见下一组用例），
-    //    所以这里只约束布局属性，不放行 display 跟着一起提权。
+    // ⚠️ 有两处例外必须提权，它们都只作用在 **tfoot** 上，与卡片模式无关
+    //    （卡片模式既不渲染 tfoot、也不靠滚动容器）：
+    //      · overflow-x                                  —— 见下一组用例（V2.0-14）
+    //      · tfoot 的 td（内边距/边框/底色/display）    —— 见「合计行通栏」一组（V2.0-16）
+    //    只要表格/表头/表体的 display 不跟着提权，卡片模式就不受影响。
     expect(mobile).toContain(':where(.app-layout.is-mobile)')
+    const flat = css.replace(/\s+/g, ' ')
+    const raised = (flat.match(/\.app-layout\.is-mobile \.data-table[^{}]*\{[^{}]*\}/g) ?? [])
+      .filter(rule => !rule.includes('tfoot') && rule.includes('display:'))
     expect(
-      css,
-      'display 不能提权，否则开单页的卡片模式会被拆成「半表格」'
-    ).not.toMatch(/\.app-layout\.is-mobile \.data-table[^{}]*\{[^{}]*display/)
+      raised,
+      '表格/表头/表体的 display 一提权就会压过开单页的卡片模式，把明细表拆成「半表格」'
+    ).toEqual([])
   })
 })
 
@@ -186,6 +192,140 @@ describe('手机端表格必须能横向滚动（右列被裁后就再也滑不�
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
+
+/** 归一化空白后再取声明块 —— 选择器可能跨行书写（如 `.data-table th,\n.data-table td {`） */
+function flatBlockOf(css: string, selector: string): string {
+  return blockOf(css.replace(/\s+/g, ' '), selector)
+}
+
+/** 去掉 :where(...) 整段（其内部不贡献特异性，这正是「降权」的原理） */
+function stripWhere(sel: string): string {
+  let s = sel
+  for (let guard = 0; guard < 20 && s.includes(':where('); guard++) {
+    const i = s.indexOf(':where(')
+    let depth = 0
+    let j = i + ':where('.length - 1
+    for (; j < s.length; j++) {
+      if (s[j] === '(') depth++
+      else if (s[j] === ')' && --depth === 0) break
+    }
+    s = s.slice(0, i) + s.slice(j + 1)
+  }
+  return s
+}
+
+/** 选择器特异性 [id, 类/属性/伪类, 元素] */
+function spec(sel: string): [number, number, number] {
+  const s = stripWhere(sel)
+  const ids = (s.match(/#[\w-]+/g) ?? []).length
+  const attrs = (s.match(/\[[^\]]*\]/g) ?? []).length
+  const pseudos = (s.match(/(?<!:):[\w-]+(\([^)]*\))?/g) ?? []).length
+  const classes = (s.match(/\.[\w-]+/g) ?? []).length
+  const rest = s
+    .replace(/#[\w-]+/g, ' ')
+    .replace(/\.[\w-]+/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/(?<!:):[\w-]+(\([^)]*\))?/g, ' ')
+  const elements = (rest.match(/[\w-]+/g) ?? []).length
+  return [ids, classes + attrs + pseudos, elements]
+}
+
+/** a 的特异性是否严格高于 b */
+function stronger(a: [number, number, number], b: [number, number, number]): boolean {
+  if (a[0] !== b[0]) return a[0] > b[0]
+  if (a[1] !== b[1]) return a[1] > b[1]
+  return a[2] > b[2]
+}
+
+/**
+ * 手机端合计行通栏（V2.0-16）
+ *
+ * 这一条与 V2.0-14 的 overflow-x 是**同一个坑的第二次**：
+ * 全局那套「合计行通栏」规则被 `:where()` 降权成特异性 0，
+ * 而基础规则 `.data-table tfoot td`（(0,1,2)）会给出 padding:12px 14px +
+ * border-top:2px 深色线，`.data-table th, .data-table td`（(0,1,1)）再补一条
+ * 1px 下边框 —— 于是手机端每个合计格自己画两条横线、再撑出 12px 内边距，
+ * 合计行变成「一串横线夹着数字」，行高从 48px 被撑到 75px。
+ *
+ * 修法：把 td 层那几条从 `:where()` 里提出来提权（只提 td，
+ * `> tfoot` 与 `> tfoot > tr` 继续降权，开单页卡片模式的合计行才能覆盖）。
+ * 这里把「特异性必须够强」做成可计算的断言，避免下次又被包回 :where()。
+ */
+describe('手机端合计行通栏：不能降权到压不过基础规则', () => {
+  const css = readFileSync(join(SRC, 'styles/theme.css'), 'utf-8')
+
+  it('基础规则确实会给合计格加内边距 + 上下边框 —— 这正是必须提权的原因', () => {
+    const base = flatBlockOf(css, '.data-table tfoot td')
+    expect(base, '基础规则变了的话，本组用例的前提就不成立了').toContain('padding: 12px 14px')
+    expect(base).toContain('border-top: 2px solid')
+    expect(flatBlockOf(css, '.data-table th, .data-table td')).toContain('border-bottom: 1px solid')
+  })
+
+  it('手机端清掉合计格的内边距/边框/底色，且特异性高于基础规则', () => {
+    const sel = '.app-layout.is-mobile .data-table > tfoot > tr > td'
+    const body = blockOf(css, sel)
+    expect(body, `找不到提权后的合计格规则 ${sel}`).not.toBe('')
+    expect(body).toContain('padding: 0')
+    expect(body).toContain('border: none')
+    expect(body).toContain('background: none')
+    expect(
+      stronger(spec(sel), spec('.data-table tfoot td')),
+      '这条规则一旦被 :where() 包住，padding/border/background 会被基础规则反压，' +
+        '合计行又会变成「一串横线夹着数字」（实测行高 48px → 75px）'
+    ).toBe(true)
+  })
+
+  it('隐藏空占位格 / 备注格的规则同样提权（否则被上面的 display:inline-block 压过）', () => {
+    const rowSel = '.app-layout.is-mobile .data-table > tfoot > tr > td'
+    for (const [sel, why] of [
+      ['.app-layout.is-mobile .data-table > tfoot > tr > td:empty', '空占位格不隐藏会分走 flex 间隙、把金额挤偏'],
+      ['.app-layout.is-mobile .data-table > tfoot > tr > td.ui-hint', '备注格不隐藏会在手机窄屏上把数字顶出屏幕']
+    ] as const) {
+      expect(blockOf(css, sel), `${sel} 必须声明 display: none`).toContain('display: none')
+      expect(stronger(spec(sel), spec(rowSel)), `${sel} 特异性不够，会被上一条的 display:inline-block 压过：${why}`).toBe(true)
+    }
+  })
+
+  it('`> tfoot` 与 `> tfoot > tr` 仍保持 :where() 降权，开单页卡片合计行才能覆盖', () => {
+    expect(css).toContain(':where(.app-layout.is-mobile) :where(.data-table) > tfoot > tr {')
+    expect(
+      css,
+      'tr 一起提权会把开单页那张「白底 + 浅灰上边框」的卡片合计行洗成蓝底粗线'
+    ).not.toContain('.app-layout.is-mobile .data-table > tfoot > tr {')
+  })
+
+  it('说明格 / 备注格规则已在全局（原先「说明格不伸缩」「备注格隐藏」只写在「记一笔」页里）', () => {
+    expect(css).toContain(':where(.app-layout.is-mobile) :where(.data-table) > tfoot td[colspan]')
+    expect(css).toContain('.app-layout.is-mobile .data-table > tfoot > tr > td.ui-hint')
+  })
+})
+
+describe('合计行通栏只允许一份实现（页面里不许再各写一遍）', () => {
+  // 开单页（卡片模式）的合计行走 tr 层、且故意用「白底 + 浅灰上边框」，与本组无关。
+  const ALLOW = new Set([
+    'views/sales/SalesCreateView.vue',
+    'views/purchase/PurchaseCreateView.vue'
+  ])
+
+  it('除开单页外，没有任何页面重复声明手机端 tfoot 的布局（display:flex / margin-left:auto）', () => {
+    const bad: string[] = []
+    for (const f of allVueFiles(SRC)) {
+      if (ALLOW.has(relative(SRC, f))) continue
+      const code = stripComments(readFileSync(f, 'utf-8'))
+      for (const m of code.match(/\.data-table tfoot[^{}]*\{[^{}]*\}/g) ?? []) {
+        if (/display:\s*(flex|block)/.test(m) || /margin-left:\s*auto/.test(m)) {
+          bad.push(`${relative(ROOT, f)}：${m.replace(/\s+/g, ' ').slice(0, 80)}`)
+        }
+      }
+    }
+    expect(
+      bad,
+      '页面级的 scoped 副本特异性更高（(0,2,3)）会盖住全局规则，而它往往只管 display/width/margin、' +
+        '不管 padding/border/background —— 「只改了全局却不生效」就是这么来的。' +
+        '通栏规则请只写在 src/styles/theme.css 一处。'
+    ).toEqual([])
+  })
+})
 
 describe('首屏不能被云端设置阻塞', () => {
   const main = stripComments(readFileSync(join(SRC, 'main.ts'), 'utf-8'))

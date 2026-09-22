@@ -609,11 +609,8 @@ onMounted(async () => {
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 .tip-line { font-size: 12px; color: var(--c-muted); }
 
-/* 手机端：合计行通栏 */
-@media (max-width: 767px) {
-  .data-table tfoot { display: block; }
-  .data-table tfoot tr { display: flex; align-items: center; gap: 8px; width: 100%; }
-  .data-table tfoot td { display: inline-block; width: auto; }
-  .data-table tfoot td.num { font-weight: 700; margin-left: auto; }
-}
+/* 手机端合计行通栏：统一由 src/styles/theme.css 的 .app-layout.is-mobile 钩子提供。
+   页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
+   display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
+   详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
 </style>

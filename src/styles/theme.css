@@ -883,7 +883,7 @@ body {
     min-width: 640px;
   }
 
-  /* 手机端：合计行通栏。
+  /* 手机端：合计行通栏（全站唯一来源，页面里不要再各写一份 —— 见下方 ⚠️）。
      拆表之后 tfoot 不再是「表格的一行」，若不管它就会缩成一块窄条（实测 303px），
      与上面的表头/表体完全错位。这里把它显式做成「一整条横向 flex 条」：
      左侧合计说明、右侧数量与金额，宽度撑满，不再试图对齐列 ——
@@ -903,7 +903,18 @@ body {
     background: #f4f7fb;
     padding: 12px 14px;
   }
-  :where(.app-layout.is-mobile) :where(.data-table) > tfoot > tr > td {
+
+  /* ⚠️ 这一条**绝不能用 :where() 降权**（与上面 overflow-x 同一个坑，第二次踩）。
+     基础规则 `.data-table tfoot td`（第 13 节，特异性 (0,1,2)）会给出
+     padding:12px 14px + border-top:2px 深色线 + background；
+     `.data-table th, .data-table td`（(0,1,1)）再补一条 1px 下边框。
+     一旦本规则被降权成 0，桌面态那套在手机上就全部生效 —— 每个合计格自己
+     画一条 2px 上边框 + 1px 下边框、再撑出 12px 内边距，合计行就变成
+     「一串横线夹着数字」、行高从 ~44px 撑到 75px（实测，用户反馈「通栏显示还是有问题」）。
+     这里保留 (0,3,1) 的特异性，padding/border/background 才真正清得掉。
+     只提 td 层：`> tfoot` 与 `> tfoot > tr` 两条保持 :where()，开单页
+     （卡片模式）自己那套「白底 + 浅色上边框」的合计行才能继续覆盖。 */
+  .app-layout.is-mobile .data-table > tfoot > tr > td {
     display: inline-block;
     width: auto;
     padding: 0;
@@ -911,14 +922,23 @@ body {
     background: none;
     white-space: nowrap;
   }
+  /* 下面两条同样必须提权：它们要压过上面那条 (0,3,1) 的 display:inline-block。
+     合计里的空占位格（原来用来占住列位的 td）在通栏布局下没有意义，隐藏掉，
+     否则 flex 会给它们分走间隙、把金额挤偏。 */
+  .app-layout.is-mobile .data-table > tfoot > tr > td:empty {
+    display: none;
+  }
+  /* 备注类提示（如「共 N 笔」）在通栏布局里没意义，隐藏。 */
+  .app-layout.is-mobile .data-table > tfoot > tr > td.ui-hint {
+    display: none;
+  }
   :where(.app-layout.is-mobile) :where(.data-table) > tfoot td.num,
   :where(.app-layout.is-mobile) :where(.data-table) > tfoot td.t-amount {
     margin-left: auto;
   }
-  /* 合计里的空占位格（原来用来占住列位的 td）在通栏布局下没有意义，隐藏掉，
-     否则 flex 会给它们分走间隙、把金额挤偏。 */
-  :where(.app-layout.is-mobile) :where(.data-table) > tfoot td:empty {
-    display: none;
+  /* 说明格（colspan）不参与 flex 伸缩，避免被拉长后把数字挤走。 */
+  :where(.app-layout.is-mobile) :where(.data-table) > tfoot td[colspan] {
+    flex: none;
   }
   .app-layout.is-mobile .ui-page-main { display: none; }
   .app-layout.is-mobile .ui-page-head {

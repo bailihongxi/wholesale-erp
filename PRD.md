@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V3.0　|　**产品版本：V2.0-15（启动白屏 3 秒修复）**
+> 文档版本：V3.0　|　**产品版本：V2.0-16（手机端合计行通栏彻底修复）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-14'`，`package.json` → `version: "2.0.14"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-16'`，`package.json` → `version: "2.0.16"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2180,3 +2180,61 @@ tag `v2.0-12`，已部署 <https://bailihongxi.github.io/wholesale-erp/> 实机�
 「过期会话即使带快照也要判为过期」「老会话会自动升级成带快照格式」
 「经销商快照可就地恢复」。
 `npx vitest run` **627 例全绿（55 文件）**；`npm run build`（`vue-tsc -b`）0 错误。
+
+---
+
+## V2.0-16（2026-09-22）：手机端合计行通栏「治了一半」——12 个页面各留着一份会盖住全局的副本
+
+**现象**：V2.0-14 只修好了「选商品列表能左右滑」，合计行通栏在**入库验货 → 验货明细**等页面
+依然是坏的：每个合计格自己画一条 2px 深色横线 + 一条 1px 浅色横线，数字被推到线下，
+整行看起来是「一串横线夹着数字」，行高从 48px 被撑到 **75px**（390px 视口实测）。
+
+**两个根因叠在一起**
+
+1. **`:where()` 降权过头（与 V2.0-14 同一个坑的第二次）**：
+   全局那套合计行通栏规则全部包在 `:where()` 里（特异性 0），
+   而基础规则 `.data-table tfoot td`（第 13 节，特异性 **(0,1,2)**）会给出
+   `padding: 12px 14px` + `border-top: 2px solid var(--c-primary)` + `background`，
+   `.data-table th, .data-table td`（(0,1,1)）再补一条 `border-bottom: 1px` ——
+   于是通栏规则里的 `padding: 0 / border: none / background: none` 全部失守。
+2. **12 个页面各自留着一份重复副本**：V2.0-12 把「手机端合计行通栏」收进全局时，
+   只搬走了表头/表体的规则，**页面里那 12 份没删**。它们的 scoped 选择器特异性更高
+   （`.data-table tfoot td[data-v-x]` = (0,2,3)），却**只声明 display/width/margin**、
+   不管 padding/border/background —— 所以「改了全局也不生效」，看起来像修不好。
+
+**修法**
+
+- `src/styles/theme.css`：把合计行的 **td 层** 从 `:where()` 里提出来单独提权
+  （`.app-layout.is-mobile .data-table > tfoot > tr > td` = (0,3,1)），
+  真正清掉 `padding/border/background`；`td:empty`（隐藏空占位格）与
+  `td.ui-hint`（隐藏备注格）同步提权，否则会被上一条的 `display: inline-block` 压过。
+  **`> tfoot` 与 `> tfoot > tr` 继续用 `:where()` 降权** —— 开单页（卡片模式）那张
+  「白底 + 浅灰上边框」的合计行走在 tr 层，必须还能覆盖。
+- 顺带把原先只写在「记一笔」页里的 `td[colspan] { flex: none }`、`td.ui-hint { display: none }`
+  两条收进全局，其余 13 个页面才享受得到。
+- **删除 12 个页面里的重复副本**（入库验货 / 出库拣货 / 出入库单明细 / 盘点 / 调拨 / 退换货 /
+  报价单 ×2 / 财务中心 / 记一笔），各留一行指引注释，说明「通栏只写在 theme.css 一处」。
+
+**实测（390px 视口）**
+
+- 修复前后：合计行 `h=75px → h=48px`，单元格 `padding 12px 14px → 0`、
+  `border-top 2px → 0`、`border-bottom 1px → 0`，空占位格 `28px 可见 → display:none`。
+- **覆盖全站 14 种 tfoot 结构**逐一注入真实页面实测（含没有单据数据、打不开的页面）：
+  全部 `h=48 w=326`（= 容器宽 326/328），无一残留内边距/边框/背景。
+- 真实数据页面逐个复核并截图：入库验货、盘点作业、新建采购单（卡片模式）、预采询价、退换货。
+- 桌面端（1280px）逐属性复核：`is-mobile=false`、tfoot 仍是 `table-row`、单元格按列对齐，未受影响。
+
+**回归测试**（`tests/table-layout-and-perf.test.ts`，23 → 29 例）
+
+- 新增一组「手机端合计行通栏：不能降权到压不过基础规则」：自带**选择器特异性计算器**，
+  断言提权规则的特异性**严格高于**基础规则 `.data-table tfoot td`；
+  并断言 `td:empty` / `td.ui-hint` 的特异性也要高于提权后的行规则。
+- 新增一组「合计行通栏只允许一份实现」：扫描全部 `.vue`，禁止页面再声明
+  `.data-table tfoot` 的 `display: flex/block` 或 `margin-left: auto`
+  （开单页两处走 tr 层、故意保留，列白名单）。
+- 改写旧断言：原先「`display` 一律不许提权」过粗 —— 卡片模式怕的是**表格/表头/表体**
+  的 display 被提权，tfoot 的 td 提权与卡片模式无关；改为按层级精确约束。
+- **自检**：把修复改回 bug 形态 → 3 条新用例报红；把重复副本加回某个页面 →
+  第 4 条用例报红并指名文件。确认不是假绿。
+
+`npx vitest run` **633 例全绿（55 文件）**；`npm run build`（`vue-tsc -b`）0 错误。
