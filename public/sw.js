@@ -16,7 +16,26 @@
  *    断网时打不开、每次打开都要等网络。现在一律用请求自身的 URL 做键。
  */
 
-const CACHE_NAME = 'erp-v3';
+/**
+ * ⚠️ 缓存名必须带构建版本（V2.0-17 补的坑）。
+ *
+ * 浏览器判断「Service Worker 有没有更新」**只看 sw.js 这个文件本身的内容**。
+ * V2.0-12 定下 CACHE_NAME='erp-v3' 之后，V2.0-13/14/15/16 四轮发版都只改了源码、
+ * 没碰过这个文件 —— 于是浏览器认为 SW 从来没变过，**永远不触发 install/activate**，
+ * activate 里那句「删掉非当前版本的缓存」也就从来没跑过。
+ *
+ * 结果就是老用户被永久钉在 V2.0-12 的缓存上：
+ *   · 网络好（< NAV_TIMEOUT_MS）时拿到新页面，看起来是好的；
+ *   · 网络一慢，navigationResponse 回退到缓存里的**旧 index.html**，
+ *     旧 HTML 又引用旧的 index-xxxx.css（缓存里有），于是一直显示旧界面。
+ *   GitHub Pages 在国内经常超过 1.5s —— 「改好了但我手机上还是老样子」的根因就在这里。
+ *
+ * 现在缓存名由 scripts/inject-sw-version.mjs 在构建后把 __BUILD_VERSION__
+ * 换成 package.json 的版本号，每次发版文件内容必变 →
+ * 浏览器安装新 SW → activate 清掉全部旧缓存。
+ */
+const BUILD_VERSION = '__BUILD_VERSION__';
+const CACHE_NAME = 'erp-' + BUILD_VERSION;
 const NAV_TIMEOUT_MS = 1500;
 
 self.addEventListener('install', () => {
@@ -91,5 +110,14 @@ async function cacheFirst(req) {
 }
 
 function isCacheable(url) {
+  /**
+   * ⚠️ sw.js 自己**永远不缓存**（V2.0-17）。
+   *
+   * 它是 .js，会被下面那条后缀规则一起缓存进来 —— 于是「Service Worker 有没有
+   * 新版本」这件事本身就变得不可信了：检查更新时拿到的可能是自己缓存的那一份
+   * 旧脚本，越更新越旧。浏览器发出的 SW 更新请求本不该经过这里，但多这层防线
+   * 成本为零，能避免哪天踩到实现差异。
+   */
+  if (url.pathname.endsWith('/sw.js')) return false;
   return /\.(js|mjs|css|png|jpe?g|svg|ico|webp|woff2?|ttf)$/.test(url.pathname);
 }

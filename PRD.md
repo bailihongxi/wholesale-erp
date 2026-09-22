@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V3.0　|　**产品版本：V2.0-16（手机端合计行通栏彻底修复）**
+> 文档版本：V3.0　|　**产品版本：V2.0-17（Service Worker 缓存随版本更新）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-16'`，`package.json` → `version: "2.0.16"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-17'`，`package.json` → `version: "2.0.17"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2238,3 +2238,59 @@ tag `v2.0-12`，已部署 <https://bailihongxi.github.io/wholesale-erp/> 实机�
   第 4 条用例报红并指名文件。确认不是假绿。
 
 `npx vitest run` **633 例全绿（55 文件）**；`npm run build`（`vue-tsc -b`）0 错误。
+
+---
+
+## V2.0-17（2026-09-22）：Service Worker 把老用户钉在了旧版本上
+
+**现象**：V2.0-16 已把手机端合计行通栏修好、线上产物也逐字节核对过，用户仍然反馈
+「入库验货 → 验货明细 的通栏显示还是有问题」。
+
+**根因**：问题不在页面代码，而在**用户手机上跑的一直是旧版本**。
+
+浏览器判断「Service Worker 有没有更新」**只看 `sw.js` 这个文件自身的内容**。
+`sw.js` 最后一次修改停在 V2.0-12（提交 `b76b748`），当时把 `CACHE_NAME` 从 `erp-v2`
+改成 `erp-v3` —— 此后 V2.0-13/14/15/16 四轮发版**只改了源码，一次都没碰过这个文件**。
+于是浏览器认为 SW 从未更新：
+
+1. 永远不触发 `install` / `activate` → `activate` 里那句「删掉非当前版本的缓存」
+   从来没执行过 → 旧缓存 `erp-v3` 一直留着；
+2. `navigationResponse` 是「网络优先，超过 `NAV_TIMEOUT_MS`(1.5s) 回退缓存」。
+   GitHub Pages 在国内经常超过 1.5 秒 —— 一旦回退，返回的就是缓存里的**旧 index.html**，
+   旧 HTML 又引用旧的 `index-xxxx.css`（缓存里有、文件名带 hash 于是永远命中）
+   → **用户看到的始终是修复前的界面**。
+
+网络好时能拿到新页面、网络一慢就退回旧版，所以表现为「有时好有时不好」。
+
+**改动**
+
+| 文件 | 改动 |
+| --- | --- |
+| `public/sw.js` | `CACHE_NAME` 改为 `'erp-' + BUILD_VERSION`（构建期注入的占位符）；`isCacheable()` 排除 `sw.js` 自身（永不缓存自己的脚本） |
+| `scripts/inject-sw-version.mjs`（新增） | 构建后把 `dist/sw.js` 的 `__BUILD_VERSION__` 替换为 `package.json` 的版本号 |
+| `package.json` | `build` 链上注入步骤：`vue-tsc -b && vite build && node scripts/inject-sw-version.mjs` |
+| `src/utils/installApp.ts` | ① `register(..., { updateViaCache: 'none' })`；② 注册后**主动** `reg.update()`（浏览器自身的更新检查有节流，实测只靠 `register()` 时刷新后仍停在旧版本）；③ 新 SW 接管（`controllerchange`）后自动刷新一次，但**只在用户尚未交互时**，避免把正在录单的数据冲掉，并用 `sessionStorage` 标记防止无限刷新 |
+| `tests/sw-cache-version.test.ts`（新增） | 11 例：缓存名不得写死、必须由占位符派生、`activate` 必须清旧缓存、注入脚本存在且被 build 引用、必须主动 `update()`、自动刷新必须有「已交互不刷」与防循环保护 |
+
+**实测**
+
+- 本地 `http://localhost:4173` 起 dist 服务，浏览器里先造出**真实的旧缓存** `erp-v3`：
+  新 SW 装上后 `caches.keys()` 变成 `['erp-2.0.16']`，旧缓存被 `activate` 清掉。
+- **模拟一次发版**：浏览器侧已有 `erp-2.0.17` → 把服务器上 `dist/sw.js` 改成 `2.0.18`
+  → 重新打开应用 → `caches.keys()` 变成 `['erp-2.0.18']`。
+  即「发新版 → 用户下次打开自动切到新版」，全链路打通。
+- 注入校验：`dist/sw.js` → `const BUILD_VERSION = '2.0.17'`；`public/sw.js` 源码保留占位符。
+- **自检**：把 `sw.js` 改回硬编码 `'erp-v3'` → 新用例 2 条报红。
+
+**手机端显示全站巡检**（用户要求「不要跳过、不要删除」）
+
+- 手机端**所有列表页走卡片布局**（`.data-table` 数量为 0），表格只出现在开单页与库房作业页，
+  与「列表页转卡片」的既有设计一致。
+- 有表格的页面逐个**注入真实商品数据**后实测：
+  入库验货（`h=48 w=326`）、出库拣货、新建采购单（卡片模式 `h=45 w=340`）、
+  预采询价（`h=54 w=340`）、盘点作业、调拨作业、退换货 —— 合计行均无内边距/边框/背景外泄、
+  无空占位格残留、无横向溢出。
+- 桌面端（1280px）复核：`is-mobile=false`、tfoot 仍为 `table-row`。
+- 巡检脚本留在 `/tmp/audit-page.js`（表格 / 合计行 / 横向溢出三项体检）。
+
+`npx vitest run` **644 例全绿（56 文件）**；`npm run build`（`vue-tsc -b`）0 错误。

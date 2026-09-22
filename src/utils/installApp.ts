@@ -139,15 +139,67 @@ export function initInstall(): void {
 /**
  * 注册 Service Worker（断网也能打开的关键）。
  * 只在生产环境注册：开发时 vite 的 HMR 与缓存会互相打架。
+ *
+ * V2.0-17：缓存名改成随构建版本变化（见 public/sw.js 的说明）之后，
+ * 老用户被钉在旧缓存的问题已经解决；这里再补一层「新 SW 接管后自动刷新一次」，
+ * 让用户**打开就看到新版**，不用等下一次冷启动。
+ *
+ * ⚠️ 但绝不无条件刷新：用户可能正在录采购单/销售单，刷一下就把填好的数据冲没了。
+ * 所以只在「本次会话还没发生任何交互」时才刷 —— 冷启动那一刻用户还没来得及点，
+ * 刷新是安全的；已经在操作就交给下次打开，那也正是版本化缓存名兜住的部分。
  */
+const SW_RELOAD_KEY = 'erp_sw_reloaded_once'
+
 export function registerServiceWorker(isProd: boolean): void {
   if (!isProd) return
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
   if (typeof window !== 'undefined' && !/^https?:$/.test(window.location.protocol)) return
+
+  // 首次安装 Service Worker 时本来就没有 controller，装好后不该触发一次无谓的刷新
+  const hadController = !!navigator.serviceWorker.controller
+
+  let userInteracted = false
+  const markInteracted = () => { userInteracted = true }
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    window.addEventListener(ev, markInteracted, { once: true, passive: true })
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return
+    if (userInteracted) return
+    try {
+      if (sessionStorage.getItem(SW_RELOAD_KEY)) return
+      sessionStorage.setItem(SW_RELOAD_KEY, '1')
+    } catch {
+      // 隐私模式下拿不到 sessionStorage：宁可不刷，也不要冒「无限刷新」的险
+      return
+    }
+    window.location.reload()
+  })
+
   window.addEventListener('load', () => {
     const base = import.meta.env.BASE_URL || './'
-    navigator.serviceWorker.register(`${base}sw.js`).catch(() => {
-      // 注册失败不影响主流程（比如 file:// 打开、或浏览器禁用了 SW）
-    })
+    navigator.serviceWorker
+      /**
+       * updateViaCache: 'none' —— 更新检查连 HTTP 缓存都不走。
+       * 默认值 'imports' 理论上已让主脚本绕过 HTTP 缓存，但各家实现历来有差异，
+       * 显式关掉最保险：发一次新版，用户打开就该拿到。
+       */
+      .register(`${base}sw.js`, { updateViaCache: 'none' })
+      .then(reg => {
+        /**
+         * 注册完成后**主动**再查一次有没有新版本。
+         *
+         * 浏览器对 SW 的自动更新检查是**有节流**的：距上次检查没隔多久就会跳过。
+         * 实测（本地 http 服务 + 发一次新版）只靠 register() 时，刷新后缓存仍停在
+         * 上一个版本，直到显式调用 update() 才立刻切到新版本。对「发一次新版，
+         * 用户打开就该看到」这种预期来说，等浏览器自己想起来太被动了，这里直接催一下。
+         * sw.js 只有几 KB，代价可以忽略。
+         */
+        return reg.update().catch(() => undefined)
+      })
+      .catch(() => {
+        // 注册失败不影响主流程（比如 file:// 打开、或浏览器禁用了 SW）
+      })
   })
 }
