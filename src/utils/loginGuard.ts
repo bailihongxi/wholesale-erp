@@ -5,6 +5,8 @@
  * 而是防「共用电脑上有人坐在登录页反复猜密码」和「登录一次就永远在线」。
  */
 
+import type { User } from '../types'
+
 const FAIL_KEY = 'erp_login_fail'
 const SESSION_KEY = 'erp_session'
 /** 第十六轮及以前只存了这个 id，没有过期时间；保留以兼容老会话 */
@@ -91,10 +93,23 @@ export function remainText(ms: number): string {
 /** 会话主体：员工（users 表）还是经销商（customers 表，手机号登录） */
 export type SessionKind = 'staff' | 'dealer'
 
+/** 本地快照：登录时拿到的员工档案（去掉 password，绝不把哈希落库） */
+export type StaffProfile = Omit<User, 'password'> & { id: number }
+
+/** 本地快照：经销商档案（仅 restoreSession 重建 User 所需字段） */
+export interface DealerProfile {
+  id: number
+  name: string
+  loginPhone?: string
+  status: 'active' | 'disabled'
+}
+
 interface Session {
   id: number
   kind: SessionKind
   expiresAt: number
+  /** 本地快照：有它时 restoreSession 直接就地恢复，不再走云端（避免首屏 3 秒白屏） */
+  profile?: StaffProfile | DealerProfile
 }
 
 /**
@@ -102,9 +117,16 @@ interface Session {
  * ⚠️ 必须带 kind：改造前只存了一个裸 id，而员工与经销商是两张表，
  * 经销商的 id 一旦和某个员工的 id 撞上，刷新后就会**以那个员工的身份登录**。
  */
-export function saveSession(id: number, kind: SessionKind = 'staff'): void {
+export function saveSession(
+  id: number,
+  kind: SessionKind = 'staff',
+  profile?: StaffProfile | DealerProfile
+): void {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ id, kind, expiresAt: Date.now() + SESSION_MS }))
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ id, kind, expiresAt: Date.now() + SESSION_MS, profile })
+    )
     if (kind === 'staff') localStorage.setItem(LEGACY_KEY, String(id))
   } catch {
     /* 隐私模式写不进去也不该阻断本次登录 */
@@ -112,15 +134,24 @@ export function saveSession(id: number, kind: SessionKind = 'staff'): void {
 }
 
 /** 读会话；返回 expired=true 表示「有登录记录但已过期」 */
-export function readSession(): { id: number; kind: SessionKind; expired: boolean } | null {
+export function readSession(): {
+  id: number
+  kind: SessionKind
+  expired: boolean
+  profile?: StaffProfile | DealerProfile
+} | null {
   const raw = localStorage.getItem(SESSION_KEY)
   if (raw) {
     try {
       const s = JSON.parse(raw) as Session
       if (!s?.id) return null
       const kind: SessionKind = s.kind === 'dealer' ? 'dealer' : 'staff'
-      if (s.expiresAt && s.expiresAt > Date.now()) return { id: s.id, kind, expired: false }
-      return { id: s.id, kind, expired: true }
+      // ⚠️ profile 必须原样带出来：touchSession() 靠它续期，
+      // 漏掉的话续期会用 undefined 覆盖，把快照抹掉、又退化成每次启动都回源。
+      if (s.expiresAt && s.expiresAt > Date.now()) {
+        return { id: s.id, kind, expired: false, profile: s.profile }
+      }
+      return { id: s.id, kind, expired: true, profile: s.profile }
     } catch {
       return null
     }
@@ -140,7 +171,7 @@ export function readSession(): { id: number; kind: SessionKind; expired: boolean
 /** 把会话续期到「从现在起 7 天」（活跃使用不掉线） */
 export function touchSession(): void {
   const cur = readSession()
-  if (cur && !cur.expired) saveSession(cur.id, cur.kind)
+  if (cur && !cur.expired) saveSession(cur.id, cur.kind, cur.profile)
 }
 
 export function clearSession(): void {

@@ -5,8 +5,10 @@ import { hashPassword, verifyPassword, generateTempPassword, PASSWORD_MIN_LEN } 
 import { isValidPhone, isValidUsername, normalizeUsername } from '../utils/account'
 import {
   MAX_FAILS, checkLock, recordFail, clearFail, remainText,
-  saveSession, readSession, touchSession, clearSession, type LockState
+  saveSession, readSession, touchSession, clearSession, type LockState,
+  type StaffProfile, type DealerProfile
 } from '../utils/loginGuard'
+import { USE_CLOUD } from '../db/supabaseClient'
 import type { User, Role, Customer } from '../types'
 
 export interface LoginResult {
@@ -70,6 +72,38 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /** 员工档案 → 会话快照（剥掉 password，哈希绝不落 localStorage） */
+  function toStaffProfile(u: User): StaffProfile {
+    const { password, ...rest } = u
+    void password
+    return { ...rest, id: u.id ?? 0 }
+  }
+
+  /** 经销商档案 → 会话快照（只留 restoreSession 重建 User 所需的字段） */
+  function toDealerProfile(c: Customer): DealerProfile {
+    return { id: c.id ?? 0, name: c.name, loginPhone: c.loginPhone, status: c.status }
+  }
+
+  /**
+   * 后台非阻塞校验：云端若已把账号停用 / 删除，再静默登出。
+   * 绝不在启动关键路径上 await —— 否则又会回到「首屏白屏 3 秒」的老问题。
+   */
+  function validateSessionInBackground(session: { id: number; kind: 'staff' | 'dealer' }): void {
+    if (!USE_CLOUD) return // 本地模式：本地库即真相，无需云端校验
+    const run: Promise<{ status: string } | undefined> =
+      session.kind === 'dealer'
+        ? db.customers.get(session.id)
+        : db.users.get(session.id)
+    run.then((row) => {
+      if (!row || row.status !== 'active') {
+        clearSession()
+        currentUser.value = null
+      }
+    }).catch(() => {
+      /* 离线 / 超时：以本地快照为准，不登出 */
+    })
+  }
+
   /**
    * 登录：账号支持「登录名」或「手机号」两种写法。
    * 顺序 —— 查员工 → 查经销商；密码走哈希校验，老数据（明文）通过后自动升级。
@@ -102,7 +136,8 @@ export const useUserStore = defineStore('user', () => {
       }
       const fresh = { ...user, lastLoginAt: now }
       currentUser.value = fresh
-      if (user.id) saveSession(user.id, 'staff')
+      // 顺带存一份本地快照，下次启动直接就地恢复，不再等云端
+      if (user.id) saveSession(user.id, 'staff', toStaffProfile(fresh))
       sessionExpired.value = false
       db.warmUp() // 后台预拉常用表，不阻塞登录
       return { ok: true, message: '登录成功' }
@@ -117,7 +152,8 @@ export const useUserStore = defineStore('user', () => {
       }
       clearFail(lockKey)
       currentUser.value = dealerAsUser(dealer)
-      if (dealer.id) saveSession(dealer.id, 'dealer')
+      // 顺带存一份本地快照，下次启动直接就地恢复，不再等云端
+      if (dealer.id) saveSession(dealer.id, 'dealer', toDealerProfile(dealer))
       sessionExpired.value = false
       db.warmUp()
       return { ok: true, message: '登录成功' }
@@ -151,6 +187,36 @@ export const useUserStore = defineStore('user', () => {
       return
     }
 
+    // 有本地快照：直接就地恢复，绝不再走云端。
+    // 云端在（新加坡），一轮往返 1~3 秒，之前把这层 await 挂在启动导航上，
+    // 结果就是「每次启动都先白屏 3 秒才跳登录页 / 工作台」。
+    if (session.profile) {
+      if (session.kind === 'dealer') {
+        const p = session.profile as DealerProfile
+        currentUser.value = {
+          id: p.id,
+          username: '',
+          employeeNo: '',
+          name: p.name,
+          phone: p.loginPhone ?? '',
+          password: '',
+          role: 'dealer',
+          status: p.status,
+          createdAt: ''
+        }
+      } else {
+        const p = session.profile as StaffProfile
+        currentUser.value = { ...p, id: p.id, password: '' }
+      }
+      touchSession()
+      db.warmUp()
+      // 后台非阻塞校验：云端若已停用 / 删除该账号，再静默登出（不阻塞首屏）
+      validateSessionInBackground({ id: session.id, kind: session.kind })
+      return
+    }
+
+    // 老会话（本版本升级前写入，无快照）：保留一次云端回源，并顺手升级成带快照格式，
+    // 之后每次启动都走上面的「本地快照」分支，不再有 3 秒白屏。
     if (session.kind === 'dealer') {
       const dealer = await db.customers.get(session.id)
       if (!dealer || dealer.status !== 'active') {
@@ -159,6 +225,7 @@ export const useUserStore = defineStore('user', () => {
         return
       }
       currentUser.value = dealerAsUser(dealer)
+      saveSession(dealer.id!, 'dealer', toDealerProfile(dealer)) // 升级为带快照格式
       touchSession()
       db.warmUp()
       return
@@ -171,6 +238,7 @@ export const useUserStore = defineStore('user', () => {
       return
     }
     currentUser.value = user
+    saveSession(user.id!, 'staff', toStaffProfile(user)) // 升级为带快照格式
     touchSession()
     db.warmUp()
   }
