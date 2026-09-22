@@ -742,8 +742,10 @@ body {
   background: #f4f7fb;
   font-weight: 700;
   color: var(--c-primary);
+  font-size: 15px;
 }
 .data-table tfoot td.num { text-align: right; }
+.data-table tfoot td.total-label { font-size: 16px; font-weight: 700; }
 
 /* 卡片列表（手机端）斑马交替。
    与表格斑马纹用同一档颜色（#eef2f9）—— 之前用 --c-surface-alt(#fafbfd)

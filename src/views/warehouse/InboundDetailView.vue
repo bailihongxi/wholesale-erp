@@ -85,8 +85,8 @@
             <tr>
               <td colspan="3" class="total-label">合计</td>
               <td class="num">{{ orderedTotal }}</td>
-              <td class="num">{{ receivedTotal }}</td>
-              <td class="num">{{ remainTotal }}</td>
+              <td class="num stock-ok">{{ receivedTotal }}</td>
+              <td class="num stock-low">{{ remainTotal }}</td>
               <td class="num">{{ thisTotal }}</td>
               <td></td>
             </tr>
