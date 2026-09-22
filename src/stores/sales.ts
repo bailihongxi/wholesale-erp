@@ -108,22 +108,21 @@ export const useSalesStore = defineStore('sales', () => {
   // ===== 库房出库（拣货发货） =====
   async function outbound(orderId: number, actualQuantities: Record<number, number>, operatorId: number, remark?: string, locationId?: number): Promise<{ ok: boolean; message: string; batchNo?: string }> {
     const inv = useInventoryStore()
-    const order = await db.saleOrders.get(orderId)
+    const [order, locId] = await Promise.all([
+      db.saleOrders.get(orderId),
+      inv.resolveLocationId(locationId),
+    ])
     if (!order) return { ok: false, message: '销售单不存在' }
     if (order.status === 'completed') return { ok: false, message: '该单已完成出库' }
-
-    // 出库库房：页面上选定，未传则落到默认库房
-    const locId = await inv.resolveLocationId(locationId)
     const loc = await db.locations.get(locId)
     if (!loc) return { ok: false, message: '出库库房不存在，请重新选择' }
 
     const items = await db.saleOrderItems.where('saleOrderId').equals(orderId).toArray()
-
-    // 出库前按「所选库房」的现有库存校验：该库房不够就整单拒绝，
-    // 避免把别处库房的货算进来（总库存够但本库房不够的情况）。
-    // 先做一次分布自愈，兼容「只写过总库存、没有库房分布」的老数据。
-    await inv.reconcileProducts(items.map(i => i.productId))
+    const productIds = items.map(i => i.productId)
+    await inv.reconcileProducts(productIds)
     const locStock = await inv.locationStockMap(locId)
+
+    // 库存校验
     for (const item of items) {
       const actual = actualQuantities[item.productId] ?? item.quantity
       if (actual <= 0) continue
@@ -136,46 +135,50 @@ export const useSalesStore = defineStore('sales', () => {
     }
 
     let allShipped = true
-    // 每次发货生成一张独立出库单（CK…），部分发货时多次出库各成一单，均关联本销售单
     const batchNo = genStockDocNo('CK')
+    const now = new Date().toISOString()
+
+    // 一次性查历史流水和库存
+    const [allRecords, allStocks, allLocStocks] = await Promise.all([
+      db.stockRecords.where('refOrderId').equals(orderId).toArray(),
+      productIds.length ? db.stock.where('productId').anyOf(productIds).toArray() : [],
+      productIds.length ? db.locationStock.where('productId').anyOf(productIds).toArray() : [],
+    ])
+    const stockMap = new Map(allStocks.map(s => [s.productId, s]))
+    const locStockMap = new Map(allLocStocks.filter(r => r.locationId === locId).map(r => [r.productId, r]))
+    const priorMap: Record<number, number> = {}
+    for (const r of allRecords.filter(x => x.type === 'sale_out')) {
+      priorMap[r.productId] = (priorMap[r.productId] ?? 0) + Math.abs(r.quantity)
+    }
+
+    const stockToUpdate: any[] = []
+    const locStockToUpdate: any[] = []
+    const recordsToAdd: any[] = []
 
     for (const item of items) {
       const actual = actualQuantities[item.productId] ?? item.quantity
-      // 累加本次之前已发的数量，支持「分次出库」：
-      // 多次发货累计达到订单数量才判定为完成（流水里出库记为负数，取绝对值累加）。
-      const prior = await db.stockRecords
-        .where('refOrderId').equals(orderId)
-        .filter(r => r.type === 'sale_out' && r.productId === item.productId)
-        .toArray()
-      const shippedBefore = prior.reduce((s, r) => s + Math.abs(r.quantity), 0)
+      const shippedBefore = priorMap[item.productId] ?? 0
       if (shippedBefore + actual < item.quantity) allShipped = false
       if (actual > 0) {
-        // 扣减库存
-        const stock = await db.stock.where('productId').equals(item.productId).first()
-        if (stock) {
-          await db.stock.update(stock.id!, {
-            quantity: stock.quantity - actual,
-            updatedAt: new Date().toISOString()
-          })
-        }
-        // 同时维护所选库房的库存分布（出库一律从用户选定的库房出）
-        await inv.applyLocationDelta(item.productId, locId, -actual)
-        // 记流水（出库记负数）；赠品行备注附加「赠品」标记
-        await db.stockRecords.add({
-          type: 'sale_out',
-          refOrderId: orderId,
-          productId: item.productId,
-          quantity: -actual,
-          operatorId,
-          createdAt: new Date().toISOString(),
-          batchNo,
-          locationId: locId,
-          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark
+        const s = stockMap.get(item.productId)
+        if (s) stockToUpdate.push({ id: s.id!, quantity: s.quantity - actual, updatedAt: now })
+        const ls = locStockMap.get(item.productId)
+        if (ls) locStockToUpdate.push({ id: ls.id!, quantity: ls.quantity - actual })
+        recordsToAdd.push({
+          type: 'sale_out', refOrderId: orderId, productId: item.productId,
+          quantity: -actual, operatorId, createdAt: now, batchNo, locationId: locId,
+          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark,
         })
       }
     }
 
-    await db.saleOrders.update(orderId, { status: allShipped ? 'completed' : 'partial' })
+    await Promise.all([
+      ...stockToUpdate.map(u => db.stock.update(u.id, { quantity: u.quantity, updatedAt: u.updatedAt })),
+      ...locStockToUpdate.map(u => db.locationStock.update(u.id, { quantity: u.quantity })),
+      recordsToAdd.length ? db.stockRecords.bulkAdd(recordsToAdd) : Promise.resolve(),
+      db.saleOrders.update(orderId, { status: allShipped ? 'completed' : 'partial' }),
+    ])
+
     await writeLog(
       operatorId,
       AUDIT_ACTIONS.SALE_OUTBOUND,

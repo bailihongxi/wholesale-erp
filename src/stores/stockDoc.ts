@@ -200,9 +200,13 @@ export const useStockDocStore = defineStore('stockDoc', () => {
       }
     }
 
+    const productIds = [...new Set(records.map(r => r.productId))]
+    const allProducts = await db.products.where('id').anyOf(productIds).toArray()
+    const productMap = new Map(allProducts.map(p => [p.id, p]))
+
     const items: StockDocItem[] = []
     for (const r of records) {
-      const p = await db.products.get(r.productId)
+      const p = productMap.get(r.productId)
       const info = priceMap.get(String(r.productId))
       const qty = absQty(r)
       const price = info?.price ?? 0
@@ -220,7 +224,9 @@ export const useStockDocStore = defineStore('stockDoc', () => {
       })
     }
 
-    const users = await db.users.toArray()
+    const [users] = await Promise.all([
+      db.users.toArray(),
+    ])
     const totalQty = items.reduce((s, i) => s + i.quantity, 0)
     const amount = items.reduce((s, i) => s + i.subtotal, 0)
 
