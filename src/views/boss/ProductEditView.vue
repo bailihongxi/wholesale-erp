@@ -144,7 +144,7 @@ function goBack(): void {
   router.push('/boss/products')
 }
 
-onMounted(async () => {
+async function initForm() {
   // 加载已有分类供下拉选择
   const { db } = await import('../../db')
   const all: any[] = await db.products.toArray()
@@ -178,7 +178,11 @@ onMounted(async () => {
     manual.wholesale = false
     manual.retail = false
   }
-})
+}
+
+onMounted(() => { initForm() })
+// 路由切换时重新初始化（从编辑页切到新增页时组件复用）
+watch(() => route.params.id, () => { initForm() })
 
 async function handleSave(): Promise<void> {
   if (!form.brand || !form.model) {
