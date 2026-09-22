@@ -26,74 +26,37 @@
     <section class="block">
       <h4 class="block-title">商品明细（{{ items.length }}）</h4>
 
-      <!-- 手机端：卡片式，数量 × 单价 = 金额 一行读清 -->
-      <template v-if="isMobile">
-        <ul class="mc-list">
-          <li v-for="(it, i) in items" :key="i" class="mc-item">
-            <div class="mc-top">
-              <span class="mc-name">{{ nameOf(it.productId) }}</span>
-              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-            </div>
-            <div class="mc-calc">
-              <span class="mc-qty">{{ it.quantity }} {{ unitOf(it.productId) }}</span>
-              <template v-if="canSeeAnyPrice">
-                <template v-if="it.isGift">
-                  <span class="mc-gift">赠品不计价</span>
-                </template>
-                <template v-else>
-                  <span class="mc-op">×</span>
-                  <span>¥{{ money(it.price) }}</span>
-                  <span class="mc-op">=</span>
-                  <b class="mc-amount">¥{{ money(it.subtotal) }}</b>
-                </template>
+      <!-- 卡片式明细：数量 × 单价 = 金额 一行读清。
+           手机 / 电脑共用同一套 DOM，只在 CSS 里按宽度调整排布（电脑多列铺开）。 -->
+      <ul class="mc-list">
+        <li v-for="(it, i) in items" :key="i" class="mc-item">
+          <div class="mc-top">
+            <span class="mc-idx">{{ i + 1 }}</span>
+            <span class="mc-name">{{ nameOf(it.productId) }}</span>
+            <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+          </div>
+          <div class="mc-calc">
+            <span class="mc-qty">{{ it.quantity }} {{ unitOf(it.productId) }}</span>
+            <template v-if="canSeeAnyPrice">
+              <template v-if="it.isGift">
+                <span class="mc-gift">赠品不计价</span>
               </template>
-            </div>
-          </li>
-          <li v-if="!items.length" class="empty">暂无明细</li>
-        </ul>
-        <div v-if="items.length" class="mc-total">
-          <span>合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span></span>
-          <span class="mt-qty">{{ totalQty }} 件</span>
-          <b v-if="canSeeAnyPrice" class="mt-amount">¥{{ money(order?.totalAmount ?? 0) }}</b>
-        </div>
-      </template>
-
-      <table v-else class="item-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>商品名称</th>
-            <th>单位</th>
-            <th class="num">数量</th>
-            <th v-if="canSeeAnyPrice" class="num">单价</th>
-            <th v-if="canSeeAnyPrice" class="num">金额</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(it, i) in items" :key="i">
-            <td>{{ i + 1 }}</td>
-            <td>
-              {{ nameOf(it.productId) }}
-              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-            </td>
-            <td>{{ unitOf(it.productId) }}</td>
-            <td class="num">{{ it.quantity }}</td>
-            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '—' : '¥' + money(it.price) }}</td>
-            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</td>
-          </tr>
-          <tr v-if="!items.length"><td :colspan="colspan" class="empty">暂无明细</td></tr>
-        </tbody>
-        <tfoot v-if="items.length">
-          <tr>
-            <td colspan="3" class="total-label">
-              合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span>
-            </td>
-            <td class="num">{{ totalQty }}</td>
-            <td v-if="canSeeAnyPrice" class="num"></td>
-            <td v-if="canSeeAnyPrice" class="num"><b>¥{{ money(order?.totalAmount ?? 0) }}</b></td>
-          </tr>
-        </tfoot>
-      </table>
+              <template v-else>
+                <span class="mc-op">×</span>
+                <span class="mc-price">¥{{ money(it.price) }}</span>
+                <span class="mc-op">=</span>
+                <b class="mc-amount">¥{{ money(it.subtotal) }}</b>
+              </template>
+            </template>
+          </div>
+        </li>
+        <li v-if="!items.length" class="empty">暂无明细</li>
+      </ul>
+      <div v-if="items.length" class="mc-total">
+        <span>合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span></span>
+        <span class="mt-qty">{{ totalQty }} 件</span>
+        <b v-if="canSeeAnyPrice" class="mt-amount">¥{{ money(order?.totalAmount ?? 0) }}</b>
+      </div>
     </section>
 
     <!-- 出库进度 -->
@@ -112,58 +75,30 @@
     <!-- 出库流水（历史痕迹） -->
     <section class="block">
       <h4 class="block-title">出库流水（{{ outboundRecords.length }}）</h4>
-      <template v-if="isMobile">
-        <ul v-if="outboundRecords.length" class="rc-list">
-          <li v-for="r in outboundRecords" :key="r.id" class="rc-item">
-            <div class="rc-top">
-              <span class="rc-name">{{ nameOf(r.productId) }}</span>
-              <span class="rc-qty">{{ Math.abs(r.quantity) }} {{ unitOf(r.productId) }}</span>
-            </div>
-            <div class="rc-sub">{{ fmtTime(r.createdAt) }} · {{ operatorName(r.operatorId) }}</div>
-          </li>
-        </ul>
-        <div v-else class="empty">尚未出库</div>
-      </template>
-      <table v-else-if="outboundRecords.length" class="item-table">
-        <thead><tr><th>时间</th><th>商品名称</th><th class="num">数量</th><th>操作人</th></tr></thead>
-        <tbody>
-          <tr v-for="r in outboundRecords" :key="r.id">
-            <td>{{ fmtTime(r.createdAt) }}</td>
-            <td>{{ nameOf(r.productId) }}</td>
-            <td class="num">{{ Math.abs(r.quantity) }}</td>
-            <td>{{ operatorName(r.operatorId) }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <ul v-if="outboundRecords.length" class="rc-list">
+        <li v-for="r in outboundRecords" :key="r.id" class="rc-item">
+          <div class="rc-top">
+            <span class="rc-name">{{ nameOf(r.productId) }}</span>
+            <span class="rc-qty">{{ Math.abs(r.quantity) }} {{ unitOf(r.productId) }}</span>
+          </div>
+          <div class="rc-sub">{{ fmtTime(r.createdAt) }} · {{ operatorName(r.operatorId) }}</div>
+        </li>
+      </ul>
       <div v-else class="empty">尚未出库</div>
     </section>
 
     <!-- 收款记录 -->
     <section class="block">
       <h4 class="block-title">收款记录（{{ payments.length }}）</h4>
-      <template v-if="isMobile">
-        <ul v-if="payments.length" class="rc-list">
-          <li v-for="p in payments" :key="p.id" class="rc-item">
-            <div class="rc-top">
-              <span class="rc-name">{{ fmtDate(p.payDate) }}</span>
-              <span class="rc-amount">¥{{ money(p.amount) }}</span>
-            </div>
-            <div class="rc-sub">{{ operatorName(p.operatorId) }}<template v-if="p.remark"> · {{ p.remark }}</template></div>
-          </li>
-        </ul>
-        <div v-else class="empty">尚未登记收款</div>
-      </template>
-      <table v-else-if="payments.length" class="item-table">
-        <thead><tr><th>日期</th><th class="num">金额</th><th>操作人</th><th>备注</th></tr></thead>
-        <tbody>
-          <tr v-for="p in payments" :key="p.id">
-            <td>{{ fmtDate(p.payDate) }}</td>
-            <td class="num">¥{{ money(p.amount) }}</td>
-            <td>{{ operatorName(p.operatorId) }}</td>
-            <td>{{ p.remark || '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <ul v-if="payments.length" class="rc-list">
+        <li v-for="p in payments" :key="p.id" class="rc-item">
+          <div class="rc-top">
+            <span class="rc-name">{{ fmtDate(p.payDate) }}</span>
+            <span class="rc-amount">¥{{ money(p.amount) }}</span>
+          </div>
+          <div class="rc-sub">{{ operatorName(p.operatorId) }}<template v-if="p.remark"> · {{ p.remark }}</template></div>
+        </li>
+      </ul>
       <div v-else class="empty">尚未登记收款</div>
     </section>
 
@@ -175,9 +110,17 @@
         <div class="d-head">
           <h3 class="d-no">修改销售单</h3>
         </div>
-        <div class="d-meta">
-          <div><i>备注</i></div>
-          <div><input v-model="editRemark" class="edit-remark-input" placeholder="选填" /></div>
+        <div class="d-meta remark-row">
+          <div class="rm-label"><i>备注</i></div>
+          <div class="rm-input">
+            <textarea
+              v-model="editRemark"
+              class="edit-remark-input"
+              rows="2"
+              placeholder="选填"
+              @input="onRemarkInput"
+            ></textarea>
+          </div>
         </div>
       </section>
 
@@ -185,66 +128,35 @@
       <section class="block">
         <h4 class="block-title"><span class="bar"></span>商品明细（{{ editItems.length }}）</h4>
 
-        <!-- 手机端：卡片式，输入框带「数量 / 单价」标签，避免横向挤压与误填 -->
-        <template v-if="isMobile">
-          <ul class="ec-list">
-            <li v-for="(it, i) in editItems" :key="i" class="ec-item">
-              <div class="ec-top">
-                <span class="ec-name">{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</span>
-                <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-                <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
-              </div>
-              <div class="ec-row">
-                <label class="ec-field">
-                  <i>数量</i>
-                  <input v-model.number="it.quantity" type="number" min="1" inputmode="numeric" class="ec-input" />
-                  <em>{{ unitOf(it.productId) }}</em>
-                </label>
-                <label class="ec-field">
-                  <i>单价</i>
-                  <input v-model.number="it.price" type="number" min="0" inputmode="decimal" class="ec-input" />
-                </label>
-              </div>
-            </li>
-            <li v-if="!editItems.length" class="empty">暂无明细</li>
-          </ul>
-          <div v-if="editItems.length" class="mc-total">
-            <span>合计</span>
-            <span class="mt-qty">{{ editItems.reduce((s, it) => s + (it.quantity || 0), 0) }} 件</span>
-            <b class="mt-amount">¥{{ money(editItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)) }}</b>
-          </div>
-        </template>
-
-        <table v-else class="item-table">
-          <thead>
-            <tr>
-              <th style="width:48px">#</th>
-              <th style="width:35%">商品名称</th>
-              <th style="width:10%" class="center">单位</th>
-              <th style="width:15%" class="num">数量</th>
-              <th style="width:20%" class="num">单价</th>
-              <th style="width:20%" class="num">金额</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(it, i) in editItems" :key="i">
-              <td>{{ i + 1 }}</td>
-              <td>{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</td>
-              <td class="center">{{ unitOf(it.productId) }}</td>
-              <td class="num"><input v-model.number="it.quantity" type="number" min="1" class="mini-input" /></td>
-              <td class="num"><input v-model.number="it.price" type="number" min="0" class="mini-input" /></td>
-              <td class="num">¥{{ money((it.quantity||0) * (it.price||0)) }}</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="total-label">合计</td>
-              <td class="num">{{ editItems.reduce((s, it) => s + (it.quantity||0), 0) }}</td>
-              <td></td>
-              <td class="num">¥{{ money(editItems.reduce((s, it) => s + (it.quantity||0) * (it.price||0), 0)) }}</td>
-            </tr>
-          </tfoot>
-        </table>
+        <!-- 卡片式编辑：输入框带「数量 / 单价」标签，避免横向挤压与误填。
+             手机 / 电脑共用同一套 DOM，电脑端多列铺开。 -->
+        <ul class="ec-list">
+          <li v-for="(it, i) in editItems" :key="i" class="ec-item">
+            <div class="ec-top">
+              <span class="ec-idx">{{ i + 1 }}</span>
+              <span class="ec-name">{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</span>
+              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+              <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
+            </div>
+            <div class="ec-row">
+              <label class="ec-field">
+                <i>数量</i>
+                <input v-model.number="it.quantity" type="number" min="1" inputmode="numeric" class="ec-input" />
+                <em>{{ unitOf(it.productId) }}</em>
+              </label>
+              <label class="ec-field">
+                <i>单价</i>
+                <input v-model.number="it.price" type="number" min="0" inputmode="decimal" class="ec-input" />
+              </label>
+            </div>
+          </li>
+          <li v-if="!editItems.length" class="empty">暂无明细</li>
+        </ul>
+        <div v-if="editItems.length" class="mc-total">
+          <span>合计</span>
+          <span class="mt-qty">{{ editItems.reduce((s, it) => s + (it.quantity || 0), 0) }} 件</span>
+          <b class="mt-amount">¥{{ money(editItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)) }}</b>
+        </div>
       </section>
      </div>
 
@@ -269,11 +181,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
-import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
 import { db } from '../../db'
 import { getCompanyName, type PrintOrderData } from '../../utils/printTemplate'
@@ -284,7 +195,6 @@ import type { SaleOrder, SaleOrderItem, Customer, Payment, Product, StockRecord 
 const route = useRoute()
 const router = useRouter()
 const salesStore = useSalesStore()
-const { isMobile } = useResponsive()
 const { canSeeAnyPrice } = usePermission()
 
 const order = ref<SaleOrder | null>(null)
@@ -304,7 +214,17 @@ const saving = ref(false)
 const editRemark = ref('')
 const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean; note?: string }>>([])
 
-function startEdit(): void {
+/** 备注框随内容自增高度：文字超过两行时不再挤在固定高度里滚动 */
+function autoGrowRemark(el: HTMLTextAreaElement | null): void {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 56)}px`
+}
+function onRemarkInput(e: Event): void {
+  autoGrowRemark(e.target as HTMLTextAreaElement)
+}
+
+async function startEdit(): Promise<void> {
   editItems.value = items.value.map(it => ({
     productId: it.productId,
     quantity: it.quantity,
@@ -314,6 +234,14 @@ function startEdit(): void {
   }))
   editRemark.value = order.value?.remark || ''
   showEdit.value = true
+  // 电脑端编辑区是详情页下方内联的一块，点「修改」后视口还停在页面顶部，
+  // 看起来像「点了没反应」——自动滚到编辑区。手机端编辑页是整屏 fixed，滚动无副作用。
+  await nextTick()
+  // 已有备注可能很长，进入编辑态先按内容把框撑开
+  autoGrowRemark(document.querySelector<HTMLTextAreaElement>('.edit-remark-input'))
+  if (window.innerWidth >= 768) {
+    document.querySelector('.edit-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 }
 
 async function saveEdit(): Promise<void> {
@@ -337,7 +265,6 @@ async function saveEdit(): Promise<void> {
   }
 }
 
-const colspan = computed(() => (canSeeAnyPrice.value ? 6 : 4))
 const totalQty = computed(() => items.value.filter(it => !it.isGift).reduce((s, it) => s + it.quantity, 0))
 const giftQty = computed(() => items.value.filter(it => it.isGift).reduce((s, it) => s + it.quantity, 0))
 
@@ -468,8 +395,9 @@ watch(() => route.params.id, loadOrder)
 .item-table .num { text-align: right; }
 .item-table tfoot td { border-bottom: none; font-weight: 600; }
 .total-label { text-align: right !important; }
-/* ── 手机端卡片列表：商品明细 / 出库流水 / 收款记录 / 编辑明细 ──────────
-   只在 isMobile 时渲染这套 DOM，桌面端表格结构完全不受影响。 */
+/* ── 卡片列表：商品明细 / 出库流水 / 收款记录 / 编辑明细 ──────────────
+   手机与电脑共用这一套 DOM（不再按设备分岔出表格），
+   手机端单列、电脑端在 min-width:768px 里改成多列网格。 */
 .mc-list, .ec-list, .rc-list { list-style: none; margin: 0; padding: 0; }
 .mc-item, .ec-item, .rc-item {
   padding: 10px 12px; margin-bottom: 8px;
@@ -481,8 +409,14 @@ watch(() => route.params.id, loadOrder)
   flex: 1; min-width: 0; font-size: 15px; font-weight: 600;
   color: var(--c-primary); overflow-wrap: anywhere;
 }
+/* 序号：电脑端多列铺开后用来对应行次，手机端单列天然有序故隐藏 */
+.mc-idx, .ec-idx {
+  flex: none; min-width: 18px; font-size: 12px; color: var(--c-muted);
+  font-variant-numeric: tabular-nums;
+}
 .mc-calc { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--c-muted); }
 .mc-qty { font-weight: 600; color: var(--c-primary); }
+.mc-price { font-variant-numeric: tabular-nums; }
 .mc-op { color: var(--c-border-strong); }
 .mc-amount { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--c-primary); }
 .mc-gift { color: var(--c-accent); }
@@ -524,13 +458,41 @@ watch(() => route.params.id, loadOrder)
 .p-num { width: 90px; text-align: right; color: var(--c-muted, #64748b); }
 .empty { text-align: center; color: var(--c-muted, #64748b); padding: 18px; }
 
+/* ── 电脑端（≥768px）：与手机端共用同一套卡片 DOM，改为多列网格铺开 ──────
+   屏幕宽了就把卡片排成多列，信息密度不输原来的表格，同时保留
+   「数量 × 单价 = 金额」一行读清的优点。不要再为电脑端单独维护一套表格。 */
+@media (min-width: 768px) {
+  /* 电脑端宽度够：商品明细单列铺满整行，卡片内容排成一行
+     （序号 + 商品名 …… 数量 × 单价 = 金额），不再像手机端那样拆上下两行。
+     流水 / 收款这类内容短的列表仍用多列网格提高密度。 */
+  .mc-item {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 8px;
+  }
+  .mc-item:last-child { margin-bottom: 0; }
+  .mc-item:hover { border-color: var(--c-accent); }
+  .mc-item .mc-top { flex: 1; min-width: 0; }
+  .mc-item .mc-calc { margin-top: 0; margin-left: auto; flex: none; }
+  .ec-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+  .rc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .ec-item, .rc-item { margin-bottom: 0; }
+  .rc-item:hover { border-color: var(--c-accent); }
+  .mc-total {
+    margin-top: 12px; padding: 12px 14px;
+    background: var(--c-bg, #f8fafc); border: 1px solid var(--c-border);
+    border-radius: 10px;
+  }
+  .mc-total .mt-amount { font-size: 19px; }
+}
+
 @media (max-width: 767px) {
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
+  .mc-idx, .ec-idx { display: none; }
 
-  /* 商品明细 / 出库流水 / 收款记录在手机端直接走上面的卡片 DOM，
-     表格只在桌面端渲染。若将来有表格漏加 isMobile 分支，这里兜底为
-     横向滚动，绝不撑破屏幕（V2.0-18 起的方案）。 */
+  /* 本页已无 <table>：商品明细 / 出库流水 / 收款记录 / 编辑明细全部走上面的卡片 DOM。
+     这里保留一条兜底 —— 若将来又引入表格，手机端只做横向滚动，绝不撑破屏幕
+     （V2.0-18 起的方案）。 */
   .item-table { display: block; overflow-x: auto; }
 }
 
@@ -545,9 +507,20 @@ watch(() => route.params.id, loadOrder)
 .edit-page .block-title { font-size: 15px; color: var(--c-primary, #1a365d); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
 .edit-page .block-title .bar { width: 3px; height: 16px; background: var(--c-accent, #2563eb); border-radius: 2px; }
 .edit-page .d-no { font-size: 18px; color: var(--c-primary, #1a365d); margin: 0; }
-.edit-page .d-meta { margin-top: 12px; font-size: 13px; display: grid; grid-template-columns: 62px 1fr; gap: 8px; align-items: center; }
-.edit-page .d-meta i { display: inline-block; color: var(--c-muted, #64748b); font-style: normal; }
-.edit-remark-input { height: 38px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 8px; padding: 0 12px; font-size: 14px; width: 100%; outline: none; }
+.edit-page .d-meta { margin-top: 12px; font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: start; }
+/* 全局 `.d-meta i` 给了 62px 固定宽（详情页那几行靠它对齐），编辑页只有「备注」两字，
+   沿用会白白空出 36px —— 这里收回成按文字宽度。 */
+.edit-page .d-meta i { display: inline-block; width: auto; color: var(--c-muted, #64748b); font-style: normal; }
+/* 备注：标签贴着输入框（原来 62px 固定列宽留了太多空白），
+   输入框改 textarea 并随内容自增高度（脚本里 autoGrowRemark 撑开）。 */
+.edit-page .rm-label { padding-top: 9px; line-height: 1.15; }
+.edit-remark-input {
+  display: block; width: 100%; min-height: 56px; max-height: 240px;
+  border: 1px solid var(--c-border, #e2e8f0); border-radius: 8px;
+  padding: 8px 12px; font-size: 14px; line-height: 1.5;
+  font-family: inherit; color: var(--c-primary, #1a365d);
+  resize: none; overflow-y: auto; outline: none;
+}
 .edit-remark-input:focus { border-color: var(--c-accent, #2563eb); }
 .edit-page .item-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
 .edit-page .item-table th, .edit-page .item-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--c-border, #e2e8f0); }
@@ -580,8 +553,13 @@ watch(() => route.params.id, loadOrder)
   }
   .edit-page .block { margin: 10px; padding: 14px; }
   .edit-page .block:first-child { margin-top: 12px; }
-  .edit-page .d-meta { grid-template-columns: 62px 1fr; }
+  .edit-page .d-meta { grid-template-columns: auto 1fr; gap: 6px; align-items: start; }
   .edit-page .item-table { display: block; overflow-x: auto; }
+  /* 手机端编辑页整屏覆盖，返回上一页不如「取消」直观 —— 去掉返回按钮，
+     只留「取消 / 保存修改」，两者各占一半更好点。 */
+  .edit-page .edit-footer .btn-back { display: none; }
+  .edit-page .edit-footer .btn-cancel { flex: 1; }
+  .edit-page .edit-footer .btn-save { flex: 1; }
   .edit-page .edit-footer {
     flex: none; gap: 10px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
