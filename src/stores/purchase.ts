@@ -186,11 +186,10 @@ export const usePurchaseStore = defineStore('purchase', () => {
     const userMap = new Map(users.map(u => [u.id!, u.name]))
 
     const productIds = [...new Set(records.map(r => r.productId))]
-    const productMap = new Map<number, string>()
-    for (const pid of productIds) {
-      const p = await db.products.get(pid)
-      if (p) productMap.set(pid, `${p.brand} ${p.model}`)
-    }
+    const allProducts = productIds.length
+      ? await db.products.where('id').anyOf(productIds).toArray()
+      : []
+    const productMap = new Map(allProducts.map(p => [p.id!, `${p.brand} ${p.model}`]))
 
     return records
       .map(r => {
