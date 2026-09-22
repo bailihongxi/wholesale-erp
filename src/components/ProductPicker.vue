@@ -300,8 +300,15 @@ function stockClass(r: PickerRow): string {
 .pk-add.pk-added:hover { background: #f06a06; border-color: #f06a06; }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 .pk-loading { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
-/* 手机端：商品名已是「品牌+型号」，型号/规格列信息重复，藏掉让本行更宽松 */
+/* 手机端：商品名已是「品牌+型号」，型号/规格列信息重复，藏掉让本行更宽松；
+   同时把本层的横向滚动交还给表格自己。
+   ⚠️ 手机端 `.data-table` 本身就是横向滚动容器（见 theme.css「手机端表格」一节），
+   这里若也留 `overflow-x: auto` 就成了**双层滚动容器嵌套**：外层其实没有可滚内容
+   （内层已经把自己的溢出裁进滚动区），手指横向滑动时容易两头都不动，
+   表现为「明明右边有列却怎么也滑不出来」。与开单页 `.tb-scroll { overflow-x: visible }`
+   的处理保持一致，全站只保留一层滚动容器。 */
 @media (max-width: 767px) {
   .col-spec { display: none; }
+  .pk-scroll { overflow-x: visible; }
 }
 </style>

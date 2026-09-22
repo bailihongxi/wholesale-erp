@@ -858,10 +858,23 @@ body {
      否则整张表被拆成互不相干的两张，列宽各算各的（实测 644px vs 650px），
      表头与数据行对不上；tfoot 更会落单成「匿名表」（实测只有 303px 宽），
      这就是「合计行通栏错位」的根因。 */
-  :where(.app-layout.is-mobile) :where(.data-table) {
-    display: block;
+  /* ⚠️ overflow 这一条**绝不能用 :where() 降权**。
+     基础规则 `.data-table { overflow: hidden }`（见第 13 节「全站表格规范」，
+     本是为 border-radius 裁剪表头背景）特异性是 (0,1,0)；
+     一旦把本规则降权成 0，就会被它压过 —— 表格内容被直接裁掉且无法滚动。
+     实测（390px 视口，选商品列表）：表格内容 640px 挤在 340px 容器里，
+     overflowX 计算值是 hidden，「操作」列整列（含「＋ 添加」按钮）落在屏幕外
+     既看不见也滑不出来 → 用户反馈「明细不能左右滑动、根本没法选中商品」。
+     这里保留 (0,2,0) 的特异性，且**只提 overflow**、不碰 display：
+     页面自己的手机端卡片模式（scoped `.data-table {...}` 覆盖 display/min-width）
+     依然照常生效，两者互不干扰（卡片模式下内容不超宽，overflow-x 无副作用）。 */
+  .app-layout.is-mobile .data-table {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  :where(.app-layout.is-mobile) :where(.data-table) {
+    display: block;
     max-width: 100%;
   }
   :where(.app-layout.is-mobile) :where(.data-table) > :where(thead, tbody) {

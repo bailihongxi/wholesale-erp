@@ -121,11 +121,64 @@ describe('手机端表格：表头/表体/表尾必须同进同出', () => {
     expect(mobile).toMatch(/> tfoot > tr[\s\S]{0,200}display: flex/)
   })
 
-  it('这些规则用 :where() 降权，页面自己的手机端样式能覆盖', () => {
-    // 页面（如开单页把明细表改成卡片）必须能压过全局规则；
+  it('布局类规则用 :where() 降权，页面自己的手机端样式能覆盖', () => {
+    // 页面（如开单页把明细表改成卡片）必须能压过全局的 display/min-width；
     // 之前用 .app-layout.is-mobile .data-table（权重 0,3,0）把页面样式全盖住了。
+    // ⚠️ overflow 是**唯一例外**，它必须提权（理由见下一组用例），
+    //    所以这里只约束布局属性，不放行 display 跟着一起提权。
     expect(mobile).toContain(':where(.app-layout.is-mobile)')
-    expect(css).not.toMatch(/^\.app-layout\.is-mobile \.data-table\b/m)
+    expect(
+      css,
+      'display 不能提权，否则开单页的卡片模式会被拆成「半表格」'
+    ).not.toMatch(/\.app-layout\.is-mobile \.data-table[^{}]*\{[^{}]*display/)
+  })
+})
+
+/**
+ * 取出 CSS 里某条规则的声明块（选择器需精确匹配 `选择器 {`）。
+ *
+ * ⚠️ 这里刻意用「字符串完全匹配」而不是正则拼选择器 —— 选择器里有点号、
+ * 括号和 :where()，正则很容易写歪，测试本身出错比被测代码出错更隐蔽。
+ */
+function blockOf(css: string, selector: string): string {
+  const i = css.indexOf(`${selector} {`)
+  if (i < 0) return ''
+  const start = css.indexOf('{', i)
+  const end = css.indexOf('}', start)
+  return css.slice(start + 1, end)
+}
+
+describe('手机端表格必须能横向滚动（右列被裁后就再也滑不出来了）', () => {
+  const css = readFileSync(join(SRC, 'styles/theme.css'), 'utf-8')
+
+  it('基础规则确实是 overflow: hidden —— 这正是手机端必须提权的原因', () => {
+    // .data-table 的 overflow:hidden 是为 border-radius 裁剪表头背景，
+    // 特异性 (0,1,0)；任何被 :where() 降到 0 的移动端规则都压不过它。
+    expect(blockOf(css, '.data-table')).toContain('overflow: hidden')
+  })
+
+  it('手机端用不降权的规则把 overflow-x 提回 auto', () => {
+    const b = blockOf(css, '.app-layout.is-mobile .data-table')
+    expect(
+      b,
+      '手机端 .data-table 必须自己就是横向滚动容器，否则内容被裁在容器宽度里、无法滚动'
+    ).toContain('overflow-x: auto')
+    expect(b).toContain('-webkit-overflow-scrolling: touch')
+  })
+
+  it('提权规则只提 overflow，不碰 display（页面卡片模式仍能覆盖）', () => {
+    const hot = blockOf(css, '.app-layout.is-mobile .data-table')
+    expect(hot, '连 display 一起提权会压过开单页的卡片模式').not.toContain('display')
+    expect(blockOf(css, ':where(.app-layout.is-mobile) :where(.data-table)')).toContain('display: block')
+  })
+
+  it('选商品列表只保留一层滚动容器（`.pk-scroll` 交还表格自己滚）', () => {
+    const picker = readFileSync(join(SRC, 'components/ProductPicker.vue'), 'utf-8')
+    const scoped = picker.slice(picker.indexOf('<style'))
+    expect(
+      scoped,
+      '外层再留 overflow-x:auto 就是双层滚动容器嵌套，手机上手势容易两头都不动'
+    ).toMatch(/@media \(max-width: 767px\)[\s\S]{0,200}\.pk-scroll \{ overflow-x: visible; \}/)
   })
 })
 
