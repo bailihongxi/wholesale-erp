@@ -262,9 +262,28 @@ export const useSalesStore = defineStore('sales', () => {
     return { ok: true, message: '已保存' }
   }
 
+  /**
+   * 删除销售单（仅老板 / 系统管理员可用，入口在详情页「删除」按钮）。
+   *
+   * 只允许删「待出库」的单：一旦部分或全部出库，库存已经动过，直接删会让
+   * 库存与单据对不上 —— 那种情况必须先撤回出库单。store 层照旧做状态校验，
+   * 避免绕过界面误删。
+   */
+  async function removeOrder(orderId: number, operatorId: number): Promise<{ ok: boolean; message: string }> {
+    const order = await db.saleOrders.get(orderId)
+    if (!order) return { ok: false, message: '销售单不存在' }
+    if (order.status !== 'pending') {
+      return { ok: false, message: '该单已出库，不能删除（请先撤回对应的出库单）' }
+    }
+    await db.saleOrderItems.where('saleOrderId').equals(orderId).delete()
+    await db.saleOrders.delete(orderId)
+    await writeLog(operatorId, AUDIT_ACTIONS.SALE_DELETE, `删除销售单 ${order.orderNo}`)
+    return { ok: true, message: '已删除' }
+  }
+
   return {
     listCustomers, createCustomer, getCustomer,
-    createOrder, listOrders, getOrder, getOrderItems, updateOrder,
+    createOrder, listOrders, getOrder, getOrderItems, updateOrder, removeOrder,
     outbound, listPendingOutbound, listOutboundHistory
   }
 })

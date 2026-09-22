@@ -205,7 +205,7 @@
             <button v-if="quote.status !== 'converted'" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为销售单' }}
             </button>
-            <button v-if="quote.status !== 'converted'" class="btn danger" type="button" @click="handleRemove">删除</button>
+            <button v-if="canDeleteDoc && quote.status !== 'converted'" class="btn danger" type="button" @click="handleRemove">🗑 删除</button>
           </div>
         </div>
 
@@ -329,6 +329,7 @@ import { useProductStore } from '../../stores/product'
 import { useSalesStore } from '../../stores/sales'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
+import { usePermission } from '../../composables/usePermission'
 import { useServerPager } from '../../composables/useServerPager'
 import { db } from '../../db'
 import { escapeOr } from '../../db/cloudDb'
@@ -343,6 +344,7 @@ const productStore = useProductStore()
 const salesStore = useSalesStore()
 const userStore = useUserStore()
 const { isMobile } = useResponsive()
+const { canDeleteDoc } = usePermission()
 
 type Mode = 'list' | 'create' | 'detail'
 const mode = ref<Mode>('list')

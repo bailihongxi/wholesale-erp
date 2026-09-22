@@ -11,6 +11,14 @@
         <div class="d-actions">
           <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="startEdit">✏️ 修改</button>
           <button class="btn" type="button" @click="openPreview">🖨 打印送货单</button>
+          <!-- 删除：仅老板 / 系统管理员可见，且只限于「待出库」的单据 -->
+          <button
+            v-if="canDeleteDoc && order?.status === 'pending'"
+            class="btn danger"
+            type="button"
+            :disabled="removing"
+            @click="handleRemove"
+          >{{ removing ? '删除中…' : '🗑 删除' }}</button>
         </div>
       </div>
 
@@ -185,8 +193,9 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showConfirmDialog, showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
+import { useUserStore } from '../../stores/user'
 import { usePermission } from '../../composables/usePermission'
 import { db } from '../../db'
 import { getCompanyName, type PrintOrderData } from '../../utils/printTemplate'
@@ -197,7 +206,8 @@ import type { SaleOrder, SaleOrderItem, Customer, Payment, Product, StockRecord 
 const route = useRoute()
 const router = useRouter()
 const salesStore = useSalesStore()
-const { canSeeAnyPrice } = usePermission()
+const userStore = useUserStore()
+const { canSeeAnyPrice, canDeleteDoc } = usePermission()
 
 const order = ref<SaleOrder | null>(null)
 const items = ref<SaleOrderItem[]>([])
@@ -338,6 +348,32 @@ function percentOf(it: SaleOrderItem): number {
 
 function goBack(): void {
   router.push('/sales/orders')
+}
+
+/** 删除整张销售单：仅老板 / 系统管理员，且只能删「待出库」的单 */
+const removing = ref(false)
+async function handleRemove(): Promise<void> {
+  if (!order.value?.id) return
+  try {
+    await showConfirmDialog({
+      title: '删除销售单',
+      message: `确定删除 ${order.value.orderNo}？\n删除后不可恢复，只能重新开单。`
+    })
+  } catch {
+    return // 用户取消
+  }
+  removing.value = true
+  try {
+    const res = await salesStore.removeOrder(order.value.id, userStore.currentUser?.id ?? 0)
+    if (!res.ok) {
+      showToast(res.message)
+      return
+    }
+    showToast('已删除')
+    router.replace('/sales/orders')
+  } finally {
+    removing.value = false
+  }
 }
 
 function openPreview(): void {

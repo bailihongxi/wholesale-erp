@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V3.0　|　**产品版本：V2.0-27（新建/修改单据后回到列表页自动刷新，修掉 keep-alive 缓存导致列表停在旧数据的问题）**
+> 文档版本：V3.0　|　**产品版本：V2.0-28（单据删除权限：仅老板与系统管理员能删单据，覆盖销售单 / 采购单 / 报价单 / 预采询价 / 出入库单）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-27'`，`package.json` → `version: "2.0.27"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-28'`，`package.json` → `version: "2.0.28"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2545,5 +2545,56 @@ V2.0-22 是 `v-if="isMobile"` 卡片 / `v-else` 表格两支并存。这次两�
   随后从云端删掉该测试单，从别的页面回到列表立刻变回「共 4 张」。
   截图：`docs/v2.0-27-新建采购单后列表立即出现.png`。
 - 验证用的测试采购单已从云端删除（删除前已备份到 `.workbuddy/backups/`），**用户数据保持原样**。
+
+**本次仅本地收口、未部署**：沿用用户要求（「等我命令再进行部署」）。
+
+## V2.0-28（2026-09-23）：单据删除权限 —— 仅老板与系统管理员
+
+### 需求
+
+「需要给 管理员和老板角色 增加单据删除功能，除了这两个角色 其他角色都没有删除的权限。
+只要是系统能进行编辑的单据都给这两角色添加删除按钮功能。」
+
+其中「管理员」＝系统内置账号 `hawsystem`（工号 **E000**，界面显示「管理员工作台」），
+「老板」＝登录名 `admin` 的老板账号（工号 **E001**）。两者的 `role` 本身都是 `boss`，
+管理员另有 `system: true` 标记。
+
+### 做法
+
+**权限单一来源**：`src/composables/usePermission.ts` 新增
+
+```ts
+const isSystemAdmin = computed(() => userStore.currentUser?.system === true)
+const canDeleteDoc = computed(() => role.value === 'boss' || isSystemAdmin.value)
+```
+
+除 `boss` 与内置管理员外，采购 / 销售 / 财务 / 库房 / 经销商一律 `false`。
+
+**覆盖的单据**（即系统中可编辑的全部单据）：
+
+| 单据 | 页面 | 之前 | 现在 |
+| --- | --- | --- | --- |
+| 销售单 | `SaleOrderDetailView.vue` | 无删除 | 新增「🗑 删除」（`canDeleteDoc && status === 'pending'`） |
+| 采购单 | `PurchaseOrderDetailView.vue` | 无删除 | 新增「🗑 删除」（`canDeleteDoc && status === 'pending'`） |
+| 报价单 | `QuotesView.vue` | 有删除，但**人人可见** | 加 `canDeleteDoc` 权限闸 |
+| 预采询价 | `PurchaseQuotesView.vue` | 有删除，但**人人可见** | 加 `canDeleteDoc` 权限闸 |
+| 出入库单 | `StockDocDetailView.vue` | 只有「撤回本单」 | 新增 boss/管理员可见的「🗑 删除本单」 |
+
+**数据安全（关键）**：
+
+- 销售单 / 采购单**只允许删「待出库 / 待入库」**的单。一旦部分或全部出入库，库存已经动过，
+  直接删会让库存与单据对不上 —— 界面上按钮不出现，store 层也照样校验，防止绕过界面误删。
+- 出入库单已经生效过库存，**不能硬删记录**。删除走与「撤回」相同的路径：
+  库存原路退回 → 流水删除 → 来源单据状态重算，再记删除日志，效果上就是彻底删除该单。
+- 所有删除都写操作日志（新增 `SALE_DELETE` / `PURCHASE_DELETE` / `STOCK_DOC_DELETE`），可追溯是谁删的。
+
+### 验证
+
+- `npm run build`（`vue-tsc -b`）**0 错误**。
+- 新增 `tests/doc-delete-permission.test.ts` **12 例全绿**：
+  权限矩阵（boss / 内置管理员 / 五种其他角色 / 未登录）、销售单与采购单删除时明细与主表一起清掉、
+  非 pending 状态拒绝删除且单据仍在、审计日志写入、五个页面的删除按钮都挂在 `canDeleteDoc` 闸上。
+- 全量 **703 例 / 691 通过 / 12 红**，与既有基线一致（`table-layout-and-perf` 8、`stage4` 2、
+  `p0-order-detail` 2），**无新增**。
 
 **本次仅本地收口、未部署**：沿用用户要求（「等我命令再进行部署」）。

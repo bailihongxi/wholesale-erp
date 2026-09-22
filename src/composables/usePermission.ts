@@ -19,6 +19,18 @@ export function usePermission() {
   const isDealer = computed(() => role.value === 'dealer')
   const isSales = computed(() => role.value === 'sales')
 
+  /** 系统内置管理员账号（hawsystem，工号 E000）：system 标记为 true */
+  const isSystemAdmin = computed(() => userStore.currentUser?.system === true)
+
+  /**
+   * 单据删除权限：只有「老板」和「系统管理员」两方有，其余角色一律没有。
+   *
+   * 说明：系统内置管理员 hawsystem 的 role 本身就是 'boss'，所以单看角色两者是同一个；
+   * 这里额外认一下 system 标记，是为了将来即便该账号角色被调整，删除权也不会丢。
+   * 采购 / 销售 / 财务 / 库房 / 经销商都不具备删除权。
+   */
+  const canDeleteDoc = computed(() => role.value === 'boss' || isSystemAdmin.value)
+
   // 库房看不到任何价格
   const canSeeAnyPrice = computed(() => role.value !== 'warehouse')
 
@@ -30,10 +42,12 @@ export function usePermission() {
   return {
     role,
     isBoss,
+    isSystemAdmin,
     isWarehouse,
     isDealer,
     isSales,
     canSeeAnyPrice,
-    canSeePurchasePrice
+    canSeePurchasePrice,
+    canDeleteDoc
   }
 }

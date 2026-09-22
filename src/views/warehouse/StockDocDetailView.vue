@@ -131,6 +131,14 @@
     <div class="extra-actions">
       <button class="ghost-btn" type="button" @click="showPreview = true">🖨 打印{{ isIn ? '入库' : '出库' }}单</button>
       <button v-if="!editing" class="danger-btn" type="button" @click="handleRevert">↩ 撤回本单</button>
+      <!-- 删除本单：仅老板 / 系统管理员。库存会原路退回，单据彻底删除 -->
+      <button
+        v-if="canDeleteDoc && !editing"
+        class="danger-btn"
+        type="button"
+        :disabled="removing"
+        @click="handleRemove"
+      >{{ removing ? '删除中…' : '🗑 删除本单' }}</button>
     </div>
 
     <PrintPreview
@@ -161,7 +169,7 @@ const route = useRoute()
 const router = useRouter()
 const docStore = useStockDocStore()
 const userStore = useUserStore()
-const { canSeeAnyPrice } = usePermission()
+const { canSeeAnyPrice, canDeleteDoc } = usePermission()
 
 const canSeePrice = canSeeAnyPrice
 const isIn = computed(() => route.path.startsWith('/warehouse/inbound'))
@@ -300,6 +308,35 @@ async function handleRevert(): Promise<void> {
   if (!res.ok) { showToast(res.message); return }
   showToast('已撤回')
   router.push(isIn.value ? '/warehouse/inbound' : '/warehouse/outbound')
+}
+
+/**
+ * 删除出入库单（仅老板 / 系统管理员）。
+ *
+ * 出入库单已经动过库存，不能直接删记录 —— 否则库存会凭空少掉/多出来。
+ * 这里走与「撤回」相同的路径：先把库存原路退回、删掉流水、重算来源单据状态，
+ * 再记一条删除日志，效果上就是「彻底删除这张单」。
+ */
+const removing = ref(false)
+async function handleRemove(): Promise<void> {
+  if (!doc.value) return
+  try {
+    await showConfirmDialog({
+      title: `删除${isIn.value ? '入库' : '出库'}单`,
+      message: `确定删除 ${batchNo.value}？\n库存会原路退回，单据彻底删除且不可恢复。`
+    })
+  } catch {
+    return // 用户取消
+  }
+  removing.value = true
+  try {
+    const res = await docStore.revertDoc(type.value, batchNo.value, userStore.currentUser?.id ?? 1)
+    if (!res.ok) { showToast(res.message); return }
+    showToast('已删除')
+    router.push(isIn.value ? '/warehouse/inbound' : '/warehouse/outbound')
+  } finally {
+    removing.value = false
+  }
 }
 
 async function saveRemark(): Promise<void> {

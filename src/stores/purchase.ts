@@ -240,9 +240,27 @@ export const usePurchaseStore = defineStore('purchase', () => {
     return { ok: true, message: '已保存' }
   }
 
+  /**
+   * 删除采购单（仅老板 / 系统管理员可用，入口在详情页「删除」按钮）。
+   *
+   * 与销售单同理：只允许删「待入库」的单，已入库的必须先把入库单撤回，
+   * 否则库存会凭空少掉。store 层保留状态校验，不依赖界面控制。
+   */
+  async function removeOrder(orderId: number, operatorId: number): Promise<{ ok: boolean; message: string }> {
+    const order = await db.purchaseOrders.get(orderId)
+    if (!order) return { ok: false, message: '采购单不存在' }
+    if (order.status !== 'pending') {
+      return { ok: false, message: '该单已入库，不能删除（请先撤回对应的入库单）' }
+    }
+    await db.purchaseOrderItems.where('purchaseOrderId').equals(orderId).delete()
+    await db.purchaseOrders.delete(orderId)
+    await writeLog(operatorId, AUDIT_ACTIONS.PURCHASE_DELETE, `删除采购单 ${order.orderNo}`)
+    return { ok: true, message: '已删除' }
+  }
+
   return {
     listSuppliers, createSupplier, getSupplier,
-    createOrder, listOrders, getOrder, getOrderItems, updateOrder,
+    createOrder, listOrders, getOrder, getOrderItems, updateOrder, removeOrder,
     inbound, listPendingInbound, listInboundHistory
   }
 })

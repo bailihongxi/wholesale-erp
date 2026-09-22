@@ -11,6 +11,14 @@
         <div class="d-actions">
           <button v-if="order?.status === 'pending'" class="btn primary" type="button" @click="beginEdit">✏️ 修改</button>
           <button class="btn" type="button" @click="openPreview">🖨 打印</button>
+          <!-- 删除：仅老板 / 系统管理员可见，且只限于「待入库」的单据 -->
+          <button
+            v-if="canDeleteDoc && order?.status === 'pending'"
+            class="btn danger"
+            type="button"
+            :disabled="removing"
+            @click="handleRemove"
+          >{{ removing ? '删除中…' : '🗑 删除' }}</button>
         </div>
       </div>
 
@@ -198,8 +206,9 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showConfirmDialog, showToast } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
+import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
 import { db } from '../../db'
@@ -213,8 +222,9 @@ import type { PurchaseOrder, PurchaseOrderItem, Supplier, Payment, Product, Stoc
 const route = useRoute()
 const router = useRouter()
 const purchaseStore = usePurchaseStore()
+const userStore = useUserStore()
 const { isMobile } = useResponsive()
-const { canSeePurchasePrice } = usePermission()
+const { canSeePurchasePrice, canDeleteDoc } = usePermission()
 
 const order = ref<PurchaseOrder | null>(null)
 const items = ref<PurchaseOrderItem[]>([])
@@ -347,6 +357,32 @@ function percentOf(it: PurchaseOrderItem): number {
 
 function goBack(): void {
   router.push('/purchase/orders')
+}
+
+/** 删除整张采购单：仅老板 / 系统管理员，且只能删「待入库」的单 */
+const removing = ref(false)
+async function handleRemove(): Promise<void> {
+  if (!order.value?.id) return
+  try {
+    await showConfirmDialog({
+      title: '删除采购单',
+      message: `确定删除 ${order.value.orderNo}？\n删除后不可恢复，只能重新开单。`
+    })
+  } catch {
+    return // 用户取消
+  }
+  removing.value = true
+  try {
+    const res = await purchaseStore.removeOrder(order.value.id, userStore.currentUser?.id ?? 0)
+    if (!res.ok) {
+      showToast(res.message)
+      return
+    }
+    showToast('已删除')
+    router.replace('/purchase/orders')
+  } finally {
+    removing.value = false
+  }
 }
 
 function openPreview(): void {
