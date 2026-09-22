@@ -124,46 +124,62 @@
       <div v-else class="empty">尚未登记收款</div>
     </section>
 
-    <!-- 编辑弹窗 -->
-    <div v-if="showEdit" class="modal-mask" @click.self="showEdit = false">
-      <div class="modal-box">
-        <div class="modal-header">
-          <h3>修改销售单</h3>
-          <span class="modal-close" @click="showEdit = false">×</span>
+    <!-- 编辑模式：页面级，跟新建页风格一致 -->
+    <div v-if="showEdit" class="edit-page">
+      <!-- 单据头部卡片 -->
+      <section class="block">
+        <div class="d-head">
+          <h3 class="d-no">修改销售单</h3>
         </div>
-        <div class="modal-body">
-          <div v-for="(it, i) in editItems" :key="i" class="edit-card">
-            <div class="edit-card-title">
-              {{ productMap[it.productId]?.brand || '商品#' + it.productId }}
-              <span class="edit-card-model">{{ productMap[it.productId]?.model || '' }}</span>
-            </div>
-            <div class="edit-card-fields">
-              <div class="field">
-                <label>数量</label>
-                <div class="field-input">
-                  <input v-model.number="it.quantity" type="number" />
-                  <span class="field-unit">{{ unitOf(it.productId) }}</span>
-                </div>
-              </div>
-              <div class="field">
-                <label>单价</label>
-                <div class="field-input">
-                  <input v-model.number="it.price" type="number" />
-                  <span class="field-unit">元</span>
-                </div>
-              </div>
-            </div>
-            <div class="edit-card-total">金额：¥{{ money((it.quantity||0) * (it.price||0)) }}</div>
-          </div>
+        <div class="d-meta">
+          <div><i>备注</i></div>
+          <div><input v-model="editRemark" class="edit-remark-input" placeholder="选填" /></div>
         </div>
-        <div class="modal-footer">
-          <button class="btn" type="button" @click="showEdit = false">取消</button>
-          <button class="btn primary" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
-        </div>
+      </section>
+
+      <!-- 商品明细卡片 -->
+      <section class="block">
+        <h4 class="block-title"><span class="bar"></span>商品明细（{{ editItems.length }}）</h4>
+        <table class="item-table">
+          <thead>
+            <tr>
+              <th style="width:48px">#</th>
+              <th style="width:35%">商品名称</th>
+              <th style="width:10%" class="center">单位</th>
+              <th style="width:15%" class="num">数量</th>
+              <th style="width:20%" class="num">单价</th>
+              <th style="width:20%" class="num">金额</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(it, i) in editItems" :key="i">
+              <td>{{ i + 1 }}</td>
+              <td>{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</td>
+              <td class="center">{{ unitOf(it.productId) }}</td>
+              <td class="num"><input v-model.number="it.quantity" type="number" min="1" class="mini-input" /></td>
+              <td class="num"><input v-model.number="it.price" type="number" min="0" class="mini-input" /></td>
+              <td class="num">¥{{ money((it.quantity||0) * (it.price||0)) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="total-label">合计</td>
+              <td class="num">{{ editItems.reduce((s, it) => s + (it.quantity||0), 0) }}</td>
+              <td></td>
+              <td class="num">¥{{ money(editItems.reduce((s, it) => s + (it.quantity||0) * (it.price||0), 0)) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </section>
+
+      <div class="edit-footer">
+        <button class="btn-back" type="button" @click="goBack">← 返回</button>
+        <button class="btn-cancel" type="button" @click="showEdit = false">取消</button>
+        <button class="btn-save" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
       </div>
     </div>
 
-    <PageActions cancel-text="返回" @cancel="goBack" />
+    <PageActions v-if="!showEdit" cancel-text="返回" @cancel="goBack" />
 
     <PrintPreview
       :visible="showPreview"
@@ -209,15 +225,18 @@ const showPreview = ref(false)
 // 编辑功能
 const showEdit = ref(false)
 const saving = ref(false)
-const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean }>>([])
+const editRemark = ref('')
+const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean; note?: string }>>([])
 
 function startEdit(): void {
   editItems.value = items.value.map(it => ({
     productId: it.productId,
     quantity: it.quantity,
     price: it.price,
-    isGift: it.isGift
+    isGift: it.isGift,
+    note: (it as any).note || ''
   }))
+  editRemark.value = order.value?.remark || ''
   showEdit.value = true
 }
 
@@ -228,7 +247,7 @@ async function saveEdit(): Promise<void> {
     const res = await salesStore.updateOrder(
       Number(route.params.id),
       editItems.value,
-      order.value.remark
+      editRemark.value
     )
     if (res.ok) {
       showToast('已保存')
@@ -396,25 +415,55 @@ watch(() => route.params.id, loadOrder)
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* 编辑模式：与详情页正常状态风格统一 */
+.edit-page { background: var(--c-bg, #f4f6fa); padding: 12px 0 90px; border: 4px solid var(--c-amber, #f97316); border-radius: 12px; }
+.edit-page .block { background: #fff; border-radius: 12px; padding: 16px; margin: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
+.edit-page .block-title { font-size: 15px; color: var(--c-primary, #1a365d); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
+.edit-page .block-title .bar { width: 3px; height: 16px; background: var(--c-accent, #2563eb); border-radius: 2px; }
+.edit-page .d-no { font-size: 18px; color: var(--c-primary, #1a365d); margin: 0; }
+.edit-page .d-meta { margin-top: 12px; font-size: 13px; display: grid; grid-template-columns: 62px 1fr; gap: 8px; align-items: center; }
+.edit-page .d-meta i { display: inline-block; color: var(--c-muted, #64748b); font-style: normal; }
+.edit-remark-input { height: 38px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 8px; padding: 0 12px; font-size: 14px; width: 100%; outline: none; }
+.edit-remark-input:focus { border-color: var(--c-accent, #2563eb); }
+.edit-page .item-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+.edit-page .item-table th, .edit-page .item-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--c-border, #e2e8f0); }
+.edit-page .item-table th { background: #f1f5f9; color: var(--c-primary, #1a365d); }
+.edit-page .item-table .num { text-align: right; }
+.edit-page .item-table .center { text-align: center; }
+.edit-page .item-table tfoot td { border-bottom: none; font-weight: 600; }
+.edit-page .item-table .total-label { text-align: right !important; }
+.edit-page .mini-input { width: 72px; height: 32px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 6px; padding: 0 8px; text-align: right; font-size: 14px; }
+.edit-footer { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-top: 1px solid #e8eaef; border-radius: 0 0 12px 12px; }
+.edit-footer button { height: 46px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
+.edit-footer .btn-back { flex: 1; background: var(--c-amber, #f97316); color: #fff; }
+.edit-footer .btn-cancel { flex: 1; background: #ef4444; color: #fff; }
+.edit-footer .btn-save { flex: 2; background: var(--c-accent, #2563eb); color: #fff; }
+.edit-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* 手机端合计行通栏 */
+@media (max-width: 767px) {
+  .edit-page .d-meta { grid-template-columns: 62px 1fr; }
+  .edit-page .item-table tfoot tr {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border-top: 2px solid var(--c-border, #e2e8f0); padding: 12px 4px 0;
+  }
+  .edit-page .item-table tfoot td { border: none; padding: 0; width: auto; }
+  .edit-page .item-table tfoot .total-label { text-align: left; }
+}
+
 </style>
 
-/* 编辑弹窗 */
-.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
-.modal-box { background: #fff; border-radius: 12px; width: 92%; max-width: 420px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--c-border); }
-.modal-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
-.modal-close { font-size: 22px; color: #999; cursor: pointer; line-height: 1; padding: 0 4px; }
-.modal-close:hover { color: #333; }
-.modal-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
-.edit-card { background: #f7f8fa; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
-.edit-card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.edit-card-model { font-size: 12px; color: #999; font-weight: 400; margin-left: 4px; }
-.edit-card-fields { display: flex; gap: 10px; margin-bottom: 6px; }
-.field { flex: 1; }
-.field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
-.field-input { display: flex; align-items: center; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0 8px; }
-.field-input input { flex: 1; border: none; outline: none; height: 32px; font-size: 14px; text-align: right; }
-.field-unit { font-size: 12px; color: #999; margin-left: 4px; }
-.edit-card-total { font-size: 13px; color: #333; text-align: right; }
-.modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--c-border); }
-.btn.primary { background: var(--c-accent); color: #fff; border: none; }
+/* 编辑模式 */
+.edit-page { position: fixed; inset: 0; background: var(--c-bg, #f4f6fa); z-index: 90; display: flex; flex-direction: column; overflow-y: auto; }
+.edit-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--c-surface, #fff); border-bottom: 1px solid #e8eaef; }
+.edit-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--c-primary, #16325c); }
+.edit-close { font-size: 13px; color: var(--c-muted, #888); cursor: pointer; }
+.edit-close:hover { color: var(--c-primary, #16325c); }
+.edit-items { flex: 1; padding: 16px 20px; overflow-y: auto; }
+.edit-footer { display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; background: var(--c-surface, #fff); border-top: 1px solid #e8eaef; position: sticky; bottom: 0; }
+
+.edit-total-label { font-weight: 600; text-align: right; padding-right: 16px; }
+.edit-note-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 0 4px; }
+.edit-note-row label { font-size: 14px; color: #666; flex-shrink: 0; width: 50px; }
+.edit-note-row .f-input { flex: 1; height: 38px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 12px; font-size: 14px; }

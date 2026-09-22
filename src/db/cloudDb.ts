@@ -124,6 +124,16 @@ class CloudQuery {
     if (error) throw new Error(`CloudQuery.count: ${error.message}`)
     return count || 0
   }
+
+  /** Dexie 兼容：按 where 条件删除（云端实现） */
+  async delete(): Promise<number> {
+    let q: any = this.client.from(this.table).delete()
+    if (this.eqVal !== undefined) q = q.eq(this.field, this.eqVal)
+    if (this.inVals) q = q.in(this.field, this.inVals)
+    const { error } = await q
+    if (error) throw new Error(`CloudQuery.delete: ${error.message}`)
+    return 1
+  }
 }
 
 /** 基础档案表：变化少，启用内存缓存，切页面秒开 */

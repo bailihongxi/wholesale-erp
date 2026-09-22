@@ -126,46 +126,55 @@
       <div v-else class="empty">尚未登记付款</div>
     </section>
 
-    <!-- 编辑弹窗 -->
-    <div v-if="showEdit" class="modal-mask" @click.self="showEdit = false">
-      <div class="modal-box">
-        <div class="modal-header">
-          <h3>修改采购单</h3>
-          <span class="modal-close" @click="showEdit = false">×</span>
+<!-- 编辑模式：页面级 -->
+    <div v-if="showEdit" class="edit-page">
+      <div class="edit-header">
+        <h3>修改采购单</h3>
+      </div>
+      <div class="edit-items">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="center" style="width:48px">#</th>
+              <th>商品名称</th>
+              <th class="center" style="width:56px">单位</th>
+              <th class="num" style="width:90px">数量</th>
+              <th class="num" style="width:100px">单价</th>
+              <th class="num" style="width:100px">金额</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(it, i) in editItems" :key="i">
+              <td class="center">{{ i + 1 }}</td>
+              <td>{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</td>
+              <td class="center">{{ unitOf(it.productId) }}</td>
+              <td class="num"><input v-model.number="it.quantity" type="number" min="1" class="mini-input" /></td>
+              <td class="num"><input v-model.number="it.price" type="number" min="0" class="mini-input" /></td>
+              <td class="num">¥{{ money((it.quantity||0) * (it.price||0)) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="edit-total-label">合计</td>
+              <td class="num">{{ editItems.reduce((s, it) => s + (it.quantity||0), 0) }}</td>
+              <td></td>
+              <td class="num">¥{{ money(editItems.reduce((s, it) => s + (it.quantity||0) * (it.price||0), 0)) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="edit-note-row">
+          <label>备注</label>
+          <input v-model="editRemark" type="text" placeholder="选填" class="f-input" />
         </div>
-        <div class="modal-body">
-          <div v-for="(it, i) in editItems" :key="i" class="edit-card">
-            <div class="edit-card-title">
-              {{ productMap[it.productId]?.brand || '商品#' + it.productId }}
-              <span class="edit-card-model">{{ productMap[it.productId]?.model || '' }}</span>
-            </div>
-            <div class="edit-card-fields">
-              <div class="field">
-                <label>数量</label>
-                <div class="field-input">
-                  <input v-model.number="it.quantity" type="number" />
-                  <span class="field-unit">{{ unitOf(it.productId) }}</span>
-                </div>
-              </div>
-              <div class="field">
-                <label>单价</label>
-                <div class="field-input">
-                  <input v-model.number="it.price" type="number" />
-                  <span class="field-unit">元</span>
-                </div>
-              </div>
-            </div>
-            <div class="edit-card-total">金额：¥{{ money((it.quantity||0) * (it.price||0)) }}</div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn" type="button" @click="showEdit = false">取消</button>
-          <button class="btn primary" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
-        </div>
+      </div>
+      <div class="edit-footer">
+        <button class="btn btn-back" type="button" @click="goBack">← 返回</button>
+        <button class="btn btn-cancel" type="button" @click="showEdit = false">取消</button>
+        <button class="btn btn-save" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
       </div>
     </div>
 
-    <PageActions cancel-text="返回" @cancel="goBack" />
+    <PageActions v-if="!showEdit" cancel-text="返回" @cancel="goBack" />
 
     <PrintPreview
       :visible="showPreview"
@@ -211,6 +220,7 @@ const showPreview = ref(false)
 // 编辑功能
 const showEdit = ref(false)
 const saving = ref(false)
+const editRemark = ref('')
 const editItems = ref<Array<{ productId: number; quantity: number; price: number; isGift?: boolean }>>([])
 
 function startEdit(): void {
@@ -220,6 +230,7 @@ function startEdit(): void {
     price: it.price,
     isGift: it.isGift
   }))
+  editRemark.value = order.value?.remark || ''
   showEdit.value = true
 }
 
@@ -230,7 +241,7 @@ async function saveEdit(): Promise<void> {
     const res = await purchaseStore.updateOrder(
       Number(route.params.id),
       editItems.value,
-      order.value.remark
+      editRemark.value
     )
     if (res.ok) {
       showToast('已保存')
@@ -408,6 +419,23 @@ watch(() => route.params.id, loadOrder)
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* 编辑模式 */
+.edit-page { position: fixed; inset: 0; background: var(--c-bg, #f4f6fa); z-index: 90; display: flex; flex-direction: column; overflow-y: auto; }
+.edit-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--c-surface, #fff); border-bottom: 1px solid #e8eaef; }
+.edit-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--c-primary, #16325c); }
+.edit-items { flex: 1; padding: 16px 20px; overflow-y: auto; }
+.edit-footer { display: flex; gap: 12px; padding: 12px 20px; background: var(--c-surface, #fff); border-top: 1px solid #e8eaef; position: sticky; bottom: 0; }
+.edit-footer button { height: 46px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
+.edit-footer .btn-back { flex: 1; background: var(--c-amber, #f97316); color: #fff; }
+.edit-footer .btn-cancel { flex: 1; background: #ef4444; color: #fff; }
+.edit-footer .btn-save { flex: 2; background: var(--c-accent, #2563eb); color: #fff; }
+.edit-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
+.edit-total-label { font-weight: 600; text-align: right; padding-right: 16px; }
+.edit-note-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 0 4px; }
+.edit-note-row label { font-size: 14px; color: #666; flex-shrink: 0; width: 50px; }
+.edit-note-row .f-input { flex: 1; height: 38px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 12px; font-size: 14px; }
+.btn.primary { background: var(--c-accent, #2563eb); color: #fff; border: none; }
 </style>
 
 /* 编辑弹窗 */
