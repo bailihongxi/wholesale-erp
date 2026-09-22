@@ -100,62 +100,65 @@ export const usePurchaseStore = defineStore('purchase', () => {
     locationId?: number
   ): Promise<{ ok: boolean; message: string; batchNo?: string }> {
     const inv = useInventoryStore()
-    const order = await db.purchaseOrders.get(orderId)
+    const [order, locId] = await Promise.all([
+      db.purchaseOrders.get(orderId),
+      inv.resolveLocationId(locationId),
+    ])
     if (!order) return { ok: false, message: '采购单不存在' }
     if (order.status === 'completed') return { ok: false, message: '该单已完成入库' }
-
-    // 入库库房：页面上选定，未传则落到默认库房
-    const locId = await inv.resolveLocationId(locationId)
     const loc = await db.locations.get(locId)
     if (!loc) return { ok: false, message: '入库库房不存在，请重新选择' }
 
     const items = await db.purchaseOrderItems.where('purchaseOrderId').equals(orderId).toArray()
+    const productIds = items.map(it => it.productId)
+    const [allRecords, allStocks, allLocStocks] = await Promise.all([
+      db.stockRecords.where('refOrderId').equals(orderId).toArray(),
+      productIds.length ? db.stock.where('productId').anyOf(productIds).toArray() : [],
+      productIds.length ? db.locationStock.where('productId').anyOf(productIds).toArray() : [],
+    ])
+
     let allReceived = true
     const batchNo = genStockDocNo('RK')
+    const now = new Date().toISOString()
+    const stockMap = new Map(allStocks.map(s => [s.productId, s]))
+    const locStockMap = new Map(allLocStocks.filter(r => r.locationId === locId).map(r => [r.productId, r]))
+    const priorMap: Record<number, number> = {}
+    for (const r of allRecords.filter(x => x.type === 'purchase_in')) {
+      priorMap[r.productId] = (priorMap[r.productId] ?? 0) + r.quantity
+    }
+
+    const stockToUpdate: any[] = [], stockToAdd: any[] = []
+    const locStockToUpdate: any[] = [], locStockToAdd: any[] = []
+    const recordsToAdd: any[] = []
 
     for (const item of items) {
       const actual = actualQuantities[item.productId] ?? item.quantity
-      // 累加本次之前已收的数量，支持「分次入库」：
-      // 多次收货累计达到订单数量才判定为完成，否则一直停留在 partial。
-      const prior = await db.stockRecords
-        .where('refOrderId').equals(orderId)
-        .filter(r => r.type === 'purchase_in' && r.productId === item.productId)
-        .toArray()
-      const receivedBefore = prior.reduce((s, r) => s + r.quantity, 0)
+      const receivedBefore = priorMap[item.productId] ?? 0
       if (receivedBefore + actual < item.quantity) allReceived = false
       if (actual > 0) {
-        // 增加库存
-        const stock = await db.stock.where('productId').equals(item.productId).first()
-        if (stock) {
-          await db.stock.update(stock.id!, {
-            quantity: stock.quantity + actual,
-            updatedAt: new Date().toISOString()
-          })
-        } else {
-          await db.stock.add({
-            productId: item.productId,
-            quantity: actual,
-            updatedAt: new Date().toISOString()
-          })
-        }
-        // 同时维护所选库房的库存分布（入库一律进用户选定的库房）
-        await inv.applyLocationDelta(item.productId, locId, actual)
-        // 记流水（带批次号，便于按单查询 / 撤回）；赠品行备注附加「赠品」标记
-        await db.stockRecords.add({
-          type: 'purchase_in',
-          refOrderId: orderId,
-          productId: item.productId,
-          quantity: actual,
-          operatorId,
-          createdAt: new Date().toISOString(),
-          batchNo,
-          locationId: locId,
-          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark
+        const s = stockMap.get(item.productId)
+        if (s) stockToUpdate.push({ id: s.id!, quantity: s.quantity + actual, updatedAt: now })
+        else stockToAdd.push({ productId: item.productId, quantity: actual, updatedAt: now })
+        const ls = locStockMap.get(item.productId)
+        if (ls) locStockToUpdate.push({ id: ls.id!, quantity: Math.max(0, ls.quantity + actual) })
+        else locStockToAdd.push({ productId: item.productId, locationId: locId, quantity: Math.max(0, actual) })
+        recordsToAdd.push({
+          type: 'purchase_in', refOrderId: orderId, productId: item.productId,
+          quantity: actual, operatorId, createdAt: now, batchNo, locationId: locId,
+          remark: item.isGift ? [remark, '赠品'].filter(Boolean).join(' · ') : remark,
         })
       }
     }
 
-    await db.purchaseOrders.update(orderId, { status: allReceived ? 'completed' : 'partial' })
+    await Promise.all([
+      ...stockToUpdate.map(u => db.stock.update(u.id, { quantity: u.quantity, updatedAt: u.updatedAt })),
+      ...stockToAdd.map(r => db.stock.add(r)),
+      ...locStockToUpdate.map(u => db.locationStock.update(u.id, { quantity: u.quantity })),
+      ...locStockToAdd.map(r => db.locationStock.add(r)),
+      recordsToAdd.length ? db.stockRecords.bulkAdd(recordsToAdd) : Promise.resolve(),
+      db.purchaseOrders.update(orderId, { status: allReceived ? 'completed' : 'partial' }),
+    ])
+
     await writeLog(
       operatorId,
       AUDIT_ACTIONS.PURCHASE_INBOUND,
