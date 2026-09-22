@@ -49,6 +49,7 @@ export interface StockDocRow {
 export interface StockDocItem {
   productId: number
   productName: string
+  brand: string
   model: string
   category: string
   unit: string
@@ -213,6 +214,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
       items.push({
         productId: r.productId,
         productName: p ? `${p.brand} ${p.model}`.trim() : `商品#${r.productId}`,
+        brand: p?.brand ?? '',
         model: p?.model ?? '',
         category: p?.category ?? '',
         unit: p?.unit ?? '',

@@ -10,6 +10,8 @@ import {
 
 export interface PrintItem {
   productName: string
+  /** 品牌（单独列） */
+  brand?: string
   /** 产品类别，如 洗衣机 / 冰箱 / 空调 —— 客户据此判断是什么东西 */
   category?: string
   model: string
@@ -236,7 +238,7 @@ function rowHtml(cols: PrintColumn[], item: PrintItem, no: number): string {
   const cells = cols.map(c => {
     switch (c.key) {
       case 'no': return `<td class="${COL_CLASS.no}">${no}</td>`
-      case 'name': return `<td>${esc(item.productName)}</td>`
+      case 'name': return `<td>${esc(item.brand || item.productName)}</td>`
       case 'category': return `<td class="${COL_CLASS.category}">${esc(item.category)}</td>`
       case 'model': return `<td>${esc(item.model)}</td>`
       case 'unit': return `<td class="${COL_CLASS.unit}">${esc(item.unit)}</td>`

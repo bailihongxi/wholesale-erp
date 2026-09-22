@@ -200,6 +200,7 @@ const printData = computed<PrintOrderData>(() => ({
   partyLabel: doc.value?.partyLabel ?? (isIn.value ? '供应商' : '客户'),
   items: items.value.map(it => ({
     productName: it.productName,
+    brand: it.brand,
     model: it.model,
     category: it.category,
     unit: it.unit,
