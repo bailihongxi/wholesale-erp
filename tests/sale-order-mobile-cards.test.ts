@@ -9,6 +9,10 @@
  *   - V2.0-22：手机端先改成语义化 `<ul>` 卡片（.mc-* / .ec-* / .rc-*），电脑端仍保留 `<table>`。
  *   - V2.0-23：用户要求电脑端也用同一套卡片 —— 表格整体退场，电脑端在
  *     `min-width:768px` 里改为多列网格铺开；同时点「修改」后自动滚到编辑区。
+ *   - V2.0-24：电脑端编辑明细卡片内改为单行（display:contents 拆开 .ec-top）。
+ *   - V2.0-25：编辑模块去掉橘色 4px 大边框（融进版面、与其它卡片同宽），
+ *     模块内删掉「返回」按钮只留「取消 / 保存修改」，关闭统一走 closeEdit()，
+ *     关掉后详情页的橘色返回键自动回来。
  *
  * ⚠️ 本文件里「电脑端保留表格」的旧断言已被需求作废，替换为
  * 「全页无线性表格 + 两端共用同一套卡片 DOM」，不是放宽断言。
@@ -182,13 +186,35 @@ describe('销售单详情 · 修改明细卡片化', () => {
     expect(template).toContain('class="edit-scroll"')
   })
 
-  it('手机端去掉「返回」按钮（编辑页整屏覆盖，返回不如取消直观）', () => {
-    expect(mobileCss, '手机端应隐藏返回按钮').toMatch(
-      /\.edit-page\s+\.edit-footer\s+\.btn-back\s*\{[^}]*display:\s*none/
+  it('编辑模块内不再有「返回」按钮（两端都删，返回语义交给详情页的橘色返回键）', () => {
+    // V2.0-25：用户要求编辑模块里只留「取消 / 保存修改」。
+    // 旧断言（手机端 display:none 隐藏、电脑端保留）随之作废。
+    expect(template, '编辑模块不应再有返回按钮').not.toContain('btn-back')
+    expect(css, '返回按钮的样式应一并删除').not.toContain('btn-back')
+    const i = template.indexOf('class="edit-footer"')
+    const footer = template.slice(i, i + 600)
+    expect(footer, '按钮条应有取消').toContain('btn-cancel')
+    expect(footer, '按钮条应有保存修改').toContain('btn-save')
+  })
+
+  it('详情页橘色返回按钮：编辑时收起、关掉模块后自动回来', () => {
+    expect(template, '详情页返回按钮要随 showEdit 收起 / 恢复').toMatch(/<PageActions\s+v-if="!showEdit"/)
+    expect(template, '取消要调统一关闭函数（不能只改 showEdit）').toContain('@click="closeEdit"')
+    expect(script, '缺少统一关闭函数').toContain('function closeEdit')
+    // 保存成功后必须同样走 closeEdit，否则模块关了、橘色返回键不回来
+    expect(script, '保存成功后也要走 closeEdit').toMatch(/await closeEdit\(\)[\s\S]{0,80}loadOrder/)
+    expect(script, '关闭后要把返回键滚进视野').toContain("querySelector('.page-actions')")
+  })
+
+  it('编辑模块去掉橘色大边框，内部卡片与详情页同宽同底', () => {
+    expect(css, '编辑模块不应再套 4px 橘色边框').not.toMatch(/\.edit-page\s*\{[^}]*border:\s*4px/)
+    expect(css, '编辑模块不应再声明橘色边框色').not.toMatch(/\.edit-page\s*\{[^}]*--c-amber/)
+    expect(css, '编辑模块内的卡片不应再内缩（margin:12px 会比其他卡片窄一圈）').not.toMatch(
+      /\.edit-page\s+\.block\s*\{[^}]*margin:\s*12px/
     )
-    // 电脑端编辑区是内联的，返回按钮要留着
-    expect(desktopCss, '电脑端不应隐藏返回按钮').not.toMatch(/\.btn-back\s*\{[^}]*display:\s*none/)
-    expect(template, '详情页的返回按钮不受影响').toContain('PageActions')
+    // 底部按钮条跟着卡片走：整圈圆角 + 整圈边框，不再是「容器内的下半截」
+    expect(css, '按钮条要独立成卡片').toMatch(/\.edit-footer\s*\{[^}]*border:\s*1px solid/)
+    expect(css, '按钮条要整圈圆角').toMatch(/\.edit-footer\s*\{[^}]*border-radius:\s*12px/)
   })
 
   it('备注框是 textarea，且文字超过两行时自增高度', () => {

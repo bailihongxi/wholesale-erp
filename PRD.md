@@ -1,9 +1,9 @@
 # 家电批发进销存 ERP 产品需求文档（PRD）
 
-> 文档版本：V3.0　|　**产品版本：V2.0-24（电脑端「修改销售单」商品明细卡片内改为单行排列）**
+> 文档版本：V3.0　|　**产品版本：V2.0-25（修改销售单模块：去掉橘色大边框 + 模块内不再有「返回」按钮）**
 > 日期：2026-09-20
 > 用途：本文件为后续开发唯一依据，开发过程中如需变更，须经确认后修改本文档。
-> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-24'`，`package.json` → `version: "2.0.24"`。
+> 代码基线：`src/version.ts` → `APP_VERSION = 'V2.0-25'`，`package.json` → `version: "2.0.25"`。
 >
 > **修订记录**
 > - **V1.0**（2026-09-19）：第一版锁定稿。
@@ -2425,3 +2425,25 @@ V2.0-22 是 `v-if="isMobile"` 卡片 / `v-else` 表格两支并存。这次两�
 `npx vitest run tests/sale-order-mobile-cards.test.ts` **29 例全绿**；全量测试与 `npm run build`（`vue-tsc -b`）未引入新红。
 
 **本次仅本地收口、未部署**：按用户要求，改动已提交为 `V2.0-24`（`package.json` → `2.0.24`，SW 缓存名随之变化），待用户下令后再 `push` + 部署 GitHub Pages。
+
+## V2.0-25（2026-09-23）：修改销售单模块去掉橘色大边框 + 模块内不再有「返回」按钮
+
+**用户诉求**（原话）：「电脑版本中，取消这个大橘色框体内的返回按键，只保留取消，保存修改。同时取消大橘色框，将橘色框体中的模块大小适应版面。我要的效果是，当点击取消按键和保存修改后，这个修改销售单小模块自动关闭，然后原有的橘色返回按键继续出现。」
+
+**三件事**：
+
+1. **模块内删掉「返回」按钮**：`<button class="btn-back">` 从模板与 CSS 中一并删除，编辑按钮条只剩「取消 / 保存修改」。
+   - ⚠️ 此前手机端是靠 `.edit-page .edit-footer .btn-back { display: none }` 隐藏的 —— 现在按钮根本不存在，那条规则随之删除（**不是**把桌面端也隐藏掉，是两端统一不再需要它）。
+2. **去掉橘色大边框**：`.edit-page` 原来声明 `border: 4px solid var(--c-amber)` + `background: var(--c-bg)` + `padding: 12px 0 90px`，内部 `.block` 再 `margin: 12px` —— 整体像一张弹窗卡片，且里面的卡片比详情页其它卡片左右各窄 12px。现改为 `.edit-page { padding: 0; background: transparent; }`，删掉 `.edit-page .block` 覆盖，让内部卡片直接沿用全局 `.block`（同宽 / 同圆角 / 同阴影 / 同间距）。
+3. **底部按钮条独立成卡片**：`.edit-footer` 原来是「容器内的下半截」（`border-top` + `border-radius: 0 0 12px 12px`），现在改成整圈边框 + 整圈圆角 + 与卡片一致的阴影；手机端媒体查询里补 `border: none; border-top: 1px solid #e8eaef`，保持贴底通栏观感。
+
+**「取消 / 保存后返回键回来」怎么保证**：详情页底部那颗橘色返回键来自 `<PageActions v-if="!showEdit" cancel-text="返回" />` —— 编辑时被收起，模块一关就自动回来。为此新增 `closeEdit()`：置 `showEdit = false` → `await nextTick()` → 把 `.page-actions` 用 `scrollIntoView({ block: 'nearest' })` 滚进视野（模块消失后页面变短，视口容易停在空白处）。`取消` 按钮与 `saveEdit()` 保存成功分支**都走 `closeEdit()`**，不再各自写 `showEdit = false`（漏一处就会出现「模块关了、返回键不回来」）。
+
+**防回归**：`tests/sale-order-mobile-cards.test.ts` 原「手机端隐藏返回按钮、电脑端保留」断言随需求作废，改写为三条新断言：
+- 模板与 `<style>` 中**都不得出现 `btn-back`**，按钮条必须含 `btn-cancel` / `btn-save`；
+- `<PageActions v-if="!showEdit"`、取消按钮必须 `@click="closeEdit"`、脚本必须有 `function closeEdit` 且保存成功分支 `await closeEdit()` 后再 `loadOrder`、必须 `querySelector('.page-actions')`；
+- `.edit-page` 不得再有 `border: 4px` / `--c-amber`、`.edit-page .block` 不得再有 `margin: 12px`；`.edit-footer` 必须整圈 `border: 1px solid` + `border-radius: 12px`。
+
+该文件 **31 例全绿**。自检：把 `btn-back` 按钮塞回模板 → 「编辑模块内不再有返回按钮」立即报红，还原后复绿。
+
+**本次仅本地收口、未部署**：按用户要求（「更改完后先不用部署，等我命令再进行部署」），改动提交为 `V2.0-25`（`package.json` → `2.0.25`，SW 缓存名随之变化），待用户下令后再 `push` + 部署 GitHub Pages。

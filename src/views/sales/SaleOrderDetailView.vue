@@ -102,7 +102,7 @@
       <div v-else class="empty">尚未登记收款</div>
     </section>
 
-    <!-- 编辑模式：页面级，跟新建页风格一致 -->
+    <!-- 编辑模式：电脑端内联在详情页下方（与其它卡片同宽），手机端整屏覆盖 -->
     <div v-if="showEdit" class="edit-page">
      <div class="edit-scroll">
       <!-- 单据头部卡片 -->
@@ -160,9 +160,10 @@
       </section>
      </div>
 
+      <!-- 编辑模块内只留「取消 / 保存修改」：返回语义交给详情页自身的橘色返回按钮
+           （编辑时它被 v-if 收起，模块一关就自动回来）。 -->
       <div class="edit-footer">
-        <button class="btn-back" type="button" @click="goBack">← 返回</button>
-        <button class="btn-cancel" type="button" @click="showEdit = false">取消</button>
+        <button class="btn-cancel" type="button" @click="closeEdit">取消</button>
         <button class="btn-save" type="button" :disabled="saving" @click="saveEdit">{{ saving ? '保存中...' : '保存修改' }}</button>
       </div>
     </div>
@@ -244,6 +245,19 @@ async function startEdit(): Promise<void> {
   }
 }
 
+/**
+ * 关闭编辑模块（「取消」与「保存成功」都走这里）。
+ *
+ * 关掉之后详情页会变短、视口可能停在一片空白上，于是把页面底部那排
+ * 操作栏（橘色「返回」）滚进视野 —— 编辑时它被 `v-if="!showEdit"` 收起，
+ * 模块一关就自动回来，用户不用再猜「返回去哪了」。
+ */
+async function closeEdit(): Promise<void> {
+  showEdit.value = false
+  await nextTick()
+  document.querySelector('.page-actions')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+
 async function saveEdit(): Promise<void> {
   if (!order.value) return
   saving.value = true
@@ -255,7 +269,7 @@ async function saveEdit(): Promise<void> {
     )
     if (res.ok) {
       showToast('已保存')
-      showEdit.value = false
+      await closeEdit()
       await loadOrder()
     } else {
       showToast(res.message)
@@ -523,9 +537,11 @@ watch(() => route.params.id, loadOrder)
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
 
-/* 编辑模式：与详情页正常状态风格统一 */
-.edit-page { background: var(--c-bg, #f4f6fa); padding: 12px 0 90px; border: 4px solid var(--c-amber, #f97316); border-radius: 12px; }
-.edit-page .block { background: #fff; border-radius: 12px; padding: 16px; margin: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
+/* 编辑模块：直接融进详情页版面。
+   以前这层套了个 4px 橘色大边框 + 里面再内缩 12px，看着像弹窗、还比别的卡片窄一圈；
+   现在去掉边框与底色，里面的卡片沿用全局 .block（同宽、同圆角、同阴影），
+   只保留「修改销售单」这张卡片和可编辑明细卡片本身。 */
+.edit-page { padding: 0; background: transparent; }
 .edit-page .block-title { font-size: 15px; color: var(--c-primary, #1a365d); margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
 .edit-page .block-title .bar { width: 3px; height: 16px; background: var(--c-accent, #2563eb); border-radius: 2px; }
 .edit-page .d-no { font-size: 18px; color: var(--c-primary, #1a365d); margin: 0; }
@@ -552,16 +568,16 @@ watch(() => route.params.id, loadOrder)
 .edit-page .item-table tfoot td { border-bottom: none; font-weight: 600; }
 .edit-page .item-table .total-label { text-align: right !important; }
 .edit-page .mini-input { width: 72px; height: 32px; border: 1px solid var(--c-border, #e2e8f0); border-radius: 6px; padding: 0 8px; text-align: right; font-size: 14px; }
-.edit-footer { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-top: 1px solid #e8eaef; border-radius: 0 0 12px 12px; }
+/* 底部操作条：跟着卡片走（同宽 / 同圆角 / 同阴影），只有「取消 / 保存修改」两键 */
+.edit-footer { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border: 1px solid var(--c-border, #e2e8f0); border-radius: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
 .edit-footer button { height: 46px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
-.edit-footer .btn-back { flex: 1; background: var(--c-amber, #f97316); color: #fff; }
 .edit-footer .btn-cancel { flex: 1; background: #ef4444; color: #fff; }
 .edit-footer .btn-save { flex: 2; background: var(--c-accent, #2563eb); color: #fff; }
 .edit-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* 编辑模式手机端：整屏覆盖（点「修改」立即切换，不用往下翻找），
-   内容区独立滚动，底部「返回 / 取消 / 保存」常驻。
-   桌面端保持原样：详情页内联的橙色边框卡片区。 */
+   内容区独立滚动，底部「取消 / 保存修改」常驻。
+   电脑端不固定：编辑模块作为详情页里的普通卡片内联排布。 */
 @media (max-width: 767px) {
   .edit-page {
     position: fixed; inset: 0; z-index: 90;
@@ -577,15 +593,15 @@ watch(() => route.params.id, loadOrder)
   .edit-page .block:first-child { margin-top: 12px; }
   .edit-page .d-meta { grid-template-columns: auto 1fr; gap: 6px; align-items: start; }
   .edit-page .item-table { display: block; overflow-x: auto; }
-  /* 手机端编辑页整屏覆盖，返回上一页不如「取消」直观 —— 去掉返回按钮，
-     只留「取消 / 保存修改」，两者各占一半更好点。 */
-  .edit-page .edit-footer .btn-back { display: none; }
+  /* 编辑模块里的「返回」按钮两端都已从模板删除（返回语义统一交给详情页的橘色返回键），
+     这里只留「取消 / 保存修改」，各占一半更好点。 */
   .edit-page .edit-footer .btn-cancel { flex: 1; }
   .edit-page .edit-footer .btn-save { flex: 1; }
   .edit-page .edit-footer {
     flex: none; gap: 10px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
-    border-radius: 0; box-shadow: 0 -2px 12px rgba(22, 50, 92, 0.08);
+    border: none; border-top: 1px solid #e8eaef; border-radius: 0;
+    box-shadow: 0 -2px 12px rgba(22, 50, 92, 0.08);
   }
   .edit-page .edit-footer button { height: 48px; }
 }
