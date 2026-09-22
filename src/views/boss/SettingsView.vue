@@ -139,8 +139,14 @@
 
         <button class="primary-btn full" type="button" @click="saveRule">保存价格规则</button>
         <button class="ghost-btn full" type="button" :disabled="applying" @click="applyRuleToAll">
-          {{ applying ? '重算中…' : '⚡ 一键应用到全部商品' }}
+          {{ applying ? `重算中 ${appliedCount}/${totalCount}…` : '⚡ 一键应用到全部商品' }}
         </button>
+        <progress
+          v-if="applying"
+          class="apply-progress"
+          :value="appliedCount"
+          :max="totalCount || 1"
+        ></progress>
         <p class="tip">
           一键应用会覆盖全部商品的批发价与零售价（按每件商品自己的成本重新计算），成本价与库存不受影响。
         </p>
@@ -367,6 +373,7 @@ async function resyncSettings(): Promise<void> {
 import {
   getPriceRule, savePriceRule, calcWholesale, calcRetail, type PriceRule
 } from '../../utils/priceRule'
+import { applyPriceRuleToAll } from '../../utils/applyPriceRule'
 
 const router = useRouter()
 const syncStore = useSyncStore()
@@ -375,6 +382,9 @@ const userStore = useUserStore()
 const company = ref({ name: '', address: '', phone: '' })
 const rule = ref<PriceRule>(getPriceRule())
 const applying = ref(false)
+/** 价格重算进度（done / total），用于在按钮上实时显示 */
+const appliedCount = ref(0)
+const totalCount = ref(0)
 /** 试算用的样例成本，方便直观看到加价后的价格 */
 const sampleCost = ref(2000)
 
@@ -447,21 +457,19 @@ async function saveRule(): Promise<void> {
 async function applyRuleToAll(): Promise<void> {
   const total = await db.products.count()
   if (!total) { showToast('库中还没有商品'); return }
-  await showConfirmDialog({
+  const ok = await showConfirmDialog({
     title: '一键应用到全部商品',
     message: `将按各自成本价重算全部 ${total} 个商品的批发价与零售价（成本价不变）。是否继续？`
-  })
+  }).then(() => true).catch(() => false)
+  if (!ok) return
   applying.value = true
+  totalCount.value = total
+  appliedCount.value = 0
   try {
-    const list = await db.products.toArray()
-    for (const p of list) {
-      await db.products.update(p.id!, {
-        wholesalePrice: calcWholesale(p.purchasePrice, rule.value),
-        retailPrice: calcRetail(p.purchasePrice, rule.value)
-      })
-    }
+    // 分批 + 并发批量 upsert（不再逐条串行 update）
+    const n = await applyPriceRuleToAll(rule.value, (p) => { appliedCount.value = p.done })
     await saveRule()
-    showToast(`已重算 ${list.length} 个商品的价格`)
+    showToast(`已重算 ${n} 个商品的价格`)
   } finally {
     applying.value = false
   }
@@ -716,6 +724,16 @@ function logout(): void {
 .f-cols-title { font-size: 12px; color: var(--c-muted); }
 .f-cols-list { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .f-col { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--c-text, #1a202c); }
+
+/* 一键重算价格：实时进度条 */
+.apply-progress {
+  display: block; width: 100%; height: 8px; margin-top: 10px;
+  -webkit-appearance: none; appearance: none;
+  border: none; border-radius: 6px; background: #e9eef5; overflow: hidden;
+}
+.apply-progress::-webkit-progress-bar { background: #e9eef5; border-radius: 6px; }
+.apply-progress::-webkit-progress-value { background: var(--c-accent, #2f6bff); border-radius: 6px; transition: width .25s ease; }
+.apply-progress::-moz-progress-bar { background: var(--c-accent, #2f6bff); border-radius: 6px; }
 
 /* ---- 云同步 ---- */
 .sync-stat { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
