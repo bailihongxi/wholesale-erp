@@ -20,7 +20,10 @@
       </div>
       <div class="row">
         <label>分类</label>
-        <input v-model="form.category" class="f-input" placeholder="如：空调 / 冰箱" />
+        <input v-model="form.category" class="f-input" list="categoryList" placeholder="选择或输入新分类" />
+        <datalist id="categoryList">
+          <option v-for="c in categories" :key="c" :value="c" />
+        </datalist>
       </div>
       <div class="row">
         <label>规格</label>
@@ -112,6 +115,7 @@ const form = reactive({
   brand: '', model: '', category: '', spec: '', unit: '台',
   purchasePrice: 0, wholesalePrice: 0, retailPrice: 0, warnStock: 0, status: 'active'
 })
+const categories = ref<string[]>([])
 
 // 填了成本就自动带出批发价 / 零售价（规则里关闭了自动填充则不动）
 watch(
@@ -141,6 +145,10 @@ function goBack(): void {
 }
 
 onMounted(async () => {
+  // 加载已有分类供下拉选择
+  const { db } = await import('../../db')
+  const all: any[] = await db.products.toArray()
+  categories.value = [...new Set(all.map((p: any) => p.category).filter(Boolean))].sort()
   if (isEdit.value) {
     const p = await productStore.getProduct(Number(id))
     if (p) {
