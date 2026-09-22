@@ -26,18 +26,37 @@
     <section class="block">
       <h4 class="block-title">商品明细（{{ items.length }}）</h4>
 
-      <ul v-if="isMobile" class="item-cards">
-        <li v-for="(it, i) in items" :key="i" class="item-card">
-          <div class="ic-name">
-            {{ nameOf(it.productId) }}
-            <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-          </div>
-          <div class="ic-line">数量 {{ it.quantity }} {{ unitOf(it.productId) }}</div>
-          <div v-if="canSeeAnyPrice" class="ic-line">单价 {{ it.isGift ? '—' : '¥' + money(it.price) }}</div>
-          <div v-if="canSeeAnyPrice" class="ic-line">金额 {{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</div>
-        </li>
-        <li v-if="!items.length" class="empty">暂无明细</li>
-      </ul>
+      <!-- 手机端：卡片式，数量 × 单价 = 金额 一行读清 -->
+      <template v-if="isMobile">
+        <ul class="mc-list">
+          <li v-for="(it, i) in items" :key="i" class="mc-item">
+            <div class="mc-top">
+              <span class="mc-name">{{ nameOf(it.productId) }}</span>
+              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+            </div>
+            <div class="mc-calc">
+              <span class="mc-qty">{{ it.quantity }} {{ unitOf(it.productId) }}</span>
+              <template v-if="canSeeAnyPrice">
+                <template v-if="it.isGift">
+                  <span class="mc-gift">赠品不计价</span>
+                </template>
+                <template v-else>
+                  <span class="mc-op">×</span>
+                  <span>¥{{ money(it.price) }}</span>
+                  <span class="mc-op">=</span>
+                  <b class="mc-amount">¥{{ money(it.subtotal) }}</b>
+                </template>
+              </template>
+            </div>
+          </li>
+          <li v-if="!items.length" class="empty">暂无明细</li>
+        </ul>
+        <div v-if="items.length" class="mc-total">
+          <span>合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span></span>
+          <span class="mt-qty">{{ totalQty }} 件</span>
+          <b v-if="canSeeAnyPrice" class="mt-amount">¥{{ money(order?.totalAmount ?? 0) }}</b>
+        </div>
+      </template>
 
       <table v-else class="item-table">
         <thead>
@@ -93,7 +112,19 @@
     <!-- 出库流水（历史痕迹） -->
     <section class="block">
       <h4 class="block-title">出库流水（{{ outboundRecords.length }}）</h4>
-      <table v-if="outboundRecords.length" class="item-table">
+      <template v-if="isMobile">
+        <ul v-if="outboundRecords.length" class="rc-list">
+          <li v-for="r in outboundRecords" :key="r.id" class="rc-item">
+            <div class="rc-top">
+              <span class="rc-name">{{ nameOf(r.productId) }}</span>
+              <span class="rc-qty">{{ Math.abs(r.quantity) }} {{ unitOf(r.productId) }}</span>
+            </div>
+            <div class="rc-sub">{{ fmtTime(r.createdAt) }} · {{ operatorName(r.operatorId) }}</div>
+          </li>
+        </ul>
+        <div v-else class="empty">尚未出库</div>
+      </template>
+      <table v-else-if="outboundRecords.length" class="item-table">
         <thead><tr><th>时间</th><th>商品名称</th><th class="num">数量</th><th>操作人</th></tr></thead>
         <tbody>
           <tr v-for="r in outboundRecords" :key="r.id">
@@ -110,7 +141,19 @@
     <!-- 收款记录 -->
     <section class="block">
       <h4 class="block-title">收款记录（{{ payments.length }}）</h4>
-      <table v-if="payments.length" class="item-table">
+      <template v-if="isMobile">
+        <ul v-if="payments.length" class="rc-list">
+          <li v-for="p in payments" :key="p.id" class="rc-item">
+            <div class="rc-top">
+              <span class="rc-name">{{ fmtDate(p.payDate) }}</span>
+              <span class="rc-amount">¥{{ money(p.amount) }}</span>
+            </div>
+            <div class="rc-sub">{{ operatorName(p.operatorId) }}<template v-if="p.remark"> · {{ p.remark }}</template></div>
+          </li>
+        </ul>
+        <div v-else class="empty">尚未登记收款</div>
+      </template>
+      <table v-else-if="payments.length" class="item-table">
         <thead><tr><th>日期</th><th class="num">金额</th><th>操作人</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="p in payments" :key="p.id">
@@ -126,6 +169,7 @@
 
     <!-- 编辑模式：页面级，跟新建页风格一致 -->
     <div v-if="showEdit" class="edit-page">
+     <div class="edit-scroll">
       <!-- 单据头部卡片 -->
       <section class="block">
         <div class="d-head">
@@ -140,7 +184,38 @@
       <!-- 商品明细卡片 -->
       <section class="block">
         <h4 class="block-title"><span class="bar"></span>商品明细（{{ editItems.length }}）</h4>
-        <table class="item-table">
+
+        <!-- 手机端：卡片式，输入框带「数量 / 单价」标签，避免横向挤压与误填 -->
+        <template v-if="isMobile">
+          <ul class="ec-list">
+            <li v-for="(it, i) in editItems" :key="i" class="ec-item">
+              <div class="ec-top">
+                <span class="ec-name">{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</span>
+                <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+                <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
+              </div>
+              <div class="ec-row">
+                <label class="ec-field">
+                  <i>数量</i>
+                  <input v-model.number="it.quantity" type="number" min="1" inputmode="numeric" class="ec-input" />
+                  <em>{{ unitOf(it.productId) }}</em>
+                </label>
+                <label class="ec-field">
+                  <i>单价</i>
+                  <input v-model.number="it.price" type="number" min="0" inputmode="decimal" class="ec-input" />
+                </label>
+              </div>
+            </li>
+            <li v-if="!editItems.length" class="empty">暂无明细</li>
+          </ul>
+          <div v-if="editItems.length" class="mc-total">
+            <span>合计</span>
+            <span class="mt-qty">{{ editItems.reduce((s, it) => s + (it.quantity || 0), 0) }} 件</span>
+            <b class="mt-amount">¥{{ money(editItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)) }}</b>
+          </div>
+        </template>
+
+        <table v-else class="item-table">
           <thead>
             <tr>
               <th style="width:48px">#</th>
@@ -171,6 +246,7 @@
           </tfoot>
         </table>
       </section>
+     </div>
 
       <div class="edit-footer">
         <button class="btn-back" type="button" @click="goBack">← 返回</button>
@@ -392,11 +468,53 @@ watch(() => route.params.id, loadOrder)
 .item-table .num { text-align: right; }
 .item-table tfoot td { border-bottom: none; font-weight: 600; }
 .total-label { text-align: right !important; }
-.item-cards { list-style: none; }
-.item-card { padding: 10px 4px; border-bottom: 1px solid var(--c-border, #e2e8f0); }
-.item-card:last-child { border-bottom: none; }
-.ic-name { font-weight: 600; color: var(--c-primary, #1a365d); }
-.ic-line { font-size: 13px; color: var(--c-muted, #64748b); margin-top: 2px; }
+/* ── 手机端卡片列表：商品明细 / 出库流水 / 收款记录 / 编辑明细 ──────────
+   只在 isMobile 时渲染这套 DOM，桌面端表格结构完全不受影响。 */
+.mc-list, .ec-list, .rc-list { list-style: none; margin: 0; padding: 0; }
+.mc-item, .ec-item, .rc-item {
+  padding: 10px 12px; margin-bottom: 8px;
+  background: #f8fafc; border: 1px solid var(--c-border); border-radius: 10px;
+}
+.mc-item:last-child, .ec-item:last-child, .rc-item:last-child { margin-bottom: 0; }
+.mc-top, .ec-top, .rc-top { display: flex; align-items: center; gap: 8px; }
+.mc-name, .ec-name, .rc-name {
+  flex: 1; min-width: 0; font-size: 15px; font-weight: 600;
+  color: var(--c-primary); overflow-wrap: anywhere;
+}
+.mc-calc { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--c-muted); }
+.mc-qty { font-weight: 600; color: var(--c-primary); }
+.mc-op { color: var(--c-border-strong); }
+.mc-amount { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--c-primary); }
+.mc-gift { color: var(--c-accent); }
+
+/* 合计条：手机端没有表格 tfoot，用这条补上 */
+.mc-total {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding-top: 10px; font-size: 13px; color: var(--c-muted);
+  border-top: 1px dashed var(--c-border);
+}
+.mc-total .mt-qty { font-weight: 600; color: var(--c-primary); }
+.mc-total .mt-amount { margin-left: auto; font-size: 17px; font-weight: 700; color: var(--c-danger); }
+
+/* 出库流水 / 收款记录 */
+.rc-qty { flex: none; font-weight: 600; color: var(--c-primary); }
+.rc-amount { flex: none; margin-left: auto; font-weight: 700; color: var(--c-danger); }
+.rc-sub { margin-top: 4px; font-size: 12px; color: var(--c-muted); overflow-wrap: anywhere; }
+
+/* 编辑明细：输入行（标签 + 输入框一体，触摸目标 ≥44px） */
+.ec-amount { flex: none; font-size: 15px; font-weight: 700; color: var(--c-primary); }
+.ec-row { display: flex; gap: 10px; margin-top: 10px; }
+.ec-field {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  height: 44px; padding: 0 10px;
+  background: #fff; border: 1px solid var(--c-border-strong); border-radius: 8px;
+}
+.ec-field:focus-within { border-color: var(--c-accent); box-shadow: 0 0 0 2px var(--c-accent-soft); }
+.ec-field i, .ec-field em { flex: none; font-style: normal; font-size: 12px; color: var(--c-muted); }
+.ec-input {
+  flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent;
+  font-size: 15px; text-align: right; color: var(--c-primary);
+}
 
 .prog-list { list-style: none; }
 .prog-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; }
@@ -409,6 +527,11 @@ watch(() => route.params.id, loadOrder)
 @media (max-width: 767px) {
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
+
+  /* 商品明细 / 出库流水 / 收款记录在手机端直接走上面的卡片 DOM，
+     表格只在桌面端渲染。若将来有表格漏加 isMobile 分支，这里兜底为
+     横向滚动，绝不撑破屏幕（V2.0-18 起的方案）。 */
+  .item-table { display: block; overflow-x: auto; }
 }
 
 /* 手机端合计行通栏：统一由 src/styles/theme.css 的 .app-layout.is-mobile 钩子提供。
@@ -441,29 +564,29 @@ watch(() => route.params.id, loadOrder)
 .edit-footer .btn-save { flex: 2; background: var(--c-accent, #2563eb); color: #fff; }
 .edit-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* 手机端合计行通栏 */
+/* 编辑模式手机端：整屏覆盖（点「修改」立即切换，不用往下翻找），
+   内容区独立滚动，底部「返回 / 取消 / 保存」常驻。
+   桌面端保持原样：详情页内联的橙色边框卡片区。 */
 @media (max-width: 767px) {
-  .edit-page .d-meta { grid-template-columns: 62px 1fr; }
-  .edit-page .item-table tfoot tr {
-    display: flex; align-items: center; gap: 8px;
-    background: #fff; border-top: 2px solid var(--c-border, #e2e8f0); padding: 12px 4px 0;
+  .edit-page {
+    position: fixed; inset: 0; z-index: 90;
+    display: flex; flex-direction: column;
+    padding: 0; border: none; border-radius: 0;
+    background: var(--c-bg); overflow: hidden;
   }
-  .edit-page .item-table tfoot td { border: none; padding: 0; width: auto; }
-  .edit-page .item-table tfoot .total-label { text-align: left; }
+  .edit-page .edit-scroll {
+    flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+  }
+  .edit-page .block { margin: 10px; padding: 14px; }
+  .edit-page .block:first-child { margin-top: 12px; }
+  .edit-page .d-meta { grid-template-columns: 62px 1fr; }
+  .edit-page .item-table { display: block; overflow-x: auto; }
+  .edit-page .edit-footer {
+    flex: none; gap: 10px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 0; box-shadow: 0 -2px 12px rgba(22, 50, 92, 0.08);
+  }
+  .edit-page .edit-footer button { height: 48px; }
 }
-
 </style>
-
-/* 编辑模式 */
-.edit-page { position: fixed; inset: 0; background: var(--c-bg, #f4f6fa); z-index: 90; display: flex; flex-direction: column; overflow-y: auto; }
-.edit-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--c-surface, #fff); border-bottom: 1px solid #e8eaef; }
-.edit-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--c-primary, #16325c); }
-.edit-close { font-size: 13px; color: var(--c-muted, #888); cursor: pointer; }
-.edit-close:hover { color: var(--c-primary, #16325c); }
-.edit-items { flex: 1; padding: 16px 20px; overflow-y: auto; }
-.edit-footer { display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; background: var(--c-surface, #fff); border-top: 1px solid #e8eaef; position: sticky; bottom: 0; }
-
-.edit-total-label { font-weight: 600; text-align: right; padding-right: 16px; }
-.edit-note-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 0 4px; }
-.edit-note-row label { font-size: 14px; color: #666; flex-shrink: 0; width: 50px; }
-.edit-note-row .f-input { flex: 1; height: 38px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 12px; font-size: 14px; }
