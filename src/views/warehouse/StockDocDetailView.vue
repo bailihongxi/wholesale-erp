@@ -55,9 +55,22 @@
 
     <!-- 明细表：数量与金额的合计统一放在表格最下面一行 -->
     <section class="block">
+      <!-- 手机端 + 只读 → 全站统一卡片组件（docs/手机端明细卡片规范.md）；
+           编辑态要改数量，仍用表格（手机端走 .items-edit 卡片范式） -->
+      <ItemCards
+        v-if="isMobile && !editing"
+        :title="isIn ? '入库明细' : '出库明细'"
+        :items="cardRows"
+        :show-price="canSeePrice"
+        :total-qty="doc?.totalQty ?? 0"
+        :total-amount="editTotalAmount"
+        empty-text="没有明细"
+      />
+
+      <template v-else>
       <h4 class="sec-title">{{ isIn ? '入库' : '出库' }}明细</h4>
       <div class="tb-scroll">
-        <table class="data-table">
+        <table class="data-table items-edit">
           <thead>
             <tr>
               <th class="center" style="width:48px">序号</th>
@@ -107,6 +120,7 @@
           </tfoot>
         </table>
       </div>
+      </template>
     </section>
 
     <!-- 同单据的其他批次（部分入库 / 部分出库的拆单关联） -->
@@ -161,9 +175,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
+import ItemCards from '../../components/ui/ItemCards.vue'
 import { useStockDocStore, type StockDocItem, type StockDocRow, type StockDocType } from '../../stores/stockDoc'
 import { useUserStore } from '../../stores/user'
 import { usePermission } from '../../composables/usePermission'
+import { useResponsive } from '../../composables/useResponsive'
+import type { ItemCardRow } from '../../types'
 import type { PrintOrderData } from '../../utils/printTemplate'
 
 const route = useRoute()
@@ -171,6 +188,7 @@ const router = useRouter()
 const docStore = useStockDocStore()
 const userStore = useUserStore()
 const { canSeeAnyPrice, canDeleteDoc } = usePermission()
+const { isMobile } = useResponsive()
 
 const canSeePrice = canSeeAnyPrice
 const isIn = computed(() => route.path.startsWith('/warehouse/inbound'))
@@ -201,6 +219,17 @@ const editTotalQty = computed(() =>
 )
 const editTotalAmount = computed(() =>
   items.value.reduce((s, it) => s + (Number(editQty.value[it.productId] ?? it.quantity) || 0) * it.price, 0)
+)
+
+/** 手机端只读卡片的明细行（形状见 types/ItemCardRow） */
+const cardRows = computed<ItemCardRow[]>(() =>
+  items.value.map(it => ({
+    name: it.productName,
+    unit: it.unit,
+    qty: it.quantity,
+    price: it.price,
+    amount: it.subtotal
+  }))
 )
 
 const printData = computed<PrintOrderData>(() => ({
@@ -399,4 +428,39 @@ watch(() => route.fullPath, load)
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* ── 手机端：出入库明细（编辑态）→ 卡片（V2.1-1.4） ──
+   列序（thead）：1序号 2名称 3类别 4单位 5数量 6上限 [7单价 8金额]
+   ⚠️ 单价/金额两列是 v-if，列数会变 → 这里只按前 6 列排，7/8 自然跟在后面。 */
+@media (max-width: 767px) {
+  .tb-scroll { overflow-x: visible; }
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td { display: block; width: 100%; }
+  .items-edit tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td:nth-child(1) { display: none; }                                   /* 序号 */
+  .items-edit tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); } /* 类别 */
+  .items-edit tbody td:nth-child(4) { order: 3; font-size: 12px; color: var(--c-muted); } /* 单位 */
+  .items-edit tbody td:nth-child(5) { order: 4; margin-left: auto; }                      /* 数量（可改） */
+  .items-edit tbody td:nth-child(6) { order: 5; font-size: 12px; color: var(--c-muted); } /* 上限 */
+  .items-edit tbody td:nth-child(7) { order: 6; font-size: 12px; color: var(--c-muted); } /* 单价 */
+  .items-edit tbody td:nth-child(8) { order: 7; font-weight: 700; color: var(--c-danger); }
+  .items-edit tbody td:nth-child(6)::before { content: '上限 '; }
+  .items-edit tbody td:nth-child(7)::before { content: '单价 '; }
+  .items-edit tbody td:nth-child(8)::before { content: '金额 '; }
+  .items-edit tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
+  .items-edit .mini-input { width: 64px; height: 30px; }
+  .items-edit tbody td.empty { display: block; width: 100%; }
+  .items-edit tfoot tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; font-size: 13px; }
+  .items-edit tfoot td.total-label { text-align: left; font-weight: 700; }
+}
 </style>

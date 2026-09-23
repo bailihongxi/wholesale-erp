@@ -34,7 +34,8 @@
         <span class="sec-tip">「库存件数」为该库房当前所有商品的合计件数；有库存的库房需先调拨清空才能删除</span>
       </h4>
 
-      <table class="data-table">
+      <!-- items-edit：手机端卡片范式的契约类，列序见 <style> 末尾 @media -->
+      <table class="data-table items-edit">
         <thead>
           <tr>
             <th class="center" style="width:56px">序号</th>
@@ -259,4 +260,36 @@ useReloadOnActivate(load)
 
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }
 .foot-tip { font-size: 12px; color: var(--c-muted); margin-top: 10px; }
+
+/* ── 手机端：库房一览 → 卡片（V2.1-1.4，与采购/销售开单同一套范式） ──
+   列序（thead）：1序号 2库房名称 3备注 4库存件数 5商品种数 6操作
+   ⚠️ 往表里插列必须同步改这里的 nth-child 与 order。 */
+@media (max-width: 767px) {
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td { display: block; width: 100%; }
+  .items-edit tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td:nth-child(1) { display: none; }                                   /* 序号 */
+  .items-edit tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); }  /* 备注 */
+  .items-edit tbody td:nth-child(4) { order: 3; margin-left: auto; font-size: 12px; color: var(--c-muted); }
+  .items-edit tbody td:nth-child(5) { order: 4; font-size: 12px; color: var(--c-muted); }
+  .items-edit tbody td:nth-child(6) { order: 5; width: 100%; }                            /* 操作独占一行 */
+  .items-edit tbody td:nth-child(4)::before { content: '库存 '; }
+  .items-edit tbody td:nth-child(5)::before { content: '种数 '; }
+  .items-edit tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
+  /* 改名 / 改备注的输入框在卡片里要能撑满，否则手机上只有一小截能点 */
+  .items-edit .txt-input.inline { width: 100%; }
+  .items-edit tbody td.empty { display: block; width: 100%; }
+  .items-edit tfoot tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; font-size: 13px; }
+  .items-edit tfoot td.total-label { text-align: left; font-weight: 700; }
+}
 </style>

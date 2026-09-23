@@ -52,7 +52,8 @@
         <span class="sec-tip">「可用库存」为「{{ locationName || '所选库房' }}」的数量，不足的行不能发足，请先补货或换库房</span>
       </h4>
       <div class="tb-scroll">
-        <table class="data-table">
+        <!-- items-edit：手机端卡片范式的契约类，列序见 <style> 末尾 @media -->
+        <table class="data-table items-edit">
           <thead>
             <tr>
               <th class="center" style="width:48px">序号</th>
@@ -411,4 +412,51 @@ async function handleOutbound(): Promise<void> {
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* ── 手机端：拣货明细 → 卡片（V2.1-1.4，与采购/销售开单同一套范式） ──
+   列序（thead）：1序号 2名称 3单位 4订购量 5已发 6待发 7可用库存 8本次实发 9操作
+   ⚠️ 往明细里插列必须同步改这里的 nth-child 与 order。 */
+@media (max-width: 767px) {
+  .tb-scroll { overflow-x: visible; }
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td { display: block; width: 100%; }
+  .items-edit tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  /* 库存不足的行（is-warn）在卡片模式下也要看得出来 */
+  .items-edit tbody tr.is-warn { background: #fff7ed; }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td:nth-child(1) { display: none; }                                   /* 序号 */
+  .items-edit tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); } /* 单位 */
+  .items-edit tbody td:nth-child(4) { order: 3; font-size: 12px; color: var(--c-muted); } /* 订购 */
+  .items-edit tbody td:nth-child(5) { order: 4; font-size: 12px; color: var(--c-muted); } /* 已发 */
+  .items-edit tbody td:nth-child(6) { order: 5; font-size: 12px; color: var(--c-muted); } /* 待发 */
+  .items-edit tbody td:nth-child(7) { order: 6; font-size: 12px; color: var(--c-muted); } /* 可用库存 */
+  .items-edit tbody td:nth-child(8) { order: 7; margin-left: auto; }                      /* 本次实发 */
+  .items-edit tbody td:nth-child(9) { order: 8; }                                         /* 操作 */
+  .items-edit tbody td:nth-child(4)::before { content: '订购 '; }
+  .items-edit tbody td:nth-child(5)::before { content: '已发 '; }
+  .items-edit tbody td:nth-child(6)::before { content: '待发 '; }
+  .items-edit tbody td:nth-child(7)::before { content: '库存 '; }
+  .items-edit tbody td:nth-child(8)::before { content: '实发 '; }
+  .items-edit tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
+  .items-edit .mini-input { width: 64px; height: 30px; }
+  .items-edit tbody td.empty { display: block; width: 100%; }
+  .items-edit tfoot tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; font-size: 13px; }
+  .items-edit tfoot td.total-label { text-align: left; font-weight: 700; }
+  .items-edit tfoot td:nth-child(2)::before { content: '订购 '; }
+  .items-edit tfoot td:nth-child(3)::before { content: '已发 '; }
+  .items-edit tfoot td:nth-child(4)::before { content: '待发 '; }
+  .items-edit tfoot td:nth-child(6)::before { content: '本次 '; }
+  /* 第 5、7 格是占位空格，手机端藏掉免得出现孤零零的「库存」标签 */
+  .items-edit tfoot td:nth-child(5), .items-edit tfoot td:nth-child(7) { display: none; }
+  .items-edit tfoot td::before { font-size: 12px; color: var(--c-muted); }
+}
 </style>

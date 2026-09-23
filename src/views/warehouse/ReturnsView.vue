@@ -35,7 +35,8 @@
           {{ tab === 'sale' ? '销售退货' : '采购退货' }}明细
           <span class="sec-tip">填写每件商品的「退货数量」与原因；默认带出原单价</span>
         </h4>
-        <table class="data-table">
+        <!-- items-edit：手机端卡片范式的契约类，列序见 <style> 末尾 @media -->
+        <table class="data-table items-edit">
           <thead>
             <tr>
               <th>商品名称</th>
@@ -315,4 +316,39 @@ watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void 
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* ── 手机端：退货明细 → 卡片（V2.1-1.4，与采购/销售开单同一套范式） ──
+   列序（thead）：1商品名称 2原单数量 3退货数量 4单价 5行金额 6退货原因
+   ⚠️ 往明细里插列必须同步改这里的 nth-child 与 order。 */
+@media (max-width: 767px) {
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td { display: block; width: 100%; }
+  .items-edit tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td:nth-child(1) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(2) { order: 2; font-size: 12px; color: var(--c-muted); }
+  .items-edit tbody td:nth-child(3) { order: 3; margin-left: auto; }
+  .items-edit tbody td:nth-child(4) { order: 4; font-size: 12px; color: var(--c-muted); }
+  .items-edit tbody td:nth-child(5) { order: 5; font-weight: 700; color: var(--c-danger); }
+  .items-edit tbody td:nth-child(6) { order: 6; width: 100%; }   /* 原因：独占一行好输入 */
+  .items-edit tbody td:nth-child(2)::before { content: '原单 '; }
+  .items-edit tbody td:nth-child(3)::before { content: '退货 '; }
+  .items-edit tbody td:nth-child(4)::before { content: '单价 '; }
+  .items-edit tbody td:nth-child(5)::before { content: '金额 '; }
+  .items-edit tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
+  .items-edit .mini-input { width: 64px; height: 30px; }
+  .items-edit .reason-input { width: 100%; }
+  .items-edit tbody td.empty { display: block; width: 100%; }
+  .items-edit tfoot tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; font-size: 13px; }
+  .items-edit tfoot td.total-label { text-align: left; font-weight: 700; }
+  .items-edit tfoot td.t-amt { margin-left: auto; font-size: 20px; }
+}
 </style>

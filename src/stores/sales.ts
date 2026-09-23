@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { db } from '../db'
 import { genSaleNo, genStockDocNo } from '../utils/orderNo'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
+import { revertQuoteOnOrderDelete } from '../utils/quoteLink'
 import { useInventoryStore } from './inventory'
 import type { Customer, SaleOrder, SaleOrderItem, Product, StockHistoryRow } from '../types'
 
@@ -275,10 +276,16 @@ export const useSalesStore = defineStore('sales', () => {
     if (order.status !== 'pending') {
       return { ok: false, message: '该单已出库，不能删除（请先撤回对应的出库单）' }
     }
+    // 双向联动（V2.1-1.4）：本单若是报价单转来的，先把来源报价单退回未转，
+    // 否则它会被永久钉在「已转单」（不能再改、不能再转），变成孤儿单据。
+    const rev = await revertQuoteOnOrderDelete(orderId, order.orderNo, 'sale', operatorId)
     await db.saleOrderItems.where('saleOrderId').equals(orderId).delete()
     await db.saleOrders.delete(orderId)
     await writeLog(operatorId, AUDIT_ACTIONS.SALE_DELETE, `删除销售单 ${order.orderNo}`)
-    return { ok: true, message: '已删除' }
+    return {
+      ok: true,
+      message: rev.reverted ? `已删除，来源报价单 ${rev.quoteNo} 已退回未转状态` : '已删除'
+    }
   }
 
   return {

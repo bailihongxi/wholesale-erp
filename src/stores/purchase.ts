@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { db } from '../db'
 import { genPurchaseNo, genStockDocNo } from '../utils/orderNo'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
+import { revertQuoteOnOrderDelete } from '../utils/quoteLink'
 import { useInventoryStore } from './inventory'
 import type { Supplier, PurchaseOrder, PurchaseOrderItem, Product, StockHistoryRow } from '../types'
 
@@ -252,10 +253,16 @@ export const usePurchaseStore = defineStore('purchase', () => {
     if (order.status !== 'pending') {
       return { ok: false, message: '该单已入库，不能删除（请先撤回对应的入库单）' }
     }
+    // 双向联动（V2.1-1.4）：本单若是预采询价单转来的，先把来源询价单退回未转，
+    // 否则它会被永久钉在「已转单」（不能再改、不能再转），变成孤儿单据。
+    const rev = await revertQuoteOnOrderDelete(orderId, order.orderNo, 'purchase', operatorId)
     await db.purchaseOrderItems.where('purchaseOrderId').equals(orderId).delete()
     await db.purchaseOrders.delete(orderId)
     await writeLog(operatorId, AUDIT_ACTIONS.PURCHASE_DELETE, `删除采购单 ${order.orderNo}`)
-    return { ok: true, message: '已删除' }
+    return {
+      ok: true,
+      message: rev.reverted ? `已删除，来源预采询价单 ${rev.quoteNo} 已退回未转状态` : '已删除'
+    }
   }
 
   return {

@@ -180,8 +180,11 @@ function money(n: number): string {
  */
 export function paginateItems(items: PrintItem[], cap: number): PrintItem[][] {
   if (!items.length) return [[]]
-  const firstCap = Math.max(3, cap - 4)
-  const lastCap = Math.max(3, cap - 5)
+  // 预留量（行）：首页多一个「往来单位」栏，末页多「合计 + 备注 + 签章」。
+  // V2.1-1.4：原为 -4 / -5，配 A5=6 时首页只剩 3 行（老板反馈「四行就换纸」）；
+  // 现容量改按纸张高度算（A5=9），预留同步收紧到 -3 / -4 → 首页 6 行、中间页 9 行、末页 5 行。
+  const firstCap = Math.max(3, cap - 3)
+  const lastCap = Math.max(3, cap - 4)
   if (items.length <= firstCap) return [items]
 
   const chunks: PrintItem[][] = []

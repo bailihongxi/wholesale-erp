@@ -379,7 +379,9 @@ async function handleRemove(): Promise<void> {
   try {
     await showConfirmDialog({
       title: '删除采购单',
-      message: `确定删除 ${order.value.orderNo}？\n删除后不可恢复，只能重新开单。`
+      message:
+        `确定删除 ${order.value.orderNo}？\n删除后不可恢复，只能重新开单。` +
+        `\n若本单由预采询价单转来，来源询价单会一并退回「未转」状态。`
     })
   } catch {
     return // 用户取消
@@ -391,7 +393,7 @@ async function handleRemove(): Promise<void> {
       showToast(res.message)
       return
     }
-    showToast('已删除')
+    showToast(res.message)
     router.replace('/purchase/orders')
   } finally {
     removing.value = false
