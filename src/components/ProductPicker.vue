@@ -320,6 +320,9 @@ function stockClass(r: PickerRow): string {
   }
   .picker .data-table tbody td { padding: 2px 0; border: none; width: auto; }
   .picker .data-table tbody td:nth-child(1) { display: none; } /* 序号 */
+  /* ⚠️ 空态行只有一个 td（colspan），它就是 :nth-child(1)，会被上面那条一起隐藏 ——
+     手机端搜不到商品时会「一片空白、连提示都没有」。这里显式放回来。 */
+  .picker .data-table tbody td.empty { display: block; width: 100%; }
   .picker .data-table tbody td:nth-child(2) { /* 商品名 */
     width: 100%; font-size: 15px; font-weight: 600; order: 1;
   }

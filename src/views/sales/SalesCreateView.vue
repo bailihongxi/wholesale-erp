@@ -355,6 +355,9 @@ onMounted(async () => {
   }
   .mini-input { width: 64px; height: 30px; font-size: 14px; }
   .mini-input.price { width: 80px; }
+  /* ⚠️ 空态行只有一个 td（colspan），它就是 :nth-child(1)，会被上面的 display:none 一起隐藏 ——
+     手机端会变成一张空卡片、连「尚未添加商品」都不显示。这里显式放回来。 */
+  .data-table tbody td.empty { display: block; width: 100%; }
   /* 合计行通栏 */
   .data-table tfoot tr {
     display: flex; align-items: center; gap: 8px;

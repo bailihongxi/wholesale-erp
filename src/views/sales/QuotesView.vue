@@ -125,7 +125,7 @@
           <span class="tag" :class="priceMode === 'retail' ? 'tag-warn' : 'tag-info'">{{ priceMode === 'retail' ? '按零售价' : '按批发价' }}</span>
         </h4>
         <div class="tb-scroll">
-          <table class="data-table">
+          <table class="data-table items-edit">
             <thead>
               <tr>
                 <th class="center" style="width:48px">序号</th>
@@ -228,7 +228,7 @@
 
       <section class="block">
         <h4 class="block-title">报价明细（{{ detailItems.length }}）</h4>
-        <table v-if="detailItems.length" class="data-table">
+        <table v-if="detailItems.length" class="data-table items-view">
           <thead>
             <tr><th>#</th><th>商品名称</th><th>单位</th><th class="num">数量</th><th class="num">报价</th><th class="num">金额</th></tr>
           </thead>
@@ -773,4 +773,69 @@ onMounted(async () => {
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* === 手机端：报价明细改卡片式（与采购单「采购商品明细」同一套范式）===
+   做法：表格结构不动，只在窄屏把单元格变块级 + order 重排成「一行一卡」。
+   为什么不改用 ul/li 卡片组件：明细在电脑端仍要保留表格（列多、便于横向比对），
+   组件化等于把两套 DOM 都维护一遍、还要同步输入框状态；纯 CSS 只动观感不动逻辑，
+   也避免「手机端改了、电脑端忘了」的分叉。
+
+   两个表格列数不同、必须分开写映射（列序见各自 thead）：
+   - .items-edit（新建态，8 列）序号/名称/类别/单位/数量/报价/金额/操作
+   - .items-view（详情态，6 列）#/名称/单位/数量/报价/金额 */
+@media (max-width: 767px) {
+  /* 卡片模式下不再需要「表格至少 640px 宽 + 横向滚动」那套（见 theme.css），
+     否则卡片会被撑到 640px、比屏幕还宽。原表格列宽约束一并解除。 */
+  .tb-scroll { overflow-x: visible; }
+  .items-edit, .items-edit tbody, .items-view, .items-view tbody { min-width: 0; }
+  .items-edit thead, .items-view thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td,
+  .items-view, .items-view tbody, .items-view tr, .items-view td {
+    display: block; width: 100%;
+  }
+  .items-edit tbody tr, .items-view tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .items-edit tbody td, .items-view tbody td { padding: 2px 0; border: none; width: auto; }
+
+  /* 新建态：商品名独占一行，其余按 类别 → 数量 → 报价 → 金额 → 操作 排开 */
+  .items-edit tbody td:nth-child(1) { display: none; }          /* 序号：卡片里无意义 */
+  .items-edit tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); }
+  .items-edit tbody td:nth-child(4) { display: none; }          /* 单位：已并入商品名区域 */
+  .items-edit tbody td:nth-child(5) { order: 3; margin-left: auto; }
+  .items-edit tbody td:nth-child(6) { order: 4; }
+  .items-edit tbody td:nth-child(7) { order: 5; font-weight: 700; color: var(--c-danger); }
+  .items-edit tbody td:nth-child(8) { order: 6; }
+  /* 一行放不下，输入框收紧（电脑端保持原尺寸） */
+  .items-edit .mini-input { width: 64px; height: 30px; }
+  .items-edit .mini-input.price { width: 80px; }
+
+  /* 详情态：只读且表头已隐藏，给数字列补小标签，否则「1 ¥780 ¥780」分不清哪列是哪列 */
+  .items-view tbody td:nth-child(1) { display: none; }          /* # */
+  .items-view tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-view tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); }
+  .items-view tbody td:nth-child(4) { order: 3; margin-left: auto; }
+  .items-view tbody td:nth-child(5) { order: 4; }
+  .items-view tbody td:nth-child(6) { order: 5; font-weight: 700; color: var(--c-danger); }
+  .items-view tbody td:nth-child(4)::before { content: '数量 '; }
+  .items-view tbody td:nth-child(5)::before { content: '报价 '; }
+  .items-view tbody td:nth-child(6)::before { content: '金额 '; }
+  .items-view tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
+
+  /* ⚠️ 空态那一行只有一个 td（colspan），它是 :nth-child(1)，
+     会被上面的 `display:none` 一起隐藏 —— 手机端就会变成一张空卡片、没有任何提示。
+     必须在后面显式放回来（同特异性、靠书写顺序取胜）。 */
+  .items-edit tbody td.empty, .items-view tbody td.empty { display: block; width: 100%; }
+
+  /* 合计行：左「合计 N 项商品」，右大号红金额 */
+  .items-edit tfoot tr, .items-view tfoot tr {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td, .items-view tfoot td { border: none; padding: 0; width: auto; }
+  .items-edit tfoot td.total-label, .items-view tfoot td.total-label { text-align: left; }
+  .items-edit tfoot td.t-amount, .items-view tfoot td.t-amount { margin-left: auto; font-size: 20px; }
+}
 </style>
