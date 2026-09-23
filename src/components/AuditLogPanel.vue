@@ -109,6 +109,8 @@ const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 
 function operatorName(id: number): string {
+  // 0 = 经销商自助单（销售确认前无归属销售），不是员工 id
+  if (id === 0) return '经销商自助'
   return users.value.find(u => u.id === id)?.name ?? `#${id}`
 }
 

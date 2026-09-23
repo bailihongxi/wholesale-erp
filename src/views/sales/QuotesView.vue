@@ -185,6 +185,8 @@
         @pick="addItem"
       />
 
+      <p v-if="submitBlockReason" class="submit-tip">{{ submitBlockReason }}</p>
+
       <PageActions
         cancel-text="取消"
         confirm-text="保存报价单"
@@ -206,6 +208,7 @@
             <span v-if="quote.convertedSaleNo" class="d-badge conv">→ {{ quote.convertedSaleNo }}</span>
           </div>
           <div class="d-actions">
+            <button class="btn btn-back" type="button" @click="backToList">← 返回列表</button>
             <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
             <button class="btn btn-print" type="button" @click="openPreview">🖨 打印</button>
             <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
@@ -442,8 +445,22 @@ const form = reactive({
 })
 const total = computed(() => form.items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0))
 const canSubmit = computed(() => {
+  // 经销商没有客户选择区（客户恒为自己，在 handleCreate 里归属），故不参与客户校验，
+  // 否则 form.customerId 恒为 0 会导致「保存报价单」永远禁用。
+  if (isDealer.value) return form.items.length > 0
   const hasCustomer = form.customerId > 0 || form.customerName.trim().length > 0
   return hasCustomer && form.items.length > 0
+})
+/**
+ * 保存按钮被禁用时，明说还差什么。
+ * 否则按钮只是变灰，用户点了没反应也不知道原因（老板实测反馈）。
+ */
+const submitBlockReason = computed(() => {
+  if (form.items.length === 0) return '请先在下方商品列表中点「＋ 添加」加入报价商品'
+  if (!isDealer.value && form.customerId <= 0 && !form.customerName.trim()) {
+    return '请先选择客户，或填写客户名称（散客）'
+  }
+  return ''
 })
 const selectedMap = computed<Record<number, number>>(() => {
   const m: Record<number, number> = {}
@@ -483,7 +500,11 @@ async function handleCreate(): Promise<void> {
     items: form.items.map(it => ({ product: it.product, quantity: Number(it.quantity) || 0, price: Number(it.price) || 0 })),
     remark: form.remark,
     validDays: form.validDays,
-    salesId: userStore.currentUser?.id ?? 2
+    // 经销商自助单在销售「确认」之前没有归属销售，写 0 表示待认领。
+    // 不能写经销商自己的客户 id：客户 id 与员工 id 是两套自增序列，
+    // 撞号时会把经销商的单静默算到某个无辜销售名下（业绩/提成错账且难排查）。
+    // 真正的归属在 V2.1-3「销售确认询价单」那一刻回填。
+    salesId: isDealer.value ? 0 : (userStore.currentUser?.id ?? 2)
   })
   submitting.value = false
   if (res.ok) {
@@ -736,6 +757,17 @@ onMounted(async () => {
 .block-title { font-size: 15px; color: var(--c-primary); margin-bottom: 10px; }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 .tip-line { font-size: 12px; color: var(--c-muted); }
+
+/* 保存按钮禁用时的原因提示：按钮只变灰不说话，用户会以为功能坏了 */
+.submit-tip {
+  margin: 8px 0 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  color: var(--c-warn, #b45309);
+  background: var(--c-warn-bg, #fff7ed);
+  border: 1px solid var(--c-warn-border, #fed7aa);
+}
 
 /* 手机端合计行通栏：统一由 src/styles/theme.css 的 .app-layout.is-mobile 钩子提供。
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明

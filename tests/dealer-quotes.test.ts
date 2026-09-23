@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { setActivePinia, createPinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import 'fake-indexeddb/auto'
@@ -66,5 +68,13 @@ describe('经销商（dealer）门户权限 —— V2.1-1', () => {
     }
     // 经销商菜单应只含报价单相关入口
     expect(nav.sidebar.some(i => i.route === '/sales/quotes'), '经销商侧边栏应含报价单入口').toBe(true)
+  })
+
+  it('经销商建单 salesId 写 0，不得写客户 id（撞号会把他们错记成某个销售的业绩）', () => {
+    const code = readFileSync(resolve(__dirname, '..', 'src/views/sales/QuotesView.vue'), 'utf-8')
+    expect(code, '经销商分支必须把 salesId 写成 0（暂无归属销售，待销售确认时回填）')
+      .toMatch(/salesId:\s*isDealer\.value\s*\?\s*0\s*:/)
+    expect(code, 'handleCreate 不得再把建单人 id 无条件写进 salesId')
+      .not.toMatch(/salesId:\s*userStore\.currentUser\?\.id/)
   })
 })
