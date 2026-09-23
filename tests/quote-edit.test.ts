@@ -179,8 +179,17 @@ describe('三张单据页都按销售单那套接好了「修改」', () => {
       // 编辑模块里不再放「返回」按钮。
       // 注意：只比对真实标签用法（class="btn btn-back"），不要用裸 'btn-back'
       // —— 采购单的 CSS 注释里提到过这个类名，裸匹配会误报。
-      expect(src).not.toContain('btn btn-back')
-      expect(src).not.toContain('class="btn-back"')
+      //
+      // V2.1-1.3 修正断言范围：报价单**详情头部**的「← 返回列表」（老板 V2.1-1.1 要求新增）
+      // 属于详情态、不在编辑模块里，整文件匹配会误伤 —— 这里改成只查 <EditModePanel> 区块内部，
+      // 意图（编辑模块内不许有返回键）不变。
+      const panelStart = src.indexOf('<EditModePanel')
+      const panelEnd = src.indexOf('</EditModePanel>')
+      expect(panelStart, `${p.name} 未找到 <EditModePanel>`).toBeGreaterThan(-1)
+      expect(panelEnd, `${p.name} 未找到 </EditModePanel>`).toBeGreaterThan(panelStart)
+      const panelSrc = src.slice(panelStart, panelEnd)
+      expect(panelSrc).not.toContain('btn btn-back')
+      expect(panelSrc).not.toContain('class="btn-back"')
     })
   }
 

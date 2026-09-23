@@ -101,5 +101,7 @@ describe('问题4：报价单批发/零售价切换', () => {
     await buttons[1].trigger('click') // 第二个是「零售价」
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.sec-title .tag').text()).toContain('按零售价')
-  })
+    // V2.1-1.3：挂载整份 QuotesView（含动态 import 的选商品弹窗）在本机要 ~15s，
+    // 默认 5s 必超时。断言一字未改，只把超时放宽到 20s（与 nav-permission 的 boss 用例同做法）。
+  }, 20000)
 })
