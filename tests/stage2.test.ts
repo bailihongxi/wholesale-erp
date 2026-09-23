@@ -67,7 +67,7 @@ describe('阶段2：登录页重写', () => {
     expect(userStore.homeRouteForRole('sales')).toBe('/sales/home')
     expect(userStore.homeRouteForRole('finance')).toBe('/finance/home')
     expect(userStore.homeRouteForRole('warehouse')).toBe('/warehouse/home')
-    expect(userStore.homeRouteForRole('dealer')).toBe('/dealer/catalog')
+    expect(userStore.homeRouteForRole('dealer')).toBe('/sales/quotes')
   })
 
   it('2.5 老板登录成功后跳转到老板工作台', async () => {

@@ -4,7 +4,7 @@
 
     <!-- 页内 Tab：销售单 / 报价单（第二十轮起报价单收进销售管理页内，不单列侧边栏菜单） -->
     <div class="quotes-tabs">
-      <button type="button" :class="{ active: route.path === '/sales/orders' }" @click="go('/sales/orders')">
+      <button v-if="!isDealer" type="button" :class="{ active: route.path === '/sales/orders' }" @click="go('/sales/orders')">
         销售单
       </button>
       <button type="button" :class="{ active: true }" @click="go('/sales/quotes')">
@@ -80,16 +80,22 @@
     <template v-else-if="mode === 'create'">
       <PageHeader title="新建报价单" sub="选客户 → 加商品 → 填数量与报价，客户确认后可一键转销售单" />
       <div class="head-card">
-        <div class="row">
-          <label>客户</label>
-          <select v-model="form.customerId" class="f-input">
-            <option :value="0">散客 / 新客户（直接填名字）</option>
-            <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
+        <div v-if="!isDealer">
+          <div class="row">
+            <label>客户</label>
+            <select v-model="form.customerId" class="f-input">
+              <option :value="0">散客 / 新客户（直接填名字）</option>
+              <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>客户名称 <span v-if="form.customerId > 0" class="muted">（已选客户，无需填写）</span></label>
+            <input v-model="form.customerName" class="f-input" placeholder="如：红星商场 王老板" :disabled="form.customerId > 0" />
+          </div>
         </div>
-        <div class="row">
-          <label>客户名称 <span v-if="form.customerId > 0" class="muted">（已选客户，无需填写）</span></label>
-          <input v-model="form.customerName" class="f-input" placeholder="如：红星商场 王老板" :disabled="form.customerId > 0" />
+        <div v-else class="row">
+          <label>客户</label>
+          <input class="f-input" :value="userStore.currentUser?.name || '经销商'" disabled />
         </div>
         <div class="row">
           <label>有效期（天）<span class="muted">（选填）</span></label>
@@ -106,7 +112,7 @@
             <button class="mode-btn" :class="{ active: priceMode === 'wholesale' }" type="button" @click="switchMode('wholesale')">
               批发价<span class="mode-hint">经销商拿货</span>
             </button>
-            <button class="mode-btn" :class="{ active: priceMode === 'retail' }" type="button" @click="switchMode('retail')">
+            <button v-if="!isDealer" class="mode-btn" :class="{ active: priceMode === 'retail' }" type="button" @click="switchMode('retail')">
               零售价<span class="mode-hint">散客零售</span>
             </button>
           </div>
@@ -200,9 +206,9 @@
             <span v-if="quote.convertedSaleNo" class="d-badge conv">→ {{ quote.convertedSaleNo }}</span>
           </div>
           <div class="d-actions">
-            <button v-if="quote.status !== 'converted'" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
+            <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
             <button class="btn btn-print" type="button" @click="openPreview">🖨 打印</button>
-            <button v-if="quote.status !== 'converted'" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
+            <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为销售单' }}
             </button>
             <button v-if="canDeleteDoc && quote.status !== 'converted'" class="btn danger" type="button" @click="handleRemove">🗑 删除</button>
@@ -344,7 +350,7 @@ const productStore = useProductStore()
 const salesStore = useSalesStore()
 const userStore = useUserStore()
 const { isMobile } = useResponsive()
-const { canDeleteDoc } = usePermission()
+const { canDeleteDoc, isDealer } = usePermission()
 
 type Mode = 'list' | 'create' | 'detail'
 const mode = ref<Mode>('list')
@@ -364,6 +370,10 @@ const pager = useServerPager<QuoteOrder>({
     const kw = keyword.value.trim()
     const lower = kw.toLowerCase()
     const parts = ['or(kind.eq.sale,kind.is.null)']
+    // 经销商只看自己的单：云端加 customerId 过滤（否则分页 total 是全部销售单，列表错乱）
+    if (isDealer.value && userStore.currentUser?.id) {
+      parts.push(`customerId.eq.${userStore.currentUser.id}`)
+    }
     if (kw) {
       const ids = customers.value
         .filter(c => String(c.name ?? '').toLowerCase().includes(lower))
@@ -375,6 +385,7 @@ const pager = useServerPager<QuoteOrder>({
     // 本地 / 测试模式没有 orExpr 语义，用同一套条件在行上过滤
     const extraFilter = (r: QuoteOrder): boolean => {
       const row = r as any
+      if (isDealer.value && row.customerId !== userStore.currentUser?.id) return false
       if (row.kind !== 'sale' && row.kind != null) return false
       if (!kw) return true
       return (
@@ -467,8 +478,8 @@ async function handleCreate(): Promise<void> {
   if (submitting.value) return
   submitting.value = true
   const res = await quotesStore.createQuote({
-    customerId: form.customerId,
-    customerName: form.customerId > 0 ? '' : form.customerName,
+    customerId: isDealer.value ? (userStore.currentUser?.id ?? 0) : form.customerId,
+    customerName: isDealer.value ? '' : (form.customerId > 0 ? '' : form.customerName),
     items: form.items.map(it => ({ product: it.product, quantity: Number(it.quantity) || 0, price: Number(it.price) || 0 })),
     remark: form.remark,
     validDays: form.validDays,
@@ -553,7 +564,14 @@ async function onSaveEdit(): Promise<void> {
 }
 
 async function openDetail(id: number): Promise<void> {
-  quote.value = (await quotesStore.getQuote(id)) ?? null
+  const q = await quotesStore.getQuote(id)
+  if (!q) return
+  // 经销商只能打开自己的单；列表虽已按 customerId 过滤，这里再兜一道（防直接调用/URL）
+  if (isDealer.value && q.customerId !== userStore.currentUser?.id) {
+    showToast('无权查看该报价单')
+    return
+  }
+  quote.value = q
   detailItems.value = await quotesStore.getQuoteItems(id)
   const ids = [...new Set(detailItems.value.map(it => it.productId))]
   const list = await db_products(ids)

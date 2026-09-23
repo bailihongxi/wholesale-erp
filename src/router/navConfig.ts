@@ -142,6 +142,15 @@ export const navConfig: Record<string, RoleNav> = {
       { label: '我的', icon: '👤', route: '/finance/mine' }
     ]
   },
+  // 经销商：受限到只剩「报价单」一入口（仅看见自己的单），概念上是"低权限销售"但独立存在，不污染真正销售
+  // 报价单是页内 Tab（非 modulesOf 管理的独立模块），故 sidebar 直接手写，不调 modulesOf（否则返回空）
+  dealer: {
+    sidebar: [{ label: '报价单', icon: '📝', route: '/sales/quotes' }],
+    tabbar: [
+      { label: '报价单', icon: '📝', route: '/sales/quotes' },
+      { label: '我的', icon: '👤', route: '/sales/mine' }
+    ]
+  },
   warehouse: {
     sidebar: modulesOf(DEFAULT_ROLE_PERMS.warehouse),
     // 库存作业已并入库存管理，手机端底部 Tab 收为两项

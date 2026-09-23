@@ -395,7 +395,7 @@ export const useUserStore = defineStore('user', () => {
       case 'sales': return '/sales/home'
       case 'finance': return '/finance/home'
       case 'warehouse': return '/warehouse/home'
-      case 'dealer': return '/dealer/catalog'
+      case 'dealer': return '/sales/quotes'
       default: return '/login'
     }
   }

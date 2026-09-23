@@ -78,7 +78,7 @@ describe('阶段1：数据层 + 登录', () => {
     expect(store.homeRouteForRole('sales')).toBe('/sales/home')
     expect(store.homeRouteForRole('finance')).toBe('/finance/home')
     expect(store.homeRouteForRole('warehouse')).toBe('/warehouse/home')
-    expect(store.homeRouteForRole('dealer')).toBe('/dealer/catalog')
+    expect(store.homeRouteForRole('dealer')).toBe('/sales/quotes')
   })
 
   it('登出后状态清空', async () => {

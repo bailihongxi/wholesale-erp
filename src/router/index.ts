@@ -42,8 +42,8 @@ const routes = [
   { path: '/sales/orders', component: () => import('../views/sales/SalesOrdersView.vue'), meta: { role: ['sales', 'boss'], title: '销售单' } },
   { path: '/sales/orders/new', component: () => import('../views/sales/SalesCreateView.vue'), meta: { role: ['sales', 'boss'], title: '新建销售单' } },
   { path: '/sales/orders/:id', component: () => import('../views/sales/SaleOrderDetailView.vue'), meta: { role: ['sales', 'boss'], title: '销售单详情' } },
-  { path: '/sales/quotes', component: () => import('../views/sales/QuotesView.vue'), meta: { role: ['sales', 'boss'], title: '报价单' } },
-  { path: '/sales/mine', component: () => import('../views/RoleMineView.vue'), meta: { role: 'sales', title: '我的' } },
+  { path: '/sales/quotes', component: () => import('../views/sales/QuotesView.vue'), meta: { role: ['sales', 'boss', 'dealer'], title: '报价单' } },
+  { path: '/sales/mine', component: () => import('../views/RoleMineView.vue'), meta: { role: ['sales', 'dealer'], title: '我的' } },
 
   // ===== 财务端 =====
   { path: '/finance/home', component: () => import('../views/finance/FinanceHomeView.vue'), meta: { role: ['finance', 'boss'], title: '财务工作台' } },

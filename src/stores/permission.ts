@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { db } from '../db'
 import {
   ALL_MODULES, ALL_MODULE_ROUTES, DEFAULT_ROLE_PERMS, MODULE_GROUPS,
-  modulesOf, type NavItem, type ModuleGroup
+  modulesOf, getNav, type NavItem, type ModuleGroup
 } from '../router/navConfig'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 
@@ -63,7 +63,14 @@ export const usePermissionStore = defineStore('permission', () => {
   function canAccess(role: string | null, route: string): boolean {
     if (!role) return false
     if (role === 'boss') return true
-    return routesOf(role).includes(route)
+    const routes = routesOf(role)
+    if (routes.length) return routes.includes(route)
+    // 经销商等「不在模块矩阵里」的角色：DEFAULT_ROLE_PERMS 没有它的条目、
+    // 也不该登记为可配置模块（其权限固定、不接受老板改），
+    // 可用入口完全由 navConfig 声明（报价单 / 我的），据此放行。
+    // 少了这段，canAccess 对它恒为 false，底部 Tab 会丢掉「我的」只剩报价单。
+    const nav = getNav(role)
+    return [...nav.sidebar, ...nav.tabbar].some(i => i.route === route)
   }
 
   /** 保存某角色的权限；传空数组表示恢复默认 */

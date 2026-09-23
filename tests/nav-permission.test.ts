@@ -53,6 +53,11 @@ describe('导航权限与路由可用性', () => {
         }
       })
 
+      // 超时放宽到 20s（断言本身不变）：该用例要逐个 push 该角色全部菜单项，
+      // 每一项都会触发一次视图组件的动态 import（真实按需加载、非 mock），
+      // 冷启动下十几个 chunk 的编译远超 vitest 默认 5s。
+      // 超时会中断导航并残留 pending 跳转，污染下一个角色的用例导致误报
+      // （实测：boss 超时 → purchaser 被误判为「守卫弹回」）。
       it('菜单项均可真正访问（不被守卫弹回、不跳登录页）', async () => {
         loginAs(role)
         const home = useUserStore().homeRouteForRole(role)
@@ -69,7 +74,7 @@ describe('导航权限与路由可用性', () => {
             expect(landed, `${role}「${item.label}」(${item.route}) 被守卫弹回首页 ${home}`).not.toBe(home)
           }
         }
-      })
+      }, 20000)
     })
   }
 
