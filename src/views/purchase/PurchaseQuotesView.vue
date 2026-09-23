@@ -119,7 +119,8 @@
           <span class="tag" :class="priceMode === 'retail' ? 'tag-warn' : 'tag-info'">{{ priceMode === 'retail' ? '按进价' : '按进价' }}</span>
         </h4>
         <div class="tb-scroll">
-          <table class="data-table">
+          <!-- items-edit：手机端卡片范式的契约类，列序见下方 @media（V2.1-1.3） -->
+          <table class="data-table items-edit">
             <thead>
               <tr>
                 <th class="center" style="width:48px">序号</th>
@@ -218,6 +219,16 @@
       </section>
 
       <section class="block">
+        <!-- 手机端卡片（全站统一组件），电脑端列表表格。规则见 docs/手机端明细卡片规范.md -->
+        <ItemCards
+          v-if="isMobile"
+          title="询价明细"
+          :items="detailCards"
+          :total-amount="quote?.totalAmount ?? 0"
+          empty-text="暂无明细"
+        />
+
+        <template v-else>
         <h4 class="block-title">询价明细（{{ detailItems.length }}）</h4>
         <table v-if="detailItems.length" class="data-table">
           <thead>
@@ -242,6 +253,7 @@
           </tfoot>
         </table>
         <div v-else class="empty">暂无明细</div>
+        </template>
       </section>
 
       <!-- 编辑模式：与销售单同一套做法 —— 电脑端内联在详情页下方（普通卡片），
@@ -317,6 +329,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
+import ItemCards from '../../components/ui/ItemCards.vue'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
 import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
@@ -335,7 +348,7 @@ import { db } from '../../db'
 import { escapeOr } from '../../db/cloudDb'
 import { serverPage } from '../../db/serverPage'
 import { buildOrderPrintHTML, getCompanyName } from '../../utils/printTemplate'
-import type { Product, QuoteOrder, QuoteOrderItem } from '../../types'
+import type { Product, QuoteOrder, QuoteOrderItem, ItemCardRow } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -573,6 +586,17 @@ async function db_products(ids: number[]): Promise<Product[]> {
 
 function nameOf(id: number): string { return productMap.value[id] ? productStore.productName(productMap.value[id]) : `商品#${id}` }
 function unitOf(id: number): string { return productMap.value[id]?.unit ?? '' }
+
+/** 手机端「询价明细」卡片行数据（详情态），形状见 types/ItemCardRow */
+const detailCards = computed<ItemCardRow[]>(() =>
+  detailItems.value.map(it => ({
+    name: nameOf(it.productId),
+    unit: unitOf(it.productId),
+    qty: it.quantity,
+    price: it.price,
+    amount: it.subtotal
+  }))
+)
 function fmtDate(s: string): string { return s ? s.slice(0, 10) : '-' }
 
 async function handleConvert(): Promise<void> {
@@ -721,6 +745,42 @@ onMounted(async () => {
 .block-title { font-size: 15px; color: var(--c-primary); margin-bottom: 10px; }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 .tip-line { font-size: 12px; color: var(--c-muted); }
+
+/* ── 手机端：可编辑明细表 → 卡片（与报价单新建态同一套范式，V2.1-1.3） ──
+   列序（.items-edit 的 thead）：1序号 2名称 3类别 4单位 5数量 6询价 7金额 8操作
+   ⚠️ 往明细里插列必须同步改这里的 nth-child 与 order。 */
+@media (max-width: 767px) {
+  /* 卡片模式下不再需要「表格至少 640px + 横向滚动」，否则卡片被撑得比屏幕还宽 */
+  .tb-scroll { overflow-x: visible; }
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td { display: block; width: 100%; }
+  .items-edit tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td:nth-child(1) { display: none; }                                  /* 序号 */
+  .items-edit tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
+  .items-edit tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); } /* 类别 */
+  .items-edit tbody td:nth-child(4) { display: none; }                                   /* 单位并入数量 */
+  .items-edit tbody td:nth-child(5) { order: 3; margin-left: auto; }
+  .items-edit tbody td:nth-child(6) { order: 4; }
+  .items-edit tbody td:nth-child(7) { order: 5; font-weight: 700; color: var(--c-danger); }
+  .items-edit tbody td:nth-child(8) { order: 6; }
+  .items-edit .mini-input { width: 64px; height: 30px; }
+  .items-edit .mini-input.price { width: 80px; }
+  /* ⚠️ 空态那行只有一个 td（colspan）→ 命中 nth-child(1) 的 display:none 会一起被隐藏，
+     手机端就变成一张空卡片。必须显式放回来（同特异性、靠书写顺序取胜）。 */
+  .items-edit tbody td.empty { display: block; width: 100%; }
+  .items-edit tfoot tr {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
+  }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; }
+  .items-edit tfoot td.total-label { text-align: left; }
+  .items-edit tfoot td.t-amount { margin-left: auto; font-size: 20px; }
+}
 
 /* 手机端合计行通栏：统一由 src/styles/theme.css 的 .app-layout.is-mobile 钩子提供。
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明

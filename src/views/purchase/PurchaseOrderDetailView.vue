@@ -30,24 +30,22 @@
       </div>
     </section>
 
-    <!-- 明细 -->
+    <!-- 明细：手机端卡片（components/ui/ItemCards.vue，全站统一），电脑端列表表格。
+         规则见 docs/手机端明细卡片规范.md：电脑端明细=列表，手机端明细=卡片。 -->
     <section class="block">
+      <ItemCards
+        v-if="isMobile"
+        title="商品明细"
+        :items="cardRows"
+        :show-price="canSeePurchasePrice"
+        :total-qty="totalQty"
+        :total-amount="order?.totalAmount ?? 0"
+        empty-text="暂无明细"
+      />
+
+      <template v-else>
       <h4 class="block-title">商品明细（{{ items.length }}）</h4>
-
-      <ul v-if="isMobile" class="item-cards">
-        <li v-for="(it, i) in items" :key="i" class="item-card">
-          <div class="ic-name">
-            {{ nameOf(it.productId) }}
-            <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-          </div>
-          <div class="ic-line">订单数量 {{ it.quantity }} {{ unitOf(it.productId) }}</div>
-          <div v-if="canSeePurchasePrice" class="ic-line">单价 {{ it.isGift ? '—' : '¥' + money(it.price) }}</div>
-          <div v-if="canSeePurchasePrice" class="ic-line">金额 {{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</div>
-        </li>
-        <li v-if="!items.length" class="empty">暂无明细</li>
-      </ul>
-
-      <table v-else class="item-table">
+      <table class="item-table">
         <thead>
           <tr>
             <th>#</th>
@@ -83,6 +81,7 @@
           </tr>
         </tfoot>
       </table>
+      </template>
     </section>
 
     <!-- 入库进度 -->
@@ -215,9 +214,10 @@ import { db } from '../../db'
 import { getCompanyName, type PrintOrderData } from '../../utils/printTemplate'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
+import ItemCards from '../../components/ui/ItemCards.vue'
 import { useEditMode } from '../../composables/useEditMode'
 import EditModePanel from '../../components/EditModePanel.vue'
-import type { PurchaseOrder, PurchaseOrderItem, Supplier, Payment, Product, StockRecord } from '../../types'
+import type { PurchaseOrder, PurchaseOrderItem, Supplier, Payment, Product, StockRecord, ItemCardRow } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -291,6 +291,19 @@ async function onSaveEdit(): Promise<void> {
 const colspan = computed(() => (canSeePurchasePrice.value ? 6 : 4))
 const totalQty = computed(() => items.value.filter(it => !it.isGift).reduce((s, it) => s + it.quantity, 0))
 const giftQty = computed(() => items.value.filter(it => it.isGift).reduce((s, it) => s + it.quantity, 0))
+
+/** 手机端卡片行数据：把单据明细折算成 ItemCards 需要的统一形状 */
+const cardRows = computed<ItemCardRow[]>(() =>
+  items.value.map(it => ({
+    name: nameOf(it.productId),
+    unit: unitOf(it.productId),
+    qty: it.quantity,
+    price: it.price,
+    amount: it.subtotal,
+    tag: it.isGift ? '🎁 赠品' : undefined,
+    note: it.isGift ? '赠品不计价' : undefined
+  }))
+)
 
 /** 打印用原始数据：交给预览组件按纸张/表头设置实时排版 */
 const printData = computed<PrintOrderData | null>(() => {
@@ -459,11 +472,8 @@ watch(() => route.params.id, loadOrder)
 .item-table .num { text-align: right; }
 .item-table tfoot td { border-bottom: none; font-weight: 600; }
 .total-label { text-align: right !important; }
-.item-cards { list-style: none; }
-.item-card { padding: 10px 4px; border-bottom: 1px solid var(--c-border, #e2e8f0); }
-.item-card:last-child { border-bottom: none; }
-.ic-name { font-weight: 600; color: var(--c-primary, #1a365d); }
-.ic-line { font-size: 13px; color: var(--c-muted, #64748b); margin-top: 2px; }
+/* 手机端商品明细卡片已收敛到 components/ui/ItemCards.vue（V2.1-1.3），
+   本页不再自建卡片类 —— 避免各页各写一份、手机端反复撑破。 */
 
 .prog-list { list-style: none; }
 .prog-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; }

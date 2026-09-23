@@ -30,12 +30,23 @@
       </div>
     </section>
 
-    <!-- 明细 -->
+    <!-- 明细：手机端卡片（components/ui/ItemCards.vue，全站统一），电脑端行列表。
+         规则见 docs/手机端明细卡片规范.md：电脑端明细=列表，手机端明细=卡片。 -->
     <section class="block">
+      <ItemCards
+        v-if="isMobile"
+        title="商品明细"
+        :items="cardRows"
+        :show-price="canSeeAnyPrice"
+        :total-qty="totalQty"
+        :total-amount="order?.totalAmount ?? 0"
+        empty-text="暂无明细"
+      />
+
+      <template v-else>
       <h4 class="block-title">商品明细（{{ items.length }}）</h4>
 
-      <!-- 卡片式明细：数量 × 单价 = 金额 一行读清。
-           手机 / 电脑共用同一套 DOM，只在 CSS 里按宽度调整排布（电脑多列铺开）。 -->
+      <!-- 电脑端行列表：序号 + 商品名 …… 数量 × 单价 = 金额 一行读清。 -->
       <ul class="mc-list">
         <li v-for="(it, i) in items" :key="i" class="mc-item">
           <div class="mc-top">
@@ -65,6 +76,7 @@
         <span class="mt-qty">{{ totalQty }} 件</span>
         <b v-if="canSeeAnyPrice" class="mt-amount">¥{{ money(order?.totalAmount ?? 0) }}</b>
       </div>
+      </template>
     </section>
 
     <!-- 出库进度 -->
@@ -197,17 +209,20 @@ import { showConfirmDialog, showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
 import { useUserStore } from '../../stores/user'
 import { usePermission } from '../../composables/usePermission'
+import { useResponsive } from '../../composables/useResponsive'
 import { db } from '../../db'
 import { getCompanyName, type PrintOrderData } from '../../utils/printTemplate'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
-import type { SaleOrder, SaleOrderItem, Customer, Payment, Product, StockRecord } from '../../types'
+import ItemCards from '../../components/ui/ItemCards.vue'
+import type { SaleOrder, SaleOrderItem, Customer, Payment, Product, StockRecord, ItemCardRow } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
 const salesStore = useSalesStore()
 const userStore = useUserStore()
 const { canSeeAnyPrice, canDeleteDoc } = usePermission()
+const { isMobile } = useResponsive()
 
 const order = ref<SaleOrder | null>(null)
 const items = ref<SaleOrderItem[]>([])
@@ -291,6 +306,19 @@ async function saveEdit(): Promise<void> {
 }
 
 const totalQty = computed(() => items.value.filter(it => !it.isGift).reduce((s, it) => s + it.quantity, 0))
+
+/** 手机端「商品明细」卡片行数据，形状见 types/ItemCardRow */
+const cardRows = computed<ItemCardRow[]>(() =>
+  items.value.map(it => ({
+    name: nameOf(it.productId),
+    unit: unitOf(it.productId),
+    qty: it.quantity,
+    price: it.price,
+    amount: it.subtotal,
+    tag: it.isGift ? '🎁 赠品' : undefined,
+    note: it.isGift ? '赠品不计价' : undefined
+  }))
+)
 const giftQty = computed(() => items.value.filter(it => it.isGift).reduce((s, it) => s + it.quantity, 0))
 
 /** 打印用原始数据：交给预览组件按纸张/表头设置实时排版 */
@@ -565,6 +593,8 @@ watch(() => route.params.id, loadOrder)
 @media (max-width: 767px) {
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
+  /* 商品明细在手机端已改用 components/ui/ItemCards.vue（不渲染 .mc-list）；
+     这条保留给「修改」编辑卡片 —— 编辑态两端共用同一份 DOM。 */
   .mc-idx, .ec-idx { display: none; }
 
   /* 本页已无 <table>：商品明细 / 出库流水 / 收款记录 / 编辑明细全部走上面的卡片 DOM。

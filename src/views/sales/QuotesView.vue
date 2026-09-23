@@ -227,8 +227,18 @@
       </section>
 
       <section class="block">
+        <!-- 手机端卡片（全站统一组件），电脑端列表表格。规则见 docs/手机端明细卡片规范.md -->
+        <ItemCards
+          v-if="isMobile"
+          title="报价明细"
+          :items="detailCards"
+          :total-amount="quote?.totalAmount ?? 0"
+          empty-text="暂无明细"
+        />
+
+        <template v-else>
         <h4 class="block-title">报价明细（{{ detailItems.length }}）</h4>
-        <table v-if="detailItems.length" class="data-table items-view">
+        <table v-if="detailItems.length" class="data-table">
           <thead>
             <tr><th>#</th><th>商品名称</th><th>单位</th><th class="num">数量</th><th class="num">报价</th><th class="num">金额</th></tr>
           </thead>
@@ -251,6 +261,7 @@
           </tfoot>
         </table>
         <div v-else class="empty">暂无明细</div>
+        </template>
       </section>
 
       <!-- 编辑模式：与销售单同一套做法 —— 电脑端内联在详情页下方（普通卡片），
@@ -326,6 +337,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
+import ItemCards from '../../components/ui/ItemCards.vue'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
 import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
@@ -344,7 +356,7 @@ import { db } from '../../db'
 import { escapeOr } from '../../db/cloudDb'
 import { serverPage } from '../../db/serverPage'
 import { buildOrderPrintHTML, getCompanyName } from '../../utils/printTemplate'
-import type { Product, Customer, QuoteOrder, QuoteOrderItem } from '../../types'
+import type { Product, Customer, QuoteOrder, QuoteOrderItem, ItemCardRow } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -609,6 +621,17 @@ async function db_products(ids: number[]): Promise<Product[]> {
 
 function nameOf(id: number): string { return productMap.value[id] ? productStore.productName(productMap.value[id]) : `商品#${id}` }
 function unitOf(id: number): string { return productMap.value[id]?.unit ?? '' }
+
+/** 手机端「报价明细」卡片行数据（详情态），形状见 types/ItemCardRow */
+const detailCards = computed<ItemCardRow[]>(() =>
+  detailItems.value.map(it => ({
+    name: nameOf(it.productId),
+    unit: unitOf(it.productId),
+    qty: it.quantity,
+    price: it.price,
+    amount: it.subtotal
+  }))
+)
 function fmtDate(s: string): string { return s ? s.slice(0, 10) : '-' }
 
 async function handleConvert(): Promise<void> {
@@ -780,24 +803,23 @@ onMounted(async () => {
    组件化等于把两套 DOM 都维护一遍、还要同步输入框状态；纯 CSS 只动观感不动逻辑，
    也避免「手机端改了、电脑端忘了」的分叉。
 
-   两个表格列数不同、必须分开写映射（列序见各自 thead）：
-   - .items-edit（新建态，8 列）序号/名称/类别/单位/数量/报价/金额/操作
-   - .items-view（详情态，6 列）#/名称/单位/数量/报价/金额 */
+   详情态的「报价明细」已改用全站统一组件 components/ui/ItemCards.vue（手机端卡片），
+   本段只剩新建态的可编辑明细表（列序见 thead）：
+   - .items-edit（新建态，8 列）序号/名称/类别/单位/数量/报价/金额/操作 */
 @media (max-width: 767px) {
   /* 卡片模式下不再需要「表格至少 640px 宽 + 横向滚动」那套（见 theme.css），
      否则卡片会被撑到 640px、比屏幕还宽。原表格列宽约束一并解除。 */
   .tb-scroll { overflow-x: visible; }
-  .items-edit, .items-edit tbody, .items-view, .items-view tbody { min-width: 0; }
-  .items-edit thead, .items-view thead { display: none; }
-  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td,
-  .items-view, .items-view tbody, .items-view tr, .items-view td {
+  .items-edit, .items-edit tbody { min-width: 0; }
+  .items-edit thead { display: none; }
+  .items-edit, .items-edit tbody, .items-edit tr, .items-edit td {
     display: block; width: 100%;
   }
-  .items-edit tbody tr, .items-view tbody tr {
+  .items-edit tbody tr {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
     background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
   }
-  .items-edit tbody td, .items-view tbody td { padding: 2px 0; border: none; width: auto; }
+  .items-edit tbody td { padding: 2px 0; border: none; width: auto; }
 
   /* 新建态：商品名独占一行，其余按 类别 → 数量 → 报价 → 金额 → 操作 排开 */
   .items-edit tbody td:nth-child(1) { display: none; }          /* 序号：卡片里无意义 */
@@ -812,30 +834,19 @@ onMounted(async () => {
   .items-edit .mini-input { width: 64px; height: 30px; }
   .items-edit .mini-input.price { width: 80px; }
 
-  /* 详情态：只读且表头已隐藏，给数字列补小标签，否则「1 ¥780 ¥780」分不清哪列是哪列 */
-  .items-view tbody td:nth-child(1) { display: none; }          /* # */
-  .items-view tbody td:nth-child(2) { width: 100%; font-size: 15px; font-weight: 600; order: 1; }
-  .items-view tbody td:nth-child(3) { order: 2; font-size: 12px; color: var(--c-muted); }
-  .items-view tbody td:nth-child(4) { order: 3; margin-left: auto; }
-  .items-view tbody td:nth-child(5) { order: 4; }
-  .items-view tbody td:nth-child(6) { order: 5; font-weight: 700; color: var(--c-danger); }
-  .items-view tbody td:nth-child(4)::before { content: '数量 '; }
-  .items-view tbody td:nth-child(5)::before { content: '报价 '; }
-  .items-view tbody td:nth-child(6)::before { content: '金额 '; }
-  .items-view tbody td::before { font-size: 12px; font-weight: 400; color: var(--c-muted); }
 
   /* ⚠️ 空态那一行只有一个 td（colspan），它是 :nth-child(1)，
      会被上面的 `display:none` 一起隐藏 —— 手机端就会变成一张空卡片、没有任何提示。
      必须在后面显式放回来（同特异性、靠书写顺序取胜）。 */
-  .items-edit tbody td.empty, .items-view tbody td.empty { display: block; width: 100%; }
+  .items-edit tbody td.empty { display: block; width: 100%; }
 
   /* 合计行：左「合计 N 项商品」，右大号红金额 */
-  .items-edit tfoot tr, .items-view tfoot tr {
+  .items-edit tfoot tr {
     display: flex; align-items: center; gap: 8px;
     background: #fff; border-top: 2px solid var(--c-border); padding: 12px 4px 0;
   }
-  .items-edit tfoot td, .items-view tfoot td { border: none; padding: 0; width: auto; }
-  .items-edit tfoot td.total-label, .items-view tfoot td.total-label { text-align: left; }
-  .items-edit tfoot td.t-amount, .items-view tfoot td.t-amount { margin-left: auto; font-size: 20px; }
+  .items-edit tfoot td { border: none; padding: 0; width: auto; }
+  .items-edit tfoot td.total-label { text-align: left; }
+  .items-edit tfoot td.t-amount { margin-left: auto; font-size: 20px; }
 }
 </style>

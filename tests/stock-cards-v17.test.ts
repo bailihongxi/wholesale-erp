@@ -77,18 +77,18 @@ describe('版本号一致性（每轮随最新基线刷新）', () => {
    *   整体以 V2.1-1 为基线；错误修复 / 小改动在其后递进 V2.1-1.1、V2.1-1.2 …
    *   只有「大的功能添加」才把 -1 递进为 -2。
    *   package.json 必须是合法 semver（三段），故用 patch 位承载修订号：
-   *     V2.1-1 → 2.1.1 ／ V2.1-1.1 → 2.1.2 ／ V2.1-1.2 → 2.1.3 …
+   *     V2.1-1 → 2.1.1 ／ V2.1-1.1 → 2.1.2 ／ V2.1-1.2 → 2.1.3 ／ V2.1-1.3 → 2.1.4 …
    *   它同时是 Service Worker 缓存名的来源，**每次发版都必须变**，否则老用户拿不到新版。
    */
-  it('version.ts 与 package.json 同步为 V2.1-1.2 / 2.1.3', () => {
-    expect(APP_VERSION).toBe('V2.1-1.2')
+  it('version.ts 与 package.json 同步为 V2.1-1.3 / 2.1.4', () => {
+    expect(APP_VERSION).toBe('V2.1-1.3')
     const pkg = JSON.parse(src('package.json')) as { version: string }
-    expect(pkg.version).toBe('2.1.3')
+    expect(pkg.version).toBe('2.1.4')
   })
 
-  it('三份文档都记录了当前版本 V2.1-1.2', () => {
+  it('三份文档都记录了当前版本 V2.1-1.3', () => {
     for (const f of ['PRD.md', 'MENU_SPEC.md', 'DEV_PLAN_V2.md']) {
-      expect(src(f), `${f} 未同步版本号`).toContain('V2.1-1.2')
+      expect(src(f), `${f} 未同步版本号`).toContain('V2.1-1.3')
     }
   })
 })

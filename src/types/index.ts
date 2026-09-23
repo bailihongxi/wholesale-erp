@@ -426,3 +426,23 @@ export interface QuoteOrderItem {
   price: number
   subtotal: number
 }
+
+// 手机端「商品明细卡片」的行数据（V2.1-1.3）
+// 页面把各自的单据明细折算成这个统一形状，交给 components/ui/ItemCards.vue 渲染。
+// ⚠️ 全站规则：电脑端商品明细用列表（表格），手机端用卡片（见 docs/手机端明细卡片规范.md）。
+export interface ItemCardRow {
+  /** 商品名称（品牌 + 型号） */
+  name: string
+  /** 计量单位，如「套」「台」 */
+  unit?: string
+  /** 数量 */
+  qty: number
+  /** 单价（赠品可不传，用 note 说明） */
+  price?: number
+  /** 金额（不传则按 qty × price 计算） */
+  amount?: number
+  /** 名称后的角标，如「🎁 赠品」 */
+  tag?: string
+  /** 代替「× 单价 = 金额」的说明文字，如「赠品不计价」 */
+  note?: string
+}
