@@ -354,7 +354,9 @@ import { escapeOr } from '../../db/cloudDb'
 import { serverPage } from '../../db/serverPage'
 import { buildOrderPrintHTML, getCompanyName } from '../../utils/printTemplate'
 import type { Product, QuoteOrder, QuoteOrderItem, ItemCardRow } from '../../types'
+import { useScrollRestore } from '../../composables/useScrollRestore'
 
+useScrollRestore('purchase-quotes')
 const route = useRoute()
 const router = useRouter()
 const quotesStore = useQuotesStore()

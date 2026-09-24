@@ -124,7 +124,9 @@ import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { PurchaseOrder, Supplier } from '../../types'
+import { useScrollRestore } from '../../composables/useScrollRestore'
 
+useScrollRestore('inbound-list')
 const router = useRouter()
 const purchaseStore = usePurchaseStore()
 const docStore = useStockDocStore()

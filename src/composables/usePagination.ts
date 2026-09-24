@@ -29,7 +29,7 @@ export interface Pagination {
 }
 
 /** 约定的分页粒度：全站所有列表一律 20 条/页（第十五轮起无例外） */
-export const PAGE_SIZE_LIST = 20
+export const PAGE_SIZE_LIST = 50
 
 /**
  * 历史专用粒度，现已与 PAGE_SIZE_LIST 统一。

@@ -242,7 +242,9 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import SectionCard from '../../components/ui/SectionCard.vue'
 import StatCard from '../../components/ui/StatCard.vue'
 import EmptyState from '../../components/ui/EmptyState.vue'
+import { useScrollRestore } from '../../composables/useScrollRestore'
 
+useScrollRestore('ledger-list')
 const financeStore = useFinanceStore()
 const userStore = useUserStore()
 

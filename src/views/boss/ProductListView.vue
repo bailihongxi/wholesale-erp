@@ -289,7 +289,9 @@ import type { Product } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import { db } from '../../db'
 import { USE_CLOUD } from '../../db/supabaseClient'
+import { useScrollRestore } from '../../composables/useScrollRestore'
 
+useScrollRestore('product-list')
 const router = useRouter()
 const productStore = useProductStore()
 const userStore = useUserStore()

@@ -83,6 +83,7 @@
 <script setup lang="ts">
 import TablePager from '../../components/TablePager.vue'
 import { useServerPager } from '../../composables/useServerPager'
+import { useScrollRestore } from '../../composables/useScrollRestore'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesStore } from '../../stores/sales'
@@ -112,6 +113,7 @@ const hasFilter = computed(
 )
 
 // 服务端分页：只拉当前页 + 总数，不再进页面就全量拉取销售单（数据量大时首屏慢）
+useScrollRestore('sales-orders')
 const pager = useServerPager<SaleOrder>({
   watch: [keyword, statusFilter, dateFrom, dateTo],
   loader: async (pg, size) => {
