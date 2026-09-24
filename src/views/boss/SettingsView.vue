@@ -298,7 +298,7 @@
 
     <!-- 版本号：移动端 PageHeader 被整体隐藏，固定在页尾保证任何屏幕都看得到 -->
     <p class="version-footer">
-      {{ APP_NAME }} · <b>{{ APP_VERSION }}</b> · 发布 {{ APP_RELEASE_DATE }}
+      {{ appName }} · <b>{{ APP_VERSION }}</b> · 发布 {{ APP_RELEASE_DATE }}
     </p>
   </div>
 </template>
@@ -328,6 +328,7 @@ import BrandSettingsPanel from '../../components/BrandSettingsPanel.vue'
 import AppIconPanel from '../../components/AppIconPanel.vue'
 import AuditLogPanel from '../../components/AuditLogPanel.vue'
 import { APP_VERSION, APP_RELEASE_DATE, APP_NAME } from '../../version'
+import { useBrand } from '../../utils/brand'
 import { migrateToCloud } from '../../utils/cloudMigrate'
 import {
   touchSetting, getSyncSummary, getLastSync, initSettingSync
@@ -335,6 +336,10 @@ import {
 import { SYSTEM_SETTINGS_SQL, SUPABASE_SQL_EDITOR_URL, copyText } from '../../utils/settingsSql'
 
 const migrating = ref(false)
+
+// 页脚显示的系统名跟随「应用名称」（默认回落出厂名），与标签页 / 侧边栏保持一致
+const { config: brandConfig } = useBrand()
+const appName = computed(() => brandConfig.value.loginTitle || APP_NAME)
 
 // ---------- 多设备设置同步状态（V2.0-6） ----------
 const syncState = ref(getLastSync())

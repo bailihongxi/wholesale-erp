@@ -13,6 +13,7 @@
  * 这里只做「判断 + 引导」，真正的图标与 manifest 由 utils/appIcon.ts 负责。
  */
 import { ref } from 'vue'
+import { currentSystemName } from './brand'
 
 /** 浏览器原生安装事件（TS 标准库没有，自己声明） */
 export interface BeforeInstallPromptEvent extends Event {
@@ -87,7 +88,7 @@ export function installSteps(ua: string): { title: string; steps: string[] } {
         title: '电脑端（Chrome / Edge）',
         steps: [
           '看地址栏最右侧，点「安装」图标 ⊕（一个屏幕带箭头的小图标）',
-          '或点浏览器右上角「⋮」菜单 →「安装 家电批发进销存 ERP」',
+          `或点浏览器右上角「⋮」菜单 →「安装 ${currentSystemName()}」`,
           '确认后桌面 / 开始菜单会生成快捷方式，双击即用，窗口和普通软件一样',
           '若没看到安装入口，说明当前是隐私模式或系统策略禁止，换普通窗口重试'
         ]

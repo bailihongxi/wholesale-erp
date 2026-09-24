@@ -15,7 +15,7 @@
  * 为什么保留「内置图」这一档：用户点了「恢复默认」要能回到 public/icons 里的
  * 品牌图，所以启动时先把 index.html 里原始 href 记下来，恢复时写回去。
  */
-import { APP_ICON_BG_PRESETS, type AppIconSetting } from './brand'
+import { APP_ICON_BG_PRESETS, currentSystemName, type AppIconSetting } from './brand'
 
 /** 图标底色渐变的两端，与 public/icons 的默认图一致 */
 export const ICON_BG_TOP = '#16325c'
@@ -188,13 +188,44 @@ export function restoreBuiltinIconLinks(): void {
   }
 }
 
-/** 拼一份新的 manifest：图标换成刚渲染出来的 dataURL */
+/** 把拼好的 manifest 顶到 <link rel="manifest"> 上（统一回收上一次的 Blob URL） */
+function setManifest(json: string): void {
+  const manifestLink = linkOf('manifest')
+  if (!manifestLink) return
+  try {
+    const blob = new Blob([json], { type: 'application/manifest+json' })
+    const url = URL.createObjectURL(blob)
+    manifestLink.href = url
+    if (lastManifestUrl) URL.revokeObjectURL(lastManifestUrl)
+    lastManifestUrl = url
+  } catch {
+    /* 拼装失败就不动原来的 manifest */
+  }
+}
+
+/**
+ * 内置图标档的 manifest：图标回到仓库里的静态图，
+ * 但**名字仍然取当前「应用名称」** —— 否则用户改了名、桌面快捷方式还是旧名字。
+ */
+function applyBuiltinManifest(pageUrl: string): void {
+  const abs = (p: string): string => new URL(p, pageUrl).href
+  setManifest(buildManifest(
+    { small: abs('./icons/icon-192.png'), large: abs('./icons/icon-512.png') },
+    pageUrl
+  ))
+}
+
+/** 拼一份新的 manifest：图标换成刚渲染出来的 dataURL，名字用当前系统名称 */
 export function buildManifest(icons: { small: string; large: string }, pageUrl: string): string {
   const abs = (p: string): string => new URL(p, pageUrl).href
+  // 应用名称跟随「系统设置 → 应用图标与桌面快捷方式 → 应用名称」，
+  // 改完名字后安装到桌面的快捷方式显示的就是新名字
+  const appName = currentSystemName()
+  const shortName = appName.length > 8 ? appName.slice(0, 8) : appName
   return JSON.stringify({
     id: 'wholesale-erp',
-    name: '家电批发进销存 ERP',
-    short_name: '批发ERP',
+    name: appName,
+    short_name: shortName,
     description: '进货 · 库存 · 销售 · 对账 全流程管理。数据保存在本机，断网也能打开。',
     lang: 'zh-CN',
     start_url: abs('./'),
@@ -224,10 +255,12 @@ export async function applyAppIcon(icon: AppIconSetting, bg: string): Promise<bo
   snapshotIconLinks()
   if (icon.type === 'builtin') {
     restoreBuiltinIconLinks()
+    applyBuiltinManifest(window.location.href)
     return true
   }
   if (icon.type === 'text' && !icon.value.trim()) {
     restoreBuiltinIconLinks()
+    applyBuiltinManifest(window.location.href)
     return true
   }
 
@@ -247,19 +280,7 @@ export async function applyAppIcon(icon: AppIconSetting, bg: string): Promise<bo
   const appleLink = linkOf('apple-touch-icon')
   if (appleLink && apple) appleLink.href = apple
 
-  const manifestLink = linkOf('manifest')
-  if (manifestLink) {
-    try {
-      const json = buildManifest({ small: android, large }, window.location.href)
-      const blob = new Blob([json], { type: 'application/manifest+json' })
-      const url = URL.createObjectURL(blob)
-      manifestLink.href = url
-      if (lastManifestUrl) URL.revokeObjectURL(lastManifestUrl)
-      lastManifestUrl = url
-    } catch {
-      /* 拼装失败就不动原来的 manifest */
-    }
-  }
+  setManifest(buildManifest({ small: android, large }, window.location.href))
   return true
 }
 

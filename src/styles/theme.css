@@ -381,6 +381,19 @@ body {
 .ui-link:hover { text-decoration: underline; }
 .ui-link.danger { color: var(--c-danger); }
 
+/* 表格「操作」列里并排的按钮容器（唯一口径，别再各页各写一份）。
+   设计说明：链接型按钮本身没有内边距，两个挨在一起看是「查看确认」四个字连成一串，
+   鼠标/手指极易点错 —— 2026-09-24 用户反馈报价单「查看 / 确认」误点。
+   统一给 16px 间隙（同理也用于库房的「明细 / 撤回」「改名 / 删除」）。
+   ⚠️ 用 inline-flex 而不是 flex：单元格里要保持居中且不撑满整格。 */
+.op-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 /* ---------- 7. 分段 Tab ---------- */
 /* 设计说明：早期版本用「深蓝实心块」表示选中，一行排开很像一排按钮阵列，观感陈旧。
    现改为「浅色槽 + 白色浮起卡片」的现代分段控件：

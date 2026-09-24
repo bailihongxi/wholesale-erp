@@ -32,6 +32,26 @@
       </div>
     </div>
 
+    <!-- ===== 应用名称 ===== -->
+    <div class="ap-sub">应用名称</div>
+    <p class="ap-tip">
+      这里改的是<b>整个系统的名字</b>：浏览器标签页、桌面快捷方式、首屏加载页、侧边栏与登录页都会同步换名。
+      它与「品牌与图标 → 系统名称」是同一个设置，两边改哪边都生效。建议<b>先把名字改好，再发送到桌面</b>，
+      这样快捷方式显示的就是新名字。
+    </p>
+    <div class="ap-row">
+      <span class="ap-label">名称</span>
+      <input
+        class="ui-input ap-name"
+        maxlength="20"
+        placeholder="如 家电批发进销存 ERP"
+        :value="appNameDraft"
+        @input="onAppName"
+        @change="saveAppName"
+      />
+      <span class="ui-hint">改名后浏览器标签页、桌面快捷方式、侧边栏与登录页同步生效。</span>
+    </div>
+
     <!-- ===== 图标来源 ===== -->
     <div class="ap-sub">图标来源</div>
     <div class="ap-row">
@@ -142,7 +162,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { showToast } from 'vant'
 import CollapseCard from './ui/CollapseCard.vue'
 import SegmentedTabs from './ui/SegmentedTabs.vue'
-import { useBrand, type AppIconSetting } from '../utils/brand'
+import { useBrand, DEFAULT_SYSTEM_NAME, type AppIconSetting } from '../utils/brand'
 import {
   applyAppIcon, renderAppIcon, ICON_BG_CHOICES, ICON_BG_TOP, ICON_BG_BOTTOM
 } from '../utils/appIcon'
@@ -157,11 +177,28 @@ const openProxy = computed({
   set: (v: boolean) => emit('update:open', v)
 })
 
-const { config, setAppIcon, setAppIconBg, resetAppIcon } = useBrand()
+const { config, setAppIcon, setAppIconBg, resetAppIcon, setLoginText } = useBrand()
 const cfg = config
 
 const QUICK_ICONS = ['📦', '🛒', '🏪', '💼', '🧾', '👑', '🚚', '🏬']
-const appTitle = '家电批发进销存 ERP'
+/** 模拟浏览器标签页文字：跟随「应用名称」（即系统名称 loginTitle）实时显示 */
+const appTitle = computed(() => config.value.loginTitle || DEFAULT_SYSTEM_NAME)
+
+/**
+ * 应用名称草稿：与「品牌与图标 → 系统名称」共用同一个 loginTitle 字段，
+ * 改哪边都生效。这里只做即时预览，失焦时才正式落盘。
+ */
+const appNameDraft = ref(config.value.loginTitle || DEFAULT_SYSTEM_NAME)
+function onAppName(e: Event): void {
+  appNameDraft.value = (e.target as HTMLInputElement).value
+}
+function saveAppName(): void {
+  const name = appNameDraft.value.trim() || DEFAULT_SYSTEM_NAME
+  appNameDraft.value = name
+  setLoginText(name, config.value.loginSub)
+  // 顺带重建 manifest：之后「发送到桌面」生成的快捷方式用的就是新名字
+  void applyCurrent()
+}
 
 /** 当前来源 Tab（string 以便与 SegmentedTabs 对接，用值前再收窄类型） */
 const sourceTab = ref<string>(cfg.value.appIcon.type)
@@ -279,6 +316,15 @@ watch(
   () => { refreshPreview() }
 )
 
+// 「品牌与图标 → 系统名称」里改了名，这里草稿与预览也要跟着刷新
+watch(
+  () => cfg.value.loginTitle,
+  () => {
+    appNameDraft.value = cfg.value.loginTitle || DEFAULT_SYSTEM_NAME
+    refreshPreview()
+  }
+)
+
 onMounted(() => {
   initInstall()
   refreshPreview()
@@ -341,6 +387,7 @@ onMounted(() => {
 .ap-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .ap-label { width: 44px; flex: none; font-size: 13px; color: var(--c-muted, #64748b); }
 .ap-text { width: 180px; flex: none; }
+.ap-name { width: 220px; flex: none; }
 .ap-upload input { display: none; }
 .ap-note { margin: 0 0 10px; display: block; }
 .ap-actions { margin: 4px 0 6px; }

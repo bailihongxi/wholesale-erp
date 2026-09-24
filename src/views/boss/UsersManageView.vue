@@ -641,8 +641,7 @@ useReloadOnActivate(load)
 .stack-main { font-weight: 600; color: var(--c-text); line-height: 1.4; }
 .stack-sub { font-size: 12px; color: var(--c-muted); }
 
-/* 操作列 */
-.op-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+/* 操作列间距口径统一在 theme.css 的 .op-cell（16px），此处不再重复定义 */
 
 /* 头像：emoji 头像用强调色浅底，与首字头像区分 */
 .avatar.is-emoji { background: var(--c-accent-soft); color: var(--c-accent); }

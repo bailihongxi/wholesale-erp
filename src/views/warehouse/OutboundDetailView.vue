@@ -395,8 +395,7 @@ async function handleOutbound(): Promise<void> {
 /* 出库库房下拉 */
 /* 库房下拉：外观走设计系统的 .ui-select，这里只约束宽度 */
 .loc-sel { width: 100%; max-width: 320px; }
-/* 操作列里的「明细 / 撤销」拉开间距，降低误触 */
-.op-cell { display: inline-flex; align-items: center; gap: 16px; }
+/* 操作列里的「明细 / 撤销」拉开间距 —— 间距口径统一在 theme.css 的 .op-cell */
 .tb-scroll { overflow-x: auto; }
 .mini-input {
   width: 84px; height: 32px; border: 1px solid var(--c-border); border-radius: 6px;

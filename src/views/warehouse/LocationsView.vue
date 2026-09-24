@@ -249,8 +249,7 @@ useReloadOnActivate(load)
 .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
 .default-badge { background: #ecfdf5; color: var(--c-success); }
 
-/* 操作列里的「改名 / 删除」拉开间距，降低误触 */
-.op-cell { display: inline-flex; align-items: center; gap: 16px; }
+/* 操作列里的「改名 / 删除」拉开间距 —— 间距口径统一在 theme.css 的 .op-cell */
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }
 /* 取消按钮：橘红实底白字（全站规范 2026-09-20） */
 .link-btn.muted { color: #fff; background: var(--c-amber); border-radius: var(--r-xs); padding: 4px 12px; font-weight: 600; }

@@ -57,17 +57,22 @@
             <td class="num">¥{{ o.totalAmount.toLocaleString() }}</td>
             <td :class="o.status">{{ statusText(o.status) }}</td>
             <td class="center">
-              <button class="link-btn" type="button" @click="openDetail(o.id!)">查看</button>
-              <!-- 销售侧快捷确认：列表里直接放行「待报价」的单子，不用逐个点进去 -->
-              <button
-                v-if="!isDealer && o.status === 'draft'"
-                class="link-btn"
-                type="button"
-                :disabled="confirmingId === o.id"
-                @click="confirmFromList(o)"
-              >
-                {{ confirmingId === o.id ? '确认中…' : '确认' }}
-              </button>
+              <!-- ⚠️ 「查看 / 确认」必须包在 .op-cell 里：链接型按钮没有内边距，
+                   不拉开间距会连成「查看确认」一串，极易误点（2026-09-24 用户反馈）。
+                   间距口径见 theme.css 的 .op-cell（16px）。 -->
+              <span class="op-cell">
+                <button class="link-btn" type="button" @click="openDetail(o.id!)">查看</button>
+                <!-- 销售侧快捷确认：列表里直接放行「待报价」的单子，不用逐个点进去 -->
+                <button
+                  v-if="!isDealer && o.status === 'draft'"
+                  class="link-btn"
+                  type="button"
+                  :disabled="confirmingId === o.id"
+                  @click="confirmFromList(o)"
+                >
+                  {{ confirmingId === o.id ? '确认中…' : '确认' }}
+                </button>
+              </span>
             </td>
           </tr>
           <tr v-if="!pager.total.value"><td colspan="6" class="empty">没有符合条件的报价单</td></tr>

@@ -150,3 +150,38 @@ describe('实时回传（Realtime）', () => {
     expect(sql.toLowerCase()).toContain('replica identity full')
   })
 })
+
+// ============================================================ 操作列间距
+
+describe('报价单列表：查看 / 确认 必须拉开间距', () => {
+  it('两个按钮包在 .op-cell 里，不再裸挨着', () => {
+    const src = SRC('src/views/sales/QuotesView.vue')
+    // 列表「操作」列（第一处 <td class="center">，即列表表格那一格）
+    const start = src.indexOf('<td class="center">')
+    const cell = src.slice(start, src.indexOf('</td>', start))
+    expect(cell).toContain('<span class="op-cell">')
+    // 同一格里两个按钮都在 span 内：查看（总是）+ 确认（仅销售 + 待报价）
+    const open = cell.indexOf('<span class="op-cell">')
+    const close = cell.indexOf('</span>', open)
+    const inner = cell.slice(open, close)
+    expect(inner).toContain('>查看</button>')
+    expect(inner).toContain("confirmingId === o.id ? '确认中…' : '确认'")
+  })
+
+  it('间距口径只有一处：theme.css 的 .op-cell（16px）', () => {
+    const css = SRC('src/styles/theme.css')
+    expect(css).toContain('.op-cell {')
+    const block = css.slice(css.indexOf('.op-cell {'))
+    expect(block.slice(0, block.indexOf('}'))).toContain('gap: 16px')
+    expect(block.slice(0, block.indexOf('}'))).toContain('inline-flex')
+    // 各页不再重复定义，避免「改一处漏一处」
+    for (const f of [
+      'src/views/warehouse/InboundDetailView.vue',
+      'src/views/warehouse/OutboundDetailView.vue',
+      'src/views/warehouse/LocationsView.vue',
+      'src/views/boss/UsersManageView.vue',
+    ]) {
+      expect(SRC(f)).not.toContain('.op-cell {')
+    }
+  })
+})

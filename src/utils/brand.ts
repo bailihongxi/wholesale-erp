@@ -101,6 +101,16 @@ export function roleLabelOf(role: string): string {
 /** 系统名称的出厂默认值；index.html 的首屏加载页写的是同一个字面量 */
 export const DEFAULT_SYSTEM_NAME = '家电批发ERP'
 
+/**
+ * 当前系统名称（带缺省回落）。
+ * 应用图标预览、manifest、桌面安装引导、页脚等所有「应用叫什么」的地方统一取这里，
+ * 保证改了「应用名称」后处处一致，不会出现标签页一个名、快捷方式又一个名。
+ */
+export function currentSystemName(): string {
+  const t = config.value.loginTitle?.trim()
+  return t || DEFAULT_SYSTEM_NAME
+}
+
 function defaultConfig(): BrandConfig {
   const roleAvatars: Record<string, BrandIcon> = {}
   for (const r of AVATAR_ROLES) {

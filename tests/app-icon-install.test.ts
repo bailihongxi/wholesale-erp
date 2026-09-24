@@ -21,7 +21,9 @@ import {
   platformOf, installSteps, isStandalone, canPromptInstall, promptInstall,
   registerServiceWorker
 } from '../src/utils/installApp'
-import { useBrand, DEFAULT_APP_ICON, DEFAULT_APP_ICON_BG } from '../src/utils/brand'
+import {
+  useBrand, currentSystemName, DEFAULT_SYSTEM_NAME, DEFAULT_APP_ICON, DEFAULT_APP_ICON_BG
+} from '../src/utils/brand'
 import AppIconPanel from '../src/components/AppIconPanel.vue'
 
 function src(rel: string): string {
@@ -351,5 +353,77 @@ describe('系统设置里的「应用图标与桌面快捷方式」面板', () =
     const btns = w.findAll('button').map(b => b.text())
     expect(btns.some(t => t.includes('恢复默认图标'))).toBe(true)
     expect(btns.some(t => t.includes('应用到系统'))).toBe(true)
+  })
+})
+
+/* ============================================================
+ * 应用名称可自主更换
+ * 需求：系统里写死的「家电批发ERP / 家电批发进销存 ERP」要能自己改，
+ *       入口放在「系统设置 → 应用图标与桌面快捷方式」里的「应用名称」。
+ * 约定：全站只有一个真源 —— 品牌配置的 loginTitle，
+ *       标签页标题 / 首屏加载页 / 侧边栏 / manifest / 安装引导都从它取，
+ *       任何一处再写死字面量都会让本组用例变红。
+ * ============================================================ */
+describe('应用名称：可自主更换，且全站同一份', () => {
+  const DESKTOP = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('currentSystemName 默认回落出厂名，改名后跟着变', () => {
+    const brand = useBrand()
+    brand.setLoginText('鸿禧电器批发', '副标题')
+    expect(currentSystemName()).toBe('鸿禧电器批发')
+    // 名字被清空时不能把系统名变成空白
+    brand.setLoginText('   ', '')
+    expect(currentSystemName()).toBe(DEFAULT_SYSTEM_NAME)
+  })
+
+  it('manifest 的 name 跟随应用名称，过长时 short_name 截断到 8 字', () => {
+    const brand = useBrand()
+    brand.setLoginText('鸿禧电器', '副标题')
+    const short = JSON.parse(buildManifest({ small: 'a', large: 'b' }, 'https://example.com/erp/')) as {
+      name: string; short_name: string
+    }
+    expect(short.name).toBe('鸿禧电器')
+    expect(short.short_name).toBe('鸿禧电器')
+
+    brand.setLoginText('一二三四五六七八九十', '副标题') // 10 字 → 快捷方式名截断
+    const long = JSON.parse(buildManifest({ small: 'a', large: 'b' }, 'https://example.com/erp/')) as {
+      name: string; short_name: string
+    }
+    expect(long.name).toBe('一二三四五六七八九十')
+    expect(long.short_name).toBe('一二三四五六七八')
+  })
+
+  it('桌面安装引导里的应用名也是当前名称（不再写死出厂名）', () => {
+    useBrand().setLoginText('鸿禧电器批发', '副标题')
+    const steps = installSteps(DESKTOP).steps.join('')
+    expect(steps).toContain('鸿禧电器批发')
+    expect(steps).not.toContain('家电批发进销存')
+  })
+
+  it('在「应用图标与桌面快捷方式」里改名：写入品牌配置并同步标签页标题', async () => {
+    const w = mount(AppIconPanel, { props: { open: true } })
+    const input = w.find('input.ap-name')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('鸿禧电器批发')
+    await input.trigger('change')
+
+    expect(useBrand().config.value.loginTitle).toBe('鸿禧电器批发')
+    // 改完立即生效：标签页标题同步换名，并落盘供刷新后的首屏加载页读取
+    expect(document.title).toBe('鸿禧电器批发')
+    const saved = JSON.parse(localStorage.getItem('erp_brand_config') ?? '{}') as { loginTitle?: string }
+    expect(saved.loginTitle).toBe('鸿禧电器批发')
+  })
+
+  it('改名留空时回落到出厂名，不会把系统名清空', async () => {
+    const w = mount(AppIconPanel, { props: { open: true } })
+    const input = w.find('input.ap-name')
+    await input.setValue('   ')
+    await input.trigger('change')
+    expect(useBrand().config.value.loginTitle).toBe(DEFAULT_SYSTEM_NAME)
   })
 })
