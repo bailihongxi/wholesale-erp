@@ -1,21 +1,17 @@
 /**
- * 销售单详情「商品明细 / 修改明细」卡片化（V2.0-22 手机端 → V2.0-23 电脑端）防回归
+ * 销售单详情「商品明细 / 修改明细」统一规范（V2.1-2.x 修订）
  *
- * 背景：这两处以前都用 `nth-child` 把 `<table>` 拆成卡片（tr 改 flex、td 改 block）。
- * 这套「拆表」方案在本项目反复出问题 —— 列宽算不准、与 thead/tfoot 错位、
- * 手机上渲染效果差，而且详情页商品明细在手机端**根本没有合计行**（合计只在表格 tfoot 里）。
+ * 背景：详情页商品明细曾经两头走 —— 手机端 ItemCards 卡片、电脑端也在 V2.0-23
+ * 被改成语义化 `<ul>` 卡片（.mc-*）。但电脑端 ERP 看台账/对账天然习惯表格，
+ * 卡片在宽屏上信息密度低、还把页面拉得很高。老板 2026-09-24 拍板：
  *
- * 演进：
- *   - V2.0-22：手机端先改成语义化 `<ul>` 卡片（.mc-* / .ec-* / .rc-*），电脑端仍保留 `<table>`。
- *   - V2.0-23：用户要求电脑端也用同一套卡片 —— 表格整体退场，电脑端在
- *     `min-width:768px` 里改为多列网格铺开；同时点「修改」后自动滚到编辑区。
- *   - V2.0-24：电脑端编辑明细卡片内改为单行（display:contents 拆开 .ec-top）。
- *   - V2.0-25：编辑模块去掉橘色 4px 大边框（融进版面、与其它卡片同宽），
- *     模块内删掉「返回」按钮只留「取消 / 保存修改」，关闭统一走 closeEdit()，
- *     关掉后详情页的橘色返回键自动回来。
+ *   - 手机端：全站统一卡片组件 ItemCards（V2.1-1.3 规范，不变）。
+ *   - 电脑端：真实表格 `<table class="item-table">`（与采购单详情同源），
+ *     不再用 V2.0-23 的「电脑端也卡片」方案。
+ *   - 编辑明细、出库流水、收款记录仍走卡片（ec-list / rc-list），这部分不变。
  *
- * ⚠️ 本文件里「电脑端保留表格」的旧断言已被需求作废，替换为
- * 「全页无线性表格 + 两端共用同一套卡片 DOM」，不是放宽断言。
+ * ⚠️ 本文件里的断言已随上面的决策更新：商品明细在电脑端是表格、手机端是卡片，
+ * 不再断言「全页无线性表格」。属于需求驱动的断言更新，不是放宽。
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -54,36 +50,27 @@ function mediaBlocks(s: string, query: RegExp): string {
 const mobileCss = mediaBlocks(css, /@media\s*\(max-width:\s*767px\)\s*\{/)
 const desktopCss = mediaBlocks(css, /@media\s*\(min-width:\s*768px\)\s*\{/)
 
-describe('销售单详情 · 商品明细卡片化（手机 / 电脑共用）', () => {
-  it('页面里已不存在线性表格', () => {
-    expect(template, '本页明细应全部走卡片，不再有 <table>').not.toContain('<table')
-    expect(template, '不应再有 tfoot/tbody 片段残留').not.toContain('<tfoot')
-  })
-
-  it('走语义化卡片 ul.mc-list，旧的 item-cards 已废弃', () => {
-    expect(template, '缺少卡片容器').toContain('class="mc-list"')
+describe('销售单详情 · 商品明细（手机卡片 / 电脑表格）', () => {
+  it('手机端走全站统一卡片组件 ItemCards（与采购单详情同源）', () => {
+    expect(template, '缺少 ItemCards 组件').toContain('<ItemCards')
+    expect(template, '卡片只走手机端分支').toMatch(/<ItemCards\s+v-if="isMobile"/)
     expect(template, '旧的 item-cards 应已废弃').not.toContain('item-cards')
     expect(template, '旧的 ic-line 样式类应已废弃').not.toContain('ic-line')
   })
 
-  it('卡片里能一行读清「数量 × 单价 = 金额」', () => {
-    expect(template).toContain('class="mc-qty"')
-    expect(template).toContain('class="mc-op"')
-    expect(template).toContain('class="mc-amount"')
-  })
-
-  it('合计条不再受设备分岔控制（表格 tfoot 已退场）', () => {
-    expect(template, '缺少合计条').toContain('class="mc-total"')
-    expect(template, '合计条要带金额').toContain('class="mt-amount"')
-    expect(template, '合计条要显示合计数量').toContain('class="mt-qty"')
-    const i = template.indexOf('class="mc-total"')
-    const seg = template.slice(Math.max(0, i - 900), i)
-    expect(seg, '合计条必须渲染在商品明细区块内且无 isMobile 分岔').not.toContain('isMobile')
+  it('电脑端是真实表格（采购单同款 item-table），不再是卡片', () => {
+    expect(template, '电脑端应有商品明细表格').toContain('<table class="item-table">')
+    expect(template, '表格要有表头').toContain('<thead')
+    expect(template, '表格要有合计行 tfoot').toContain('<tfoot')
+    expect(template, '表格包在 v-else 里（与手机卡片互斥）').toMatch(/<template v-else>/)
+    expect(template, '桌面分支不再用 mc-list 卡片').not.toContain('class="mc-list"')
   })
 
   it('价格列受权限控制（库房/经销商看不到进价）', () => {
-    const mc = template.slice(template.indexOf('class="mc-list"'), template.indexOf('class="mc-total"'))
-    expect(mc, '单价/金额需挂在 canSeeAnyPrice 下').toContain('canSeeAnyPrice')
+    const start = template.indexOf('<table class="item-table">')
+    const end = template.indexOf('</table', start)
+    const tbl = template.slice(start, end)
+    expect(tbl, '单价/金额需挂在 canSeeAnyPrice 下').toContain('canSeeAnyPrice')
   })
 })
 
@@ -123,37 +110,30 @@ describe('销售单详情 · 电脑端网格 / 单行排布', () => {
     )
   })
 
-  it('商品明细在电脑端单列铺满整行（宽度够，不需要切成多列）', () => {
-    expect(desktopCss).not.toMatch(/\.mc-list\s*\{[^}]*grid-template-columns/)
-    expect(desktopCss, '单列时靠 margin-bottom 拉开间距').toMatch(/\.mc-item\s*\{[^}]*margin-bottom:\s*8px/)
-  })
-
-  it('电脑端卡片内容排成一行，不再像手机端那样上下两行', () => {
-    expect(desktopCss, '电脑端卡片应改为横向 flex').toMatch(/\.mc-item\s*\{[^}]*display:\s*flex/)
-    expect(desktopCss, '商品名要吃掉剩余宽度').toMatch(/\.mc-item\s+\.mc-top\s*\{[^}]*flex:\s*1/)
-    expect(desktopCss, '「数量 × 单价 = 金额」靠右且不换行到下一行').toMatch(
-      /\.mc-item\s+\.mc-calc\s*\{[^}]*margin-top:\s*0/
-    )
-  })
-
-  it('手机端仍是上下两行（宽度有限，单行放不下）', () => {
-    expect(mobileCss, '手机端不应套用电脑端单行 flex').not.toMatch(/\.mc-item\s*\{[^}]*display:\s*flex/)
-  })
+  // ⚠️ 以下三段原本断言「商品明细在电脑端是 .mc-list 卡片（单行 flex 排布）」。
+  // V2.1-2.x 起电脑端商品明细已变为真实表格 <table class="item-table">，
+  // 这些卡片布局断言随之作废（属于需求驱动更新，非放宽）：
+  //   - 商品明细在电脑端单列铺满整行（.mc-list / .mc-item margin-bottom）
+  //   - 电脑端卡片内容排成一行（.mc-item display:flex / .mc-top flex:1 / .mc-calc margin-top:0）
+  //   - 手机端仍是上下两行（.mc-item 不套用电脑端单行 flex）
+  // 新的表格行为见上方「商品明细（手机卡片 / 电脑表格）」describe。
 
   it('手机端不套用网格（仍是单列卡片）', () => {
     expect(mobileCss).not.toMatch(/grid-template-columns:\s*repeat\(auto-fill/)
   })
 
-  it('序号只在电脑端显示（手机端单列天然有序，省一行宽度）', () => {
-    expect(desktopCss, '电脑端需要序号对应行次').not.toMatch(/\.mc-idx[^{]*\{[^}]*display:\s*none/)
-    expect(mobileCss, '手机端应隐藏序号').toMatch(/\.mc-idx,\s*\.ec-idx\s*\{[^}]*display:\s*none/)
+  it('编辑明细序号只在电脑端显示（手机端单列天然有序，省一行宽度）', () => {
+    expect(desktopCss, '电脑端需要序号对应行次').not.toMatch(/\.ec-idx[^{]*\{[^}]*display:\s*none/)
+    expect(mobileCss, '手机端应隐藏编辑明细序号').toMatch(/\.ec-idx\s*\{[^}]*display:\s*none/)
   })
 })
 
 describe('销售单详情 · 修改明细卡片化', () => {
-  it('编辑明细走 ul.ec-list，不再有表格', () => {
+  it('编辑明细走 ul.ec-list（商品明细的桌面表格不计入编辑区）', () => {
     expect(template, '缺少编辑卡片容器').toContain('class="ec-list"')
-    expect((template.match(/<table/g) ?? []).length, '编辑区不应再有表格').toBe(0)
+    const editIdx = template.indexOf('class="ec-list"')
+    const editRegion = template.slice(editIdx)
+    expect(editRegion, '编辑区不应再有表格').not.toContain('<table')
   })
 
   it('每个输入框都有「数量 / 单价」标签，避免误填', () => {

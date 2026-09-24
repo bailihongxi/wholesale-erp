@@ -30,8 +30,10 @@
       </div>
     </section>
 
-    <!-- 明细：手机端卡片（components/ui/ItemCards.vue，全站统一），电脑端行列表。
-         规则见 docs/手机端明细卡片规范.md：电脑端明细=列表，手机端明细=卡片。 -->
+    <!-- 明细：手机端卡片（components/ui/ItemCards.vue，全站统一），电脑端表格。
+         规则见 docs/手机端明细卡片规范.md：电脑端明细=表格，手机端明细=卡片。
+         电脑端表格与采购单详情同源（<table class="item-table">）；V2.1-2.x 起
+         不再沿用 V2.0-23 的「电脑端也卡片」方案（老板 2026-09-24 拍板）。 -->
     <section class="block">
       <ItemCards
         v-if="isMobile"
@@ -45,37 +47,42 @@
 
       <template v-else>
       <h4 class="block-title">商品明细（{{ items.length }}）</h4>
-
-      <!-- 电脑端行列表：序号 + 商品名 …… 数量 × 单价 = 金额 一行读清。 -->
-      <ul class="mc-list">
-        <li v-for="(it, i) in items" :key="i" class="mc-item">
-          <div class="mc-top">
-            <span class="mc-idx">{{ i + 1 }}</span>
-            <span class="mc-name">{{ nameOf(it.productId) }}</span>
-            <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
-          </div>
-          <div class="mc-calc">
-            <span class="mc-qty">{{ it.quantity }} {{ unitOf(it.productId) }}</span>
-            <template v-if="canSeeAnyPrice">
-              <template v-if="it.isGift">
-                <span class="mc-gift">赠品不计价</span>
-              </template>
-              <template v-else>
-                <span class="mc-op">×</span>
-                <span class="mc-price">¥{{ money(it.price) }}</span>
-                <span class="mc-op">=</span>
-                <b class="mc-amount">¥{{ money(it.subtotal) }}</b>
-              </template>
-            </template>
-          </div>
-        </li>
-        <li v-if="!items.length" class="empty">暂无明细</li>
-      </ul>
-      <div v-if="items.length" class="mc-total">
-        <span>合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span></span>
-        <span class="mt-qty">{{ totalQty }} 件</span>
-        <b v-if="canSeeAnyPrice" class="mt-amount">¥{{ money(order?.totalAmount ?? 0) }}</b>
-      </div>
+      <table class="item-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>商品名称</th>
+            <th>单位</th>
+            <th class="num">数量</th>
+            <th v-if="canSeeAnyPrice" class="num">单价</th>
+            <th v-if="canSeeAnyPrice" class="num">金额</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(it, i) in items" :key="i">
+            <td>{{ i + 1 }}</td>
+            <td>
+              {{ nameOf(it.productId) }}
+              <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
+            </td>
+            <td>{{ unitOf(it.productId) }}</td>
+            <td class="num">{{ it.quantity }}</td>
+            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '—' : '¥' + money(it.price) }}</td>
+            <td v-if="canSeeAnyPrice" class="num">{{ it.isGift ? '赠品' : '¥' + money(it.subtotal) }}</td>
+          </tr>
+          <tr v-if="!items.length"><td :colspan="canSeeAnyPrice ? 6 : 4" class="empty">暂无明细</td></tr>
+        </tbody>
+        <tfoot v-if="items.length">
+          <tr>
+            <td colspan="3" class="total-label">
+              合计<span v-if="giftQty" class="gift-note">（含赠品 {{ giftQty }} 件）</span>
+            </td>
+            <td class="num">{{ totalQty }}</td>
+            <td v-if="canSeeAnyPrice" class="num"></td>
+            <td v-if="canSeeAnyPrice" class="num"><b>¥{{ money(order?.totalAmount ?? 0) }}</b></td>
+          </tr>
+        </tfoot>
+      </table>
       </template>
     </section>
 
@@ -480,31 +487,26 @@ watch(() => route.params.id, loadOrder)
 .item-table .num { text-align: right; }
 .item-table tfoot td { border-bottom: none; font-weight: 600; }
 .total-label { text-align: right !important; }
-/* ── 卡片列表：商品明细 / 出库流水 / 收款记录 / 编辑明细 ──────────────
-   手机与电脑共用这一套 DOM（不再按设备分岔出表格），
-   手机端单列、电脑端在 min-width:768px 里改成多列网格。 */
-.mc-list, .ec-list, .rc-list { list-style: none; margin: 0; padding: 0; }
-.mc-item, .ec-item, .rc-item {
+/* ── 卡片列表：出库流水 / 收款记录 / 编辑明细 ──────────────
+   这些模块手机与电脑共用同一套卡片 DOM（不再按设备分岔）。
+   ⚠️ 商品明细已改回桌面 <table class="item-table">（与采购单详情同源，
+   V2.1-2.x 老板拍板「电脑端统一用表格」），以下不再含 .mc-* 商品明细卡片样式。 */
+.ec-list, .rc-list { list-style: none; margin: 0; padding: 0; }
+.ec-item, .rc-item {
   padding: 10px 12px; margin-bottom: 8px;
   background: #f8fafc; border: 1px solid var(--c-border); border-radius: 10px;
 }
-.mc-item:last-child, .ec-item:last-child, .rc-item:last-child { margin-bottom: 0; }
-.mc-top, .ec-top, .rc-top { display: flex; align-items: center; gap: 8px; }
-.mc-name, .ec-name, .rc-name {
+.ec-item:last-child, .rc-item:last-child { margin-bottom: 0; }
+.ec-top, .rc-top { display: flex; align-items: center; gap: 8px; }
+.ec-name, .rc-name {
   flex: 1; min-width: 0; font-size: 15px; font-weight: 600;
   color: var(--c-primary); overflow-wrap: anywhere;
 }
-/* 序号：电脑端多列铺开后用来对应行次，手机端单列天然有序故隐藏 */
-.mc-idx, .ec-idx {
+/* 序号（编辑明细用）：电脑端多列铺开后用来对应行次，手机端单列天然有序故隐藏 */
+.ec-idx {
   flex: none; min-width: 18px; font-size: 12px; color: var(--c-muted);
   font-variant-numeric: tabular-nums;
 }
-.mc-calc { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--c-muted); }
-.mc-qty { font-weight: 600; color: var(--c-primary); }
-.mc-price { font-variant-numeric: tabular-nums; }
-.mc-op { color: var(--c-border-strong); }
-.mc-amount { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--c-primary); }
-.mc-gift { color: var(--c-accent); }
 
 /* 合计条：手机端没有表格 tfoot，用这条补上 */
 .mc-total {
@@ -543,21 +545,11 @@ watch(() => route.params.id, loadOrder)
 .p-num { width: 90px; text-align: right; color: var(--c-muted, #64748b); }
 .empty { text-align: center; color: var(--c-muted, #64748b); padding: 18px; }
 
-/* ── 电脑端（≥768px）：与手机端共用同一套卡片 DOM，只改排布方式 ──────────
-   屏幕宽就把卡片内容横向铺开（商品明细、编辑明细都排成一行，信息密度不输原来的
-   表格），内容短的流水 / 收款列表排成多列网格。不要再为电脑端单独维护一套表格。 */
+/* ── 电脑端（≥768px）：编辑明细 / 出库流水 / 收款记录 的卡片 DOM 只改排布方式 ──
+   商品明细在桌面是 <table class="item-table">（见上文），不在此处。
+   编辑明细排成一行，内容短的流水 / 收款列表排成多列网格。 */
 @media (min-width: 768px) {
-  /* 电脑端宽度够：商品明细单列铺满整行，卡片内容排成一行
-     （序号 + 商品名 …… 数量 × 单价 = 金额），不再像手机端那样拆上下两行。
-     流水 / 收款这类内容短的列表仍用多列网格提高密度。 */
-  .mc-item {
-    display: flex; align-items: center; gap: 14px;
-    margin-bottom: 8px;
-  }
-  .mc-item:last-child { margin-bottom: 0; }
-  .mc-item:hover { border-color: var(--c-accent); }
-  .mc-item .mc-top { flex: 1; min-width: 0; }
-  .mc-item .mc-calc { margin-top: 0; margin-left: auto; flex: none; }
+  /* 流水 / 收款这类内容短的列表用多列网格提高密度；编辑明细见下方 .ec-*。 */
   .rc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
   .rc-item { margin-bottom: 0; }
   .rc-item:hover { border-color: var(--c-accent); }
@@ -595,13 +587,12 @@ watch(() => route.params.id, loadOrder)
 @media (max-width: 767px) {
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
-  /* 商品明细在手机端已改用 components/ui/ItemCards.vue（不渲染 .mc-list）；
-     这条保留给「修改」编辑卡片 —— 编辑态两端共用同一份 DOM。 */
-  .mc-idx, .ec-idx { display: none; }
+  /* 编辑明细的卡片在手机端用 ec-idx；移动端隐藏序号避免占位。
+     商品明细移动端走 components/ui/ItemCards.vue（不渲染 .mc-list）。 */
+  .ec-idx { display: none; }
 
-  /* 本页已无 <table>：商品明细 / 出库流水 / 收款记录 / 编辑明细全部走上面的卡片 DOM。
-     这里保留一条兜底 —— 若将来又引入表格，手机端只做横向滚动，绝不撑破屏幕
-     （V2.0-18 起的方案）。 */
+  /* 商品明细移动端走 ItemCards；若将来在移动端直接渲染 item-table，
+     则只做横向滚动，绝不撑破屏幕（V2.0-18 起的方案）。 */
   .item-table { display: block; overflow-x: auto; }
 }
 

@@ -124,7 +124,7 @@ describe('ItemCards · 手机端不撑破屏幕（样式硬约束）', () => {
 
 describe('四个销售 / 采购详情页 · 手机端接线（电脑端仍列表）', () => {
   const PAGES: Array<{ file: string; title: string; desktop: RegExp; label: string }> = [
-    { file: 'src/views/sales/SaleOrderDetailView.vue', title: '商品明细', desktop: /class="mc-list"/, label: '销售单详情' },
+    { file: 'src/views/sales/SaleOrderDetailView.vue', title: '商品明细', desktop: /<table class="item-table">/, label: '销售单详情' },
     { file: 'src/views/purchase/PurchaseOrderDetailView.vue', title: '商品明细', desktop: /<table class="item-table">/, label: '采购单详情' },
     { file: 'src/views/sales/QuotesView.vue', title: '报价明细', desktop: /<table v-if="detailItems.length" class="data-table">/, label: '报价单详情' },
     { file: 'src/views/purchase/PurchaseQuotesView.vue', title: '询价明细', desktop: /<table v-if="detailItems.length" class="data-table">/, label: '预采询价详情' }
