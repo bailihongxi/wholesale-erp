@@ -305,7 +305,7 @@ export const useSalesStore = defineStore('sales', () => {
   }
 
   return {
-    listCustomers, createCustomer, getCustomer,
+    listCustomers, createCustomer, getCustomer, getCustomerMap, clearCustomerCache,
     createOrder, listOrders, getOrder, getOrderItems, updateOrder, removeOrder,
     outbound, listPendingOutbound, listOutboundHistory
   }

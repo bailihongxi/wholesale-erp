@@ -282,7 +282,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
   }
 
   return {
-    listSuppliers, createSupplier, getSupplier,
+    listSuppliers, createSupplier, getSupplier, getSupplierMap, clearSupplierCache,
     createOrder, listOrders, getOrder, getOrderItems, updateOrder, removeOrder,
     inbound, listPendingInbound, listInboundHistory
   }
