@@ -800,8 +800,17 @@ async function openPreview(): Promise<void> {
 function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
-  customers.value = await salesStore.listCustomers()
-  pickerCats.value = await productStore.pickerCategories()
+  // 经销商只看报价，不需要加载商品分类等其他数据
+  if (isDealer.value) {
+    customers.value = []
+    return
+  }
+  // 销售/老板：用全局客户缓存，并行加载
+  const [custs] = await Promise.all([
+    salesStore.listCustomers(),
+    productStore.pickerCategories().then(cats => pickerCats.value = cats),
+  ])
+  customers.value = custs
 })
 
 // ---- 实时回传（V2.1-2）：销售一点「确认」，经销商这边秒级变「已确认」 ----

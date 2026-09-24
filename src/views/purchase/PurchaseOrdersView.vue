@@ -142,8 +142,7 @@ const pager = useServerPager<PurchaseOrder>({
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 async function loadSuppliers(): Promise<void> {
-  const list = await purchaseStore.listSuppliers()
-  supplierMap.value = new Map(list.map(c => [c.id!, c.name]))
+  supplierMap.value = await purchaseStore.getSupplierMap()
 }
 async function ensureSuppliers(): Promise<void> {
   if (supplierMap.value.size === 0) await loadSuppliers()

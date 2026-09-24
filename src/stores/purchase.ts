@@ -7,9 +7,25 @@ import { useInventoryStore } from './inventory'
 import type { Supplier, PurchaseOrder, PurchaseOrderItem, Product, StockHistoryRow } from '../types'
 
 export const usePurchaseStore = defineStore('purchase', () => {
-  // ===== 供应商 =====
-  async function listSuppliers(): Promise<Supplier[]> {
-    return await db.suppliers.toArray()
+  // ===== 供应商（全局缓存，所有页面共用） =====
+  let cachedSuppliers: Supplier[] | null = null
+  let supplierMap: Map<number, string> | null = null
+
+  async function listSuppliers(force = false): Promise<Supplier[]> {
+    if (cachedSuppliers && !force) return cachedSuppliers
+    cachedSuppliers = await db.suppliers.toArray()
+    supplierMap = new Map(cachedSuppliers.map(s => [s.id!, s.name]))
+    return cachedSuppliers
+  }
+
+  async function getSupplierMap(): Promise<Map<number, string>> {
+    if (!supplierMap) await listSuppliers()
+    return supplierMap!
+  }
+
+  function clearSupplierCache() {
+    cachedSuppliers = null
+    supplierMap = null
   }
 
   // operatorId 可选：传入时会记录操作日志

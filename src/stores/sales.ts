@@ -7,9 +7,25 @@ import { useInventoryStore } from './inventory'
 import type { Customer, SaleOrder, SaleOrderItem, Product, StockHistoryRow } from '../types'
 
 export const useSalesStore = defineStore('sales', () => {
-  // ===== 客户 =====
-  async function listCustomers(): Promise<Customer[]> {
-    return await db.customers.toArray()
+  // ===== 客户（全局缓存，所有页面共用） =====
+  let cachedCustomers: Customer[] | null = null
+  let customerMap: Map<number, string> | null = null
+
+  async function listCustomers(force = false): Promise<Customer[]> {
+    if (cachedCustomers && !force) return cachedCustomers
+    cachedCustomers = await db.customers.toArray()
+    customerMap = new Map(cachedCustomers.map(c => [c.id!, c.name]))
+    return cachedCustomers
+  }
+
+  async function getCustomerMap(): Promise<Map<number, string>> {
+    if (!customerMap) await listCustomers()
+    return customerMap!
+  }
+
+  function clearCustomerCache() {
+    cachedCustomers = null
+    customerMap = null
   }
 
   // operatorId 可选：传入时会记录操作日志
