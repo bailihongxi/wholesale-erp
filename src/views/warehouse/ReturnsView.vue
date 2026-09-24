@@ -149,6 +149,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -250,7 +251,28 @@ async function submit(): Promise<void> {
 async function loadHistory(): Promise<void> { history.value = await returnsStore.listReturns() }
 function showDetail(d: ReturnRow): void { activeDetail.value = d }
 
-async function init(): Promise<void> {
+const listCache = useListCache('returns-page')
+
+async function init(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{
+      locations: any[]; saleOrders: any[]; purchaseOrders: any[];
+      customerMap: Record<number, string>; supplierMap: Record<number, string>;
+      productNameMap: Record<number, string>; history: any[]
+    }>()
+    if (cached) {
+      locations.value = cached.locations
+      saleOrders.value = cached.saleOrders
+      purchaseOrders.value = cached.purchaseOrders
+      customerMap.value = cached.customerMap
+      supplierMap.value = cached.supplierMap
+      productNameMap.value = cached.productNameMap
+      history.value = cached.history
+      return
+    }
+  }
+
   await inventoryStore.ensureLocations()
   locations.value = await inventoryStore.listLocations()
   if (!locationId.value || !locations.value.some(l => l.id === locationId.value)) {
@@ -265,13 +287,23 @@ async function init(): Promise<void> {
   // 只读名字：走窄字段扫描，不为显示名称去拉全字段整表
   productNameMap.value = await productStore.nameMap()
   await loadHistory()
+  // 写入缓存
+  listCache.set({
+    locations: locations.value,
+    saleOrders: saleOrders.value,
+    purchaseOrders: purchaseOrders.value,
+    customerMap: customerMap.value,
+    supplierMap: supplierMap.value,
+    productNameMap: productNameMap.value,
+    history: history.value,
+  })
 }
 
 onMounted(init)
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(init)
+useReloadOnActivate(() => init(true))
 watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void loadHistory() })
 </script>
 

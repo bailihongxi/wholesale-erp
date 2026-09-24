@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useRoute } from 'vue-router'
 import InboundView from './InboundView.vue'
 import OutboundView from './OutboundView.vue'
@@ -68,7 +69,19 @@ watch(() => route.query.tab, q => {
 })
 
 /** 角标随子页操作刷新：切模块时重新取一次，保证「做完一单角标就减一」 */
-async function loadBadges(): Promise<void> {
+const listCache = useListCache('warehouse-badges')
+
+async function loadBadges(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{ pendingIn: number; pendingOut: number }>()
+    if (cached) {
+      pendingIn.value = cached.pendingIn
+      pendingOut.value = cached.pendingOut
+      return
+    }
+  }
+
   try {
     const [ins, outs] = await Promise.all([
       purchaseStore.listPendingInbound(),
@@ -76,17 +89,19 @@ async function loadBadges(): Promise<void> {
     ])
     pendingIn.value = ins.length
     pendingOut.value = outs.length
+    // 写入缓存
+    listCache.set({ pendingIn: pendingIn.value, pendingOut: pendingOut.value })
   } catch {
     /* 数据库尚未就绪时保持无角标，不影响页面使用 */
   }
 }
 
-watch(tab, loadBadges)
+watch(tab, () => loadBadges(false))
 onMounted(loadBadges)
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(loadBadges)
+useReloadOnActivate(() => loadBadges(true))
 </script>
 
 <style scoped>

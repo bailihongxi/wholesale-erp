@@ -92,6 +92,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useRoute } from 'vue-router'
 import { db } from '../../db'
 import { useFinanceStore } from '../../stores/finance'
@@ -191,7 +192,18 @@ function clearFilter(): void {
   to.value = ''
 }
 
-async function loadFlow(): Promise<void> {
+const listCache = useListCache('finance-ops-flow')
+
+async function loadFlow(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<FlowRow[]>()
+    if (cached) {
+      flowRows.value = cached
+      return
+    }
+  }
+
   const [history, ledger] = await Promise.all([
     financeStore.listPaymentHistory(),
     db.ledgerEntries.toArray()
@@ -232,13 +244,15 @@ async function loadFlow(): Promise<void> {
 
   rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   flowRows.value = rows
+  // 写入缓存
+  listCache.set(rows)
 }
 
 onMounted(loadFlow)
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(loadFlow)
+useReloadOnActivate(() => loadFlow(true))
 </script>
 
 <style scoped>

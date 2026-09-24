@@ -147,6 +147,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
@@ -249,9 +250,36 @@ const payTotal = computed(() =>
   filteredPayments.value.filter(p => p.type === 'pay').reduce((s, p) => s + p.amount, 0)
 )
 
-async function reload(): Promise<void> {
+const listCache = useListCache('reconcile-page')
+
+async function reload(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{
+      receivables: ReconRow[]; payables: ReconRow[]; payments: any[];
+      customerMap: Record<number, string>; supplierMap: Record<number, string>
+    }>()
+    if (cached) {
+      receivables.value = cached.receivables
+      payables.value = cached.payables
+      payments.value = cached.payments
+      customerMap.value = cached.customerMap
+      supplierMap.value = cached.supplierMap
+      loading.value = false
+      return
+    }
+  }
+
   try {
     await loadAll()
+    // 写入缓存
+    listCache.set({
+      receivables: receivables.value,
+      payables: payables.value,
+      payments: payments.value,
+      customerMap: customerMap.value,
+      supplierMap: supplierMap.value,
+    })
   } finally {
     loading.value = false
   }
@@ -320,7 +348,7 @@ onMounted(reload)
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(reload)
+useReloadOnActivate(() => reload(true))
 
 // 全站统一：两张列表各自 20 条/页 + 斑马纹（表格已挂 data-table）
 // 上方「共 N 笔 / 余额合计 / 收款·付款合计」仍按全部数据汇总，不随翻页变化

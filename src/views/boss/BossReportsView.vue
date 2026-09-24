@@ -124,6 +124,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useFinanceStore } from '../../stores/finance'
 import { useProductStore } from '../../stores/product'
 import { useResponsive } from '../../composables/useResponsive'
@@ -200,15 +201,47 @@ function money(n: number): string {
   return (Number.isFinite(n) ? n : 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
-async function reload(): Promise<void> {
+const listCache = useListCache('boss-reports')
+
+async function reload(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{
+      summary: any; receivableTotal: number; payableTotal: number; trend: any[]
+    }>()
+    if (cached) {
+      summary.value = cached.summary
+      receivableTotal.value = cached.receivableTotal
+      payableTotal.value = cached.payableTotal
+      trend.value = cached.trend
+      return
+    }
+  }
+
   summary.value = await financeStore.getProfitSummary(startDate.value || undefined, endDate.value || undefined)
   receivableTotal.value = await financeStore.getReceivableTotal()
   payableTotal.value = await financeStore.getPayableTotal()
   trend.value = await financeStore.getMonthlyTrend(6)
+  // 写入缓存
+  listCache.set({
+    summary: summary.value,
+    receivableTotal: receivableTotal.value,
+    payableTotal: payableTotal.value,
+    trend: trend.value,
+  })
 }
 
-async function reloadLowStock(): Promise<void> {
+async function reloadLowStock(useCache = true): Promise<void> {
+  const lowStockCache = useListCache('boss-low-stock')
+  if (useCache) {
+    const cached = lowStockCache.get<any[]>()
+    if (cached) {
+      lowStock.value = cached
+      return
+    }
+  }
   lowStock.value = await productStore.getLowStockProducts()
+  lowStockCache.set(lowStock.value)
 }
 
 onMounted(async () => {
@@ -218,9 +251,9 @@ onMounted(async () => {
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(async () => { await reload(); await reloadLowStock() })
+useReloadOnActivate(async () => { await reload(true); await reloadLowStock(true) })
 
-watch([startDate, endDate], reload)
+watch([startDate, endDate], () => reload(false))
 </script>
 
 <style scoped>
