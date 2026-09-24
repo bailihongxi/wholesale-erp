@@ -162,7 +162,7 @@
           <li v-for="(it, i) in editItems" :key="i" class="ec-item">
             <div class="ec-top">
               <span class="ec-idx">{{ i + 1 }}</span>
-              <span class="ec-name">{{ productMap[it.productId]?.brand }} {{ productMap[it.productId]?.model }}</span>
+              <span class="ec-name">{{ productCache[it.productId]?.brand }} {{ productCache[it.productId]?.model }}</span>
               <span v-if="it.isGift" class="gift-badge">🎁 赠品</span>
               <b class="ec-amount">¥{{ money((it.quantity || 0) * (it.price || 0)) }}</b>
             </div>
@@ -203,6 +203,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useProductCache } from '../../composables/useProductCache'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showToast } from 'vant'
@@ -231,6 +232,7 @@ const items = ref<PurchaseOrderItem[]>([])
 const supplier = ref<Supplier | null>(null)
 const payments = ref<Payment[]>([])
 const inboundRecords = ref<StockRecord[]>([])
+const { cache: productCache } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 const receivedMap = ref<Record<number, number>>({})
 const userMap = ref<Record<number, string>>({})
@@ -424,12 +426,8 @@ async function loadOrder(): Promise<void> {
   userMap.value = um
 
   // 商品信息
-  const map: Record<number, Product> = {}
-  for (const it of items.value) {
-    const p = await db.products.get(it.productId)
-    if (p) map[it.productId] = p
-  }
-  productMap.value = map
+  // 用全局商品缓存，不用循环拉商品表了
+  productMap.value = {}
 
   // 入库流水（历史痕迹），按时间倒序
   const records = await db.stockRecords.where('refOrderId').equals(id).toArray()

@@ -330,6 +330,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useProductCache } from '../../composables/useProductCache'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -518,6 +519,7 @@ function backToList(): void { mode.value = 'list' }
 const quote = ref<QuoteOrder | null>(null)
 const detailItems = ref<QuoteOrderItem[]>([])
 const converting = ref(false)
+const { productName: getProductName, productUnit: getProductUnit } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 
 // ---- 修改：与销售单同一套（useEditMode 管状态与滚动，EditModePanel 管排版） ----
@@ -591,8 +593,8 @@ async function db_products(ids: number[]): Promise<Product[]> {
   return await db.products.bulkGet(ids).then(a => a.filter((p): p is Product => Boolean(p)))
 }
 
-function nameOf(id: number): string { return productMap.value[id] ? productStore.productName(productMap.value[id]) : `商品#${id}` }
-function unitOf(id: number): string { return productMap.value[id]?.unit ?? '' }
+function nameOf(id: number): string { return getProductName(id) }
+function unitOf(id: number): string { return getProductUnit(id) }
 
 /** 手机端「询价明细」卡片行数据（详情态），形状见 types/ItemCardRow */
 const detailCards = computed<ItemCardRow[]>(() =>

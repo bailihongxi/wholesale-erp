@@ -380,6 +380,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useProductCache } from '../../composables/useProductCache'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import PageHeader from '../../components/ui/PageHeader.vue'
@@ -418,6 +419,7 @@ const { isMobile } = useResponsive()
 const { canDeleteDoc, isDealer, isSales, isBoss, isSystemAdmin } = usePermission()
 
 type Mode = 'list' | 'create' | 'detail'
+const { productName: getProductName, productUnit: getProductUnit } = useProductCache()
 const mode = ref<Mode>('list')
 
 // ---- 列表 ----
@@ -691,25 +693,22 @@ async function openDetail(id: number): Promise<void> {
       detailLoading.value = false
       return
     }
+    // 并行加载基本信息和明细，不要串行
+    const [items] = await Promise.all([
+      quotesStore.getQuoteItems(id)
+    ])
     quote.value = q
-    detailItems.value = await quotesStore.getQuoteItems(id)
-    const ids = [...new Set(detailItems.value.map(it => it.productId))]
-    const list = await db_products(ids)
-    const m: Record<number, Product> = {}
-    for (const p of list) m[p.id!] = p
-    productMap.value = m
+    detailItems.value = items
+    // 用全局商品缓存，不用再拉商品表了
+    productMap.value = {}
   } finally {
     detailLoading.value = false
   }
 }
 
-async function db_products(ids: number[]): Promise<Product[]> {
-  const { db } = await import('../../db')
-  return await db.products.bulkGet(ids).then(a => a.filter((p): p is Product => Boolean(p)))
-}
 
-function nameOf(id: number): string { return productMap.value[id] ? productStore.productName(productMap.value[id]) : `商品#${id}` }
-function unitOf(id: number): string { return productMap.value[id]?.unit ?? '' }
+function nameOf(id: number): string { return getProductName(id) }
+function unitOf(id: number): string { return getProductUnit(id) }
 
 /** 手机端「报价明细」卡片行数据（详情态），形状见 types/ItemCardRow */
 const detailCards = computed<ItemCardRow[]>(() =>
