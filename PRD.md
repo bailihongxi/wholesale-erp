@@ -2688,7 +2688,7 @@ const canDeleteDoc = computed(() => role.value === 'boss' || isSystemAdmin.value
 
 ---
 
-## V2.1-3.0 手机端UI适配修复
+## V2.1-2.10 手机端UI适配修复
 
 ### 修复内容
 
@@ -2705,3 +2705,20 @@ const canDeleteDoc = computed(() => role.value === 'boss' || isSystemAdmin.value
 3. **排查其他页面**
    - 对账页面：已经有手机端卡片列表，不用改
    - 操作日志页面：已经有手机端卡片列表，不用改
+
+---
+
+## V2.1-2.11 严重bug修复：商品名称显示不出来
+
+### 问题
+所有单据详情页的商品明细，只显示"商品#数字"，显示不出来商品名称（品牌+型号）。
+
+### 原因
+之前做全局商品缓存优化时，犯了两个错误：
+1. useProductCache里云端加载商品的方式不对，直接访问private的client，加载失败
+2. 各个详情页把原来的productMap清空了，但是打印数据里还在用productMap取商品信息，导致空了
+
+### 修复
+1. 修复useProductCache的loadAll函数，统一用db.products.toArray()，云端本地都兼容
+2. 所有详情页（销售单、采购单、报价单、询价单）的打印数据，改成用全局商品缓存取商品信息
+3. 加了try-catch，加载失败有错误提示

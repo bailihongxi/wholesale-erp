@@ -2461,7 +2461,7 @@ alter table "quoteOrders" replica identity full;
 
 ---
 
-## V2.1-3.0 手机端UI适配修复
+## V2.1-2.10 手机端UI适配修复
 
 ### 问题
 1. 收支流水列表手机端还是显示表格，列太多撑破屏幕
@@ -2475,4 +2475,4 @@ alter table "quoteOrders" replica identity full;
 ### 效果
 - 手机端收支流水不再撑破屏幕
 - 返回列表时tab状态保持，体验更流畅
-- 版本号：V2.1-3.0
+- 版本号：V2.1-2.10

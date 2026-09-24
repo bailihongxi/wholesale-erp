@@ -519,7 +519,7 @@ function backToList(): void { mode.value = 'list' }
 const quote = ref<QuoteOrder | null>(null)
 const detailItems = ref<QuoteOrderItem[]>([])
 const converting = ref(false)
-const { productName: getProductName, productUnit: getProductUnit } = useProductCache()
+const { productName: getProductName, productUnit: getProductUnit, cache: productCache } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 
 // ---- 修改：与销售单同一套（useEditMode 管状态与滚动，EditModePanel 管排版） ----
@@ -657,9 +657,9 @@ async function openPreview(): Promise<void> {
     partyName: partyName(quote.value),
     partyLabel: '供应商',
     items: detailItems.value.map(it => ({
-      productName: productMap.value[it.productId]?.brand ?? '',
-      category: productMap.value[it.productId]?.category ?? '',
-      model: productMap.value[it.productId]?.model ?? '',
+      productName: productCache.value[it.productId]?.brand ?? '',
+      category: productCache.value[it.productId]?.category ?? '',
+      model: productCache.value[it.productId]?.model ?? '',
       unit: unitOf(it.productId),
       quantity: it.quantity,
       price: it.price,

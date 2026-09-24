@@ -320,9 +320,9 @@ const printData = computed<PrintOrderData | null>(() => {
     partyAddress: supplier.value?.address ?? '',
     partyLabel: '供应商',
     items: items.value.map(it => ({
-      productName: productMap.value[it.productId]?.brand ?? '',
-      category: productMap.value[it.productId]?.category ?? '',
-      model: productMap.value[it.productId]?.model ?? '',
+      productName: productCache.value[it.productId]?.brand ?? '',
+      category: productCache.value[it.productId]?.category ?? '',
+      model: productCache.value[it.productId]?.model ?? '',
       unit: unitOf(it.productId),
       quantity: it.quantity,
       price: it.price,

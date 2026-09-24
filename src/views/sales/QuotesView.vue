@@ -419,7 +419,7 @@ const { isMobile } = useResponsive()
 const { canDeleteDoc, isDealer, isSales, isBoss, isSystemAdmin } = usePermission()
 
 type Mode = 'list' | 'create' | 'detail'
-const { productName: getProductName, productUnit: getProductUnit } = useProductCache()
+const { productName: getProductName, productUnit: getProductUnit, cache: productCache } = useProductCache()
 const mode = ref<Mode>('list')
 
 // ---- 列表 ----
@@ -802,9 +802,9 @@ async function openPreview(): Promise<void> {
     partyName: partyName(quote.value),
     partyLabel: '客户',
     items: detailItems.value.map(it => ({
-      productName: productMap.value[it.productId]?.brand ?? '',
-      category: productMap.value[it.productId]?.category ?? '',
-      model: productMap.value[it.productId]?.model ?? '',
+      productName: productCache.value[it.productId]?.brand ?? '',
+      category: productCache.value[it.productId]?.category ?? '',
+      model: productCache.value[it.productId]?.model ?? '',
       unit: unitOf(it.productId),
       quantity: it.quantity,
       price: it.price,

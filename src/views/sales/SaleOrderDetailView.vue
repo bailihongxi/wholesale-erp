@@ -343,9 +343,9 @@ const printData = computed<PrintOrderData | null>(() => {
     partyAddress: customer.value?.address ?? '',
     partyLabel: '客户',
     items: items.value.map(it => ({
-      productName: productMap.value[it.productId]?.brand ?? '',
-      category: productMap.value[it.productId]?.category ?? '',
-      model: productMap.value[it.productId]?.model ?? '',
+      productName: productCache.value[it.productId]?.brand ?? '',
+      category: productCache.value[it.productId]?.category ?? '',
+      model: productCache.value[it.productId]?.model ?? '',
       unit: unitOf(it.productId),
       quantity: it.quantity,
       price: it.price,
@@ -366,10 +366,10 @@ function money(n: number): string {
 function fmtDate(s: string): string { return s ? s.slice(0, 10) : '-' }
 function fmtTime(s: string): string { return s ? s.slice(0, 16).replace('T', ' ') : '-' }
 function nameOf(id: number): string {
-  const p = productMap.value[id]
-  return p ? `${p.brand} ${p.model}` : `商品#${id}`
+  const p = productCache.value[id]
+  return p ? `${p.brand || ''} ${p.model || ''}`.trim() : `商品#${id}`
 }
-function unitOf(id: number): string { return productMap.value[id]?.unit ?? '-' }
+function unitOf(id: number): string { return productCache.value[id]?.unit || '-' }
 function operatorName(id: number): string { return userMap.value[id] ?? `#${id}` }
 function statusText(s: string): string {
   return { pending: '待出库', partial: '部分出库', completed: '已完成' }[s] || s || '-'

@@ -7,7 +7,6 @@
 
 import { ref } from 'vue'
 import { db } from '../db'
-import { USE_CLOUD } from '../db/supabaseClient'
 
 interface ProductBasic {
   id: number
@@ -28,30 +27,23 @@ async function loadAll(): Promise<void> {
   if (loaded.value || loading.value) return
   loading.value = true
   try {
-    let products: ProductBasic[] = []
-    if (USE_CLOUD) {
-      // 云端：只拉需要的字段，不拉全量
-      const { data } = await (db as any).client
-        .from('products')
-        .select('id,brand,model,unit,category')
-      products = data || []
-    } else {
-      // 本地：从IndexedDB拉
-      const all = await db.products.toArray()
-      products = all.map(p => ({
-        id: p.id!,
-        brand: p.brand,
-        model: p.model,
-        unit: p.unit,
-        category: p.category
-      }))
-    }
+    // 云端和本地都用toArray()，cloudDb已经做了兼容
+    const all = await db.products.toArray()
+    const products = all.map(p => ({
+      id: p.id!,
+      brand: p.brand,
+      model: p.model,
+      unit: p.unit,
+      category: p.category
+    }))
     const m: Record<number, ProductBasic> = {}
     for (const p of products) {
       m[p.id] = p
     }
     cache.value = m
     loaded.value = true
+  } catch (e) {
+    console.error('加载商品缓存失败:', e)
   } finally {
     loading.value = false
   }
