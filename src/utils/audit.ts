@@ -47,6 +47,8 @@ export const AUDIT_ACTIONS = {
   QUOTE_UPDATE: '修改报价单',
   QUOTE_DELETE: '删除报价单',
   QUOTE_CONVERT: '报价转销售单',
+  /** 销售「确认询价单」：draft→sent，确认后经销商才被允许转销售单（V2.1-2） */
+  QUOTE_CONFIRM: '确认询价单',
   /** 删销售单/采购单时把来源报价单/询价单退回未转（V2.1-1.4 双向联动） */
   QUOTE_REVERT: '撤回转单',
   PERM_UPDATE: '配置角色权限',

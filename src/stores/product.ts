@@ -177,26 +177,53 @@ export const useProductStore = defineStore('product', () => {
     )
   }
 
+  /** 品牌 / 型号标准化：去首尾空格、压缩内部空白，避免「格力 KFR」与「格力KFR」被当成两个商品 */
+  function normName(s: unknown): string {
+    return String(s ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  /**
+   * 按「品牌 + 型号」查同名商品；excludeId 用于编辑时排除自身。
+   *
+   * ⚠️ 走服务端等值过滤（本地 / 测试语义一致），**不要**改成
+   * 「where('brand').equals(品牌).toArray() 再在内存里比型号」：
+   * 热门品牌下有上千条商品时那要拉整页数据，既慢又可能在 1000 行上限处漏判，
+   * 漏判的后果就是库里真的多出一条同名商品。
+   */
+  async function findSameName(brand: string, model: string, excludeId?: number): Promise<Product[]> {
+    const b = normName(brand)
+    const m = normName(model)
+    if (!b || !m) return []
+    const { rows } = await serverPage<Product>(db.products, {
+      page: 1, pageSize: 100, eq: { brand: b, model: m }
+    })
+    return rows.filter(p => p.id !== excludeId)
+  }
+
   // operatorId 可选：传入时会记录操作日志
   async function createProduct(data: Omit<Product, 'id'>, operatorId?: number): Promise<{ ok: boolean; message: string }> {
     if (!data.brand || !data.model) return { ok: false, message: '品牌和型号不能为空' }
-    // 精确匹配：先按品牌查出所有，再在内存里精确比型号（cloudDb 的链式 filter 不可靠）
-    const sameBrand = await db.products.where('brand').equals(data.brand).toArray()
-    const existing = sameBrand.find((p: any) => p.model === data.model)
-    if (existing) return { ok: false, message: '相同品牌+型号的商品已存在' }
-    const id = await db.products.add(data)
+    const brand = normName(data.brand)
+    const model = normName(data.model)
+    const existing = await findSameName(brand, model)
+    if (existing.length) return { ok: false, message: '相同品牌+型号的商品已存在' }
+    const id = await db.products.add({ ...data, brand, model })
     clearPickerCache()
     // 初始化库存为 0
     await db.stock.add({ productId: id as number, quantity: 0, updatedAt: new Date().toISOString() })
     if (operatorId) {
-      await writeLog(operatorId, AUDIT_ACTIONS.PRODUCT_CREATE, `新增商品 ${data.brand} ${data.model}`)
+      await writeLog(operatorId, AUDIT_ACTIONS.PRODUCT_CREATE, `新增商品 ${brand} ${model}`)
     }
     return { ok: true, message: '创建成功' }
   }
 
   // operatorId 可选：传入时会记录操作日志
   async function updateProduct(id: number, data: Partial<Product>, operatorId?: number): Promise<void> {
-    await db.products.update(id, data)
+    // 改品牌 / 型号时同样做标准化，保证与新增、导入、重复检测用的是同一套口径
+    const patch: Partial<Product> = { ...data }
+    if (patch.brand !== undefined) patch.brand = normName(patch.brand)
+    if (patch.model !== undefined) patch.model = normName(patch.model)
+    await db.products.update(id, patch)
     clearPickerCache()
     if (operatorId) {
       await writeLog(operatorId, AUDIT_ACTIONS.PRODUCT_UPDATE, `修改商品 #${id}`)
@@ -372,7 +399,7 @@ export const useProductStore = defineStore('product', () => {
 
   return {
     products, productName, loadAll, search, createProduct, listAll, listPage, distinctCategories, stockMap,
-    updateProduct, getProduct, nameMap, getStock, getLowStockProducts,
+    updateProduct, getProduct, nameMap, getStock, getLowStockProducts, findSameName,
     pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache
   }
 })

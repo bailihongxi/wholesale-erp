@@ -58,6 +58,16 @@
             <td :class="o.status">{{ statusText(o.status) }}</td>
             <td class="center">
               <button class="link-btn" type="button" @click="openDetail(o.id!)">查看</button>
+              <!-- 销售侧快捷确认：列表里直接放行「待报价」的单子，不用逐个点进去 -->
+              <button
+                v-if="!isDealer && o.status === 'draft'"
+                class="link-btn"
+                type="button"
+                :disabled="confirmingId === o.id"
+                @click="confirmFromList(o)"
+              >
+                {{ confirmingId === o.id ? '确认中…' : '确认' }}
+              </button>
             </td>
           </tr>
           <tr v-if="!pager.total.value"><td colspan="6" class="empty">没有符合条件的报价单</td></tr>
@@ -210,8 +220,19 @@
           <div class="d-actions">
             <button class="btn btn-back" type="button" @click="backToList">← 返回列表</button>
             <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
+            <!-- 售票员确认：draft→sent，确认后经销商那侧才被允许转销售单（V2.1-2） -->
+            <button
+              v-if="!isDealer && quote.status === 'draft'"
+              class="btn"
+              type="button"
+              :disabled="confirmingId === quote.id"
+              @click="handleConfirm"
+            >
+              {{ confirmingId === quote.id ? '确认中…' : '✅ 确认询价单' }}
+            </button>
             <button class="btn btn-print" type="button" @click="openPreview">🖨 打印</button>
-            <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
+            <!-- 经销商只能转「销售已确认」的单；销售侧不受限 -->
+            <button v-if="canConvertQuote" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为销售单' }}
             </button>
             <button v-if="canDeleteDoc && quote.status !== 'converted'" class="btn danger" type="button" @click="handleRemove">🗑 删除</button>
@@ -224,6 +245,16 @@
           <span v-if="quote.validDays"><i>有效期</i>{{ quote.validDays }} 天</span>
           <span><i>备注</i>{{ quote.remark || '无' }}</span>
         </div>
+        <!-- 经销商看不到「确认」按钮，用一条提示告诉他现在处在流程哪一步 -->
+        <p v-if="isDealer && quote.status === 'draft'" class="wait-tip">
+          已提交，等待销售确认 —— 确认后这里会出现「转为销售单」。
+        </p>
+        <p v-else-if="isDealer && quote.status === 'sent'" class="wait-tip ok">
+          ✅ 销售已确认，可以转销售单了。
+        </p>
+        <p v-else-if="isDealer && quote.status === 'converted'" class="wait-tip ok">
+          已转为销售单 {{ quote.convertedSaleNo }}，本单流程结束。
+        </p>
       </section>
 
       <section class="block">
@@ -352,6 +383,7 @@ import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
 import { useServerPager } from '../../composables/useServerPager'
+import { useQuoteRealtime } from '../../composables/useQuoteRealtime'
 import { db } from '../../db'
 import { escapeOr } from '../../db/cloudDb'
 import { serverPage } from '../../db/serverPage'
@@ -432,9 +464,24 @@ async function ensureCustomers(): Promise<void> {
 
 function resetFilter(): void { keyword.value = ''; statusFilter.value = '' }
 
+/**
+ * 状态文案：销售侧沿用「待报价 / 已报价」，经销商侧换成流程语言
+ * （待确认 → 已确认 → 已转销售单）。同一份状态，两种读法，
+ * 经销商不需要知道内部叫「报价」，只需要知道「售票员确认了没有」。
+ */
 function statusText(s: string): string {
+  if (isDealer.value) {
+    return { draft: '待确认', sent: '已确认', converted: '已转销售单', void: '已失效' }[s] ?? s
+  }
   return { draft: '待报价', sent: '已报价', converted: '已转销售单', void: '已失效' }[s] ?? s
 }
+
+/** 能否转销售单：销售随时可转；经销商必须等销售确认（sent）之后 */
+const canConvertQuote = computed(() => {
+  const q = quote.value
+  if (!q || q.status === 'converted' || q.status === 'void') return false
+  return !isDealer.value || q.status === 'sent'
+})
 function partyName(q: QuoteOrder): string {
   return q.customerId > 0 ? customers.value.find(c => c.id === q.customerId)?.name ?? `客户#${q.customerId}` : q.customerName
 }
@@ -539,6 +586,8 @@ function backToList(): void { mode.value = 'list' }
 const quote = ref<QuoteOrder | null>(null)
 const detailItems = ref<QuoteOrderItem[]>([])
 const converting = ref(false)
+/** 正在确认的报价单 id（0 = 没有）；列表与详情共用，避免连点出两次确认 */
+const confirmingId = ref(0)
 const productMap = ref<Record<number, Product>>({})
 
 // ---- 修改：与销售单同一套（useEditMode 管状态与滚动，EditModePanel 管排版） ----
@@ -654,6 +703,36 @@ async function handleConvert(): Promise<void> {
   }
 }
 
+/**
+ * 确认询价单（销售侧）：draft → sent，不动明细。
+ * 确认完经销商那侧的 Realtime 会立刻收到，页面出现「转为销售单」。
+ */
+async function handleConfirm(): Promise<void> {
+  const q = quote.value
+  if (!q?.id) return
+  await runConfirm(q.id)
+}
+
+/** 列表里的快捷确认：确认完只刷新列表，不进详情 */
+async function confirmFromList(o: QuoteOrder): Promise<void> {
+  await runConfirm(o.id!)
+}
+
+async function runConfirm(id: number): Promise<void> {
+  if (confirmingId.value) return
+  confirmingId.value = id
+  try {
+    const res = await quotesStore.confirmQuote(id, userStore.currentUser?.id ?? 2)
+    showToast(res.message)
+    if (!res.ok) return
+    // 详情态：把本单状态刷成最新（按钮随之切换）
+    if (quote.value?.id === id) quote.value = (await quotesStore.getQuote(id)) ?? quote.value
+    await pager.reload()
+  } finally {
+    confirmingId.value = 0
+  }
+}
+
 async function handleRemove(): Promise<void> {
   if (!quote.value) return
   const go = await showConfirmDialog({
@@ -706,6 +785,32 @@ function go(p: string): void { router.push(p) }
 onMounted(async () => {
   customers.value = await salesStore.listCustomers()
   pickerCats.value = await productStore.pickerCategories()
+})
+
+// ---- 实时回传（V2.1-2）：销售一点「确认」，经销商这边秒级变「已确认」 ----
+//
+// 只有经销商需要订阅（销售侧改单就在自己页面上，不需要推送）。
+// ⚠️ 前提：Supabase 后台要把 quoteOrders 加进 supabase_realtime 发布，
+// 见 supabase/migrate_v2.1-2_realtime_quote_orders.sql；没加发布时这里静默无事件，
+// 页面退化为「回到本页 / 手动刷新才更新」，不会影响正常使用。
+useQuoteRealtime({
+  enabled: () => isDealer.value,
+  customerId: () => userStore.currentUser?.id,
+  onChange: row => {
+    const changedId = Number(row.id) || 0
+    // 详情态正开着这一张：即时换状态并提示，别让用户盯着旧页面
+    if (changedId && quote.value?.id === changedId) {
+      void quotesStore.getQuote(changedId).then(q => {
+        if (!q) return
+        const before = quote.value?.status
+        quote.value = q
+        if (before === 'draft' && q.status === 'sent') showToast('销售已确认，可以转销售单了')
+      })
+    }
+    void pager.reload()
+  },
+  // 订阅成功 / 断线重连后校准一次：断线期间的事件已经拿不回来了
+  onSubscribed: () => { void pager.reload() },
 })
 </script>
 
@@ -776,6 +881,12 @@ onMounted(async () => {
 .btn:disabled { opacity: .6; }
 .d-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 14px; font-size: 13px; color: var(--c-text); }
 .d-meta i { font-style: normal; color: var(--c-muted); margin-right: 6px; }
+/* 经销商流程提示：告诉他现在卡在「等销售确认」还是「可以转单了」 */
+.wait-tip {
+  margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+  background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa;
+}
+.wait-tip.ok { background: #eef6ff; color: var(--c-accent); border-color: #c7dbff; }
 .block { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(26,54,93,.06); }
 .block-title { font-size: 15px; color: var(--c-primary); margin-bottom: 10px; }
 .link-btn { border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 13px; }

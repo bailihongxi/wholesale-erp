@@ -287,13 +287,22 @@ export interface DuplicateGroup {
   items: Array<Product & { stock: number }>
 }
 
+/** 扫库时一次性把库存读进内存：逐个商品查库存 = N+1 次请求（6000+ 商品会直接卡死） */
+async function stockQtyMap(): Promise<Record<number, number>> {
+  const map: Record<number, number> = {}
+  const rows = await db.stock.toArray()
+  for (const s of rows) map[s.productId] = (map[s.productId] ?? 0) + (Number(s.quantity) || 0)
+  return map
+}
+
 /** 扫描全库，找出所有「名称重复」的商品分组；只返回确实重复的（≥2 条） */
 export async function findDuplicateProducts(): Promise<DuplicateGroup[]> {
   const all = await db.products.toArray()
+  const qty = await stockQtyMap()
   const map = new Map<string, DuplicateGroup>()
   for (const p of all) {
     const key = productKeyOf(p)
-    const stock = (await db.stock.where('productId').equals(p.id!).first())?.quantity ?? 0
+    const stock = qty[p.id!] ?? 0
     const g = map.get(key)
     if (g) g.items.push({ ...p, stock })
     else map.set(key, { key, name: `${p.brand} ${p.model}`.trim(), items: [{ ...p, stock }] })
@@ -302,11 +311,24 @@ export async function findDuplicateProducts(): Promise<DuplicateGroup[]> {
 }
 
 /**
+ * 引用了 productId 的表：合并商品时必须把这些行改指向保留商品，
+ * 否则被删掉的商品 id 会变成单据里的孤儿（明细显示成空白、库存对不上）。
+ */
+const PRODUCT_REF_TABLES = [
+  'purchaseOrderItems', 'saleOrderItems', 'quoteOrderItems',
+  'stockRecords', 'locationStock', 'transferItems', 'stocktakeItems', 'returnItems',
+] as const
+
+/**
  * 合并：保留 keepId 那条，其余重复的删除。
  * 处理三件事，缺一不可：
  *  1. 重复商品的库存累加到保留商品
- *  2. 采购 / 销售明细、出入库流水里的 productId 改指向保留商品（同明细若同一产品出现两次会合并数量留给后续处理）
+ *  2. 采购 / 销售 / 报价明细、出入库流水、库位库存里的 productId 改指向保留商品
  *  3. 删除多余的商品行与其库存行
+ *
+ * ⚠️ **不能用 db.transaction()**：云端版 db（src/db/cloudDb.ts）没有实现 Dexie 的事务 API，
+ * 旧实现一进云端就在这一行抛 `db.transaction is not a function`，「合并同名」点了没反应、
+ * 连提示都没有（V2.1-2 修复）。这里改成顺序执行 + 批量读写，云端 / 本地都能跑。
  */
 export async function mergeProducts(keepId: number, mergeIds: number[]): Promise<{ ok: boolean; message: string; movedItems: number }> {
   if (!keepId) return { ok: false, message: '未指定保留的商品', movedItems: 0 }
@@ -314,39 +336,39 @@ export async function mergeProducts(keepId: number, mergeIds: number[]): Promise
   if (!dupIds.length) return { ok: false, message: '没有需要合并的商品', movedItems: 0 }
 
   let movedItems = 0
-  await db.transaction('rw', db.products, db.stock, db.purchaseOrderItems, db.saleOrderItems, db.stockRecords, async () => {
-    // 1) 库存累加
-    const keepStock = await db.stock.where('productId').equals(keepId).first()
-    let extraQty = 0
-    for (const id of dupIds) {
-      const s = await db.stock.where('productId').equals(id).first()
-      if (s) {
-        extraQty += s.quantity
-        await db.stock.delete(s.id!)
-      }
-    }
-    if (keepStock) {
-      await db.stock.update(keepStock.id!, {
-        quantity: keepStock.quantity + extraQty,
-        updatedAt: new Date().toISOString()
-      })
-    } else {
-      await db.stock.add({ productId: keepId, quantity: extraQty, updatedAt: new Date().toISOString() })
-    }
 
-    // 2) 单据明细改指向
-    for (const id of dupIds) {
-      const poi = await db.purchaseOrderItems.where('productId').equals(id).toArray()
-      for (const it of poi) { await db.purchaseOrderItems.update(it.id!, { productId: keepId }); movedItems++ }
-      const soi = await db.saleOrderItems.where('productId').equals(id).toArray()
-      for (const it of soi) { await db.saleOrderItems.update(it.id!, { productId: keepId }); movedItems++ }
-      const sr = await db.stockRecords.where('productId').equals(id).toArray()
-      for (const r of sr) { await db.stockRecords.update(r.id!, { productId: keepId }) }
-    }
+  // 1) 库存累加：一次 anyOf 查出保留商品与待删商品的库存行，不再逐条查
+  const stocks = await db.stock.where('productId').anyOf([keepId, ...dupIds]).toArray()
+  const keepStock = stocks.find(s => s.productId === keepId)
+  const dropStockIds: number[] = []
+  let extraQty = 0
+  for (const s of stocks) {
+    if (s.productId === keepId) continue
+    extraQty += Number(s.quantity) || 0
+    if (s.id != null) dropStockIds.push(s.id)
+  }
+  if (keepStock?.id != null) {
+    await db.stock.update(keepStock.id, {
+      quantity: (Number(keepStock.quantity) || 0) + extraQty,
+      updatedAt: new Date().toISOString()
+    })
+  } else {
+    await db.stock.add({ productId: keepId, quantity: extraQty, updatedAt: new Date().toISOString() })
+  }
+  if (dropStockIds.length) await db.stock.bulkDelete(dropStockIds)
 
-    // 3) 删除重复商品
-    await db.products.bulkDelete(dupIds)
-  })
+  // 2) 明细改指向：整表按 productId in (...) 一次捞齐，再 bulkPut 批量写回
+  for (const name of PRODUCT_REF_TABLES) {
+    const table = (db as any)[name]
+    if (!table?.where) continue
+    const rows = await table.where('productId').anyOf(dupIds).toArray()
+    if (!rows.length) continue
+    movedItems += rows.length
+    await table.bulkPut(rows.map((r: any) => ({ ...r, productId: keepId })))
+  }
+
+  // 3) 删除重复商品
+  await db.products.bulkDelete(dupIds)
 
   return { ok: true, message: `已合并 ${dupIds.length} 条重复商品`, movedItems }
 }

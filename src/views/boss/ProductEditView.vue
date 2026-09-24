@@ -7,6 +7,7 @@
 
     <div class="preview">
       商品名称（自动生成）：<b>{{ previewName }}</b>
+      <span v-if="isEdit" class="preview-id">商品 #{{ editId }}</span>
     </div>
 
     <div class="form">
@@ -76,6 +77,15 @@
           <option value="inactive">停售</option>
         </select>
       </div>
+      <div class="row">
+        <label>备注</label>
+        <textarea
+          v-model="form.remark"
+          class="f-input remark-input"
+          rows="3"
+          placeholder="选填：产地、配件、替代型号、注意事项…"
+        />
+      </div>
 
       <PageActions
         cancel-text="取消"
@@ -95,6 +105,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useProductStore } from '../../stores/product'
 import { usePermission } from '../../composables/usePermission'
+import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import PageActions from '../../components/PageActions.vue'
 import { getPriceRule, calcWholesale, calcRetail, type PriceRule } from '../../utils/priceRule'
 import type { Product } from '../../types'
@@ -104,17 +115,30 @@ const router = useRouter()
 const productStore = useProductStore()
 const { canSeeAnyPrice, canSeePurchasePrice } = usePermission()
 
-const id = route.params.id
-const isEdit = computed(() => !!id)
+/**
+ * ⚠️ 编辑的商品 id **必须是 computed**。
+ *
+ * 本组件被 App.vue 的 <keep-alive> 缓存：`/boss/products/edit/:id` 之间来回切换时
+ * 组件是「复活」而不是「重新挂载」，setup 只跑一次。旧实现把
+ * `const id = route.params.id` 在 setup 里取值一次，于是从列表里点第二个商品进来，
+ * 表单虽然加载了第二个商品，保存却仍写回**第一个**商品的 id ——
+ * 表现就是「只有第一次点编辑能改成功，后面的都改不动」，甚至把 A 的数据盖到 B 上。
+ */
+const editId = computed(() => Number(route.params.id) || 0)
+const isEdit = computed(() => editId.value > 0)
 const saving = ref(false)
 const rule = ref<PriceRule>(getPriceRule())
 /** 手工改过价格后不再自动覆盖，尊重开单人的临时改价 */
 const manual = reactive({ wholesale: false, retail: false })
 
-const form = reactive({
-  brand: '', model: '', category: '', spec: '', unit: '台',
-  purchasePrice: 0, wholesalePrice: 0, retailPrice: 0, warnStock: 0, status: 'active'
-})
+function emptyForm() {
+  return {
+    brand: '', model: '', category: '', spec: '', unit: '台',
+    purchasePrice: 0, wholesalePrice: 0, retailPrice: 0, warnStock: 0,
+    status: 'active' as 'active' | 'inactive', remark: ''
+  }
+}
+const form = reactive(emptyForm())
 const categories = ref<string[]>([])
 
 // 填了成本就自动带出批发价 / 零售价（规则里关闭了自动填充则不动）
@@ -144,46 +168,67 @@ function goBack(): void {
   router.push('/boss/products')
 }
 
-async function initForm() {
-  // 加载已有分类供下拉选择
-  const { db } = await import('../../db')
-  const all: any[] = await db.products.toArray()
-  categories.value = [...new Set(all.map((p: any) => p.category).filter(Boolean))].sort()
-  const editId = route.params.id
-  if (editId) {
-    const p = await productStore.getProduct(Number(editId))
-    if (p) {
-      form.brand = p.brand
-      form.model = p.model
-      form.category = p.category
-      form.spec = p.spec
-      form.unit = p.unit
-      form.purchasePrice = p.purchasePrice
-      form.wholesalePrice = p.wholesalePrice
-      form.retailPrice = p.retailPrice
-      form.warnStock = p.warnStock
-      form.status = p.status
+/**
+ * 载入表单。**每次都先整份重置**，再按 editId 填值——
+ * 只覆盖「读回来的那几个字段」的话，上一个商品残留的值会混进新商品里（例如上一个
+ * 有备注、这一个没有，保存时备注就串了）。
+ */
+async function initForm(): Promise<void> {
+  const id = editId.value
+  Object.assign(form, emptyForm())
+  manual.wholesale = false
+  manual.retail = false
+  try {
+    // 分类下拉：走带缓存的 distinctCategories，不在这里扫整张商品表
+    categories.value = await productStore.distinctCategories()
+  } catch { categories.value = [] }
+  if (!id) return
+  try {
+    const p = await productStore.getProduct(id)
+    if (!p) {
+      showToast(`没找到商品 #${id}`)
+      return
     }
-  } else {
-    // 新建：清空表单，避免残留上一个商品的数据
-    form.brand = ''
-    form.model = ''
-    form.category = ''
-    form.spec = ''
-    form.unit = '台'
-    form.purchasePrice = 0
-    form.wholesalePrice = 0
-    form.retailPrice = 0
-    form.warnStock = 0
-    form.status = 'active'
-    manual.wholesale = false
-    manual.retail = false
+    form.brand = p.brand
+    form.model = p.model
+    form.category = p.category
+    form.spec = p.spec
+    form.unit = p.unit
+    form.purchasePrice = p.purchasePrice
+    form.wholesalePrice = p.wholesalePrice
+    form.retailPrice = p.retailPrice
+    form.warnStock = p.warnStock
+    form.status = p.status
+    form.remark = p.remark ?? ''
+    // 档案里已有的价格是准的：别让「成本 → 售价」的自动推算在载入时把它们冲掉
+    manual.wholesale = true
+    manual.retail = true
+  } catch (e: any) {
+    showToast('加载失败：' + (e?.message || '未知错误'))
   }
 }
 
-onMounted(() => { initForm() })
-// 路由切换时重新初始化（从编辑页切到新增页时组件复用）
-watch(() => route.params.id, () => { initForm() })
+onMounted(() => { void initForm() })
+// 路由参数变化（换一个商品编辑 / 从编辑切到新增）必须重新初始化
+watch(() => route.params.id, () => { void initForm() })
+// 从别的页面回到本页（keep-alive 复活）时重新载入，避免停留在上次的表单
+useReloadOnActivate(initForm)
+
+function payload(): Pick<Product, 'brand' | 'model' | 'category' | 'spec' | 'unit' | 'purchasePrice' | 'wholesalePrice' | 'retailPrice' | 'warnStock' | 'status' | 'remark'> {
+  return {
+    brand: String(form.brand ?? '').trim(),
+    model: String(form.model ?? '').trim(),
+    category: form.category,
+    spec: form.spec,
+    unit: form.unit,
+    purchasePrice: Number(form.purchasePrice) || 0,
+    wholesalePrice: Number(form.wholesalePrice) || 0,
+    retailPrice: Number(form.retailPrice) || 0,
+    warnStock: Number(form.warnStock) || 0,
+    status: form.status as 'active' | 'inactive',
+    remark: String(form.remark ?? '')
+  }
+}
 
 async function handleSave(): Promise<void> {
   if (!form.brand || !form.model) {
@@ -192,17 +237,19 @@ async function handleSave(): Promise<void> {
   }
   saving.value = true
   try {
-    const payload = {
-      brand: form.brand, model: form.model, category: form.category, spec: form.spec,
-      unit: form.unit, purchasePrice: Number(form.purchasePrice), wholesalePrice: Number(form.wholesalePrice),
-      retailPrice: Number(form.retailPrice), warnStock: Number(form.warnStock), status: form.status as 'active' | 'inactive'
+    const data = payload()
+    // 同名拦截：不论新增还是改名，都不允许库里出现第二个「品牌+型号」完全相同的商品
+    const same = await productStore.findSameName(data.brand, data.model, isEdit.value ? editId.value : undefined)
+    if (same.length) {
+      showToast(`已存在同名商品（#${same[0].id} ${data.brand} ${data.model}），请改用「合并同名」`)
+      return
     }
     if (isEdit.value) {
-      await productStore.updateProduct(Number(id), payload)
+      await productStore.updateProduct(editId.value, data)
       showToast('已保存')
       router.push('/boss/products')
     } else {
-      const res = await productStore.createProduct({ ...payload, remark: '', extra: {} })
+      const res = await productStore.createProduct({ ...data, extra: {} })
       if (res.ok) {
         showToast('已保存')
         router.push('/boss/products')
@@ -210,6 +257,8 @@ async function handleSave(): Promise<void> {
         showToast(res.message)
       }
     }
+  } catch (e: any) {
+    showToast('保存失败：' + (e?.message || '未知错误'))
   } finally {
     saving.value = false
   }
@@ -222,6 +271,7 @@ async function handleSave(): Promise<void> {
   padding: 10px 14px; background: #eef6ff; border-radius: 10px; font-size: 13px;
   color: #1f6b48; margin-bottom: 14px;
 }
+.preview-id { margin-left: 8px; color: var(--c-muted); font-size: 12px; }
 .form { display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; flex-direction: column; gap: 6px; }
 .row label { font-size: 13px; color: var(--c-muted); }
@@ -240,6 +290,10 @@ async function handleSave(): Promise<void> {
 .f-input {
   height: 44px; border: 1px solid var(--c-border); border-radius: 10px;
   padding: 0 14px; font-size: 14px; outline: none; background: #fff;
+}
+.remark-input {
+  height: auto; min-height: 84px; padding: 10px 14px; line-height: 1.5;
+  resize: vertical; font-family: inherit;
 }
 .save-btn {
   height: 48px; border: none; border-radius: 10px; background: var(--c-accent);

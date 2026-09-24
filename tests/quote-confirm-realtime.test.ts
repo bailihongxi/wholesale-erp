@@ -1,0 +1,150 @@
+/**
+ * V2.1-2（B1 下）：销售「确认询价单」+ 实时回传 + 经销商转销售单放开。
+ *
+ * 闭环比喻：经销商在窗口买票（提交询价单）→ 售票员确认（confirmQuote，draft→sent）
+ * → 结果实时回传到窗口（Realtime）→ 经销商拿到票（转销售单）。
+ *
+ * 本文件锁三件事：
+ *   1. confirmQuote 的状态机与留痕（错的状态不能确认、确认要能审计）；
+ *   2. 经销商「转销售单」的闸门只认 sent（销售没确认就转不了）；
+ *   3. Realtime 订阅的三条硬约束（能停、有兜底、云端才订阅）与后台发布脚本存在。
+ */
+import { describe, it, expect, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import 'fake-indexeddb/auto'
+import { db } from '../src/db'
+import { useQuotesStore } from '../src/stores/quotes'
+import { AUDIT_ACTIONS } from '../src/utils/audit'
+
+const SRC = (rel: string): string => readFileSync(resolve(__dirname, '..', rel), 'utf8')
+
+async function seedQuote(status: 'draft' | 'sent' | 'converted' | 'void', withItem = true) {
+  const qs = useQuotesStore()
+  const id = await db.quoteOrders.add({
+    orderNo: `BJ-TEST-${Math.random().toString(36).slice(2, 8)}`,
+    customerId: 9,
+    customerName: '',
+    quoteDate: new Date().toISOString(),
+    status,
+    totalAmount: 1000,
+    remark: '',
+    salesId: 1,
+    kind: 'sale',
+    createdAt: new Date().toISOString(),
+  } as never) as number
+  if (withItem) {
+    await db.quoteOrderItems.add({ quoteOrderId: id, productId: 1, quantity: 1, price: 1000, subtotal: 1000 } as never)
+  }
+  return id
+}
+
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  await db.open()
+  await Promise.all(db.tables.map(t => t.clear()))
+})
+
+describe('确认询价单（confirmQuote）', () => {
+  it('draft → sent，回填确认人与时间，并写审计', async () => {
+    const qs = useQuotesStore()
+    const id = await seedQuote('draft')
+    const res = await qs.confirmQuote(id, 7)
+    expect(res.ok).toBe(true)
+
+    const q = await db.quoteOrders.get(id)
+    expect(q!.status).toBe('sent')
+    expect(q!.confirmedBy).toBe(7)
+    expect(q!.confirmedAt).toBeTruthy()
+
+    const logs = await db.auditLogs.toArray()
+    const log = logs.find(l => l.action === AUDIT_ACTIONS.QUOTE_CONFIRM)
+    expect(log).toBeTruthy()
+    expect(log!.detail).toContain(q!.orderNo)
+  })
+
+  it('已经确认 / 已转单 / 已失效 / 没有明细的都不能再确认', async () => {
+    const qs = useQuotesStore()
+    const sent = await seedQuote('sent')
+    expect((await qs.confirmQuote(sent, 7)).ok).toBe(false)
+
+    const converted = await seedQuote('converted')
+    expect((await qs.confirmQuote(converted, 7)).ok).toBe(false)
+
+    const voided = await seedQuote('void')
+    expect((await qs.confirmQuote(voided, 7)).ok).toBe(false)
+
+    const empty = await seedQuote('draft', false)
+    const r = await qs.confirmQuote(empty, 7)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('明细')
+
+    expect((await qs.confirmQuote(999999, 7)).ok).toBe(false)
+  })
+
+  it('确认只改状态，不动明细与金额', async () => {
+    const qs = useQuotesStore()
+    const id = await seedQuote('draft')
+    const before = await qs.getQuoteItems(id)
+    await qs.confirmQuote(id, 7)
+    const after = await qs.getQuoteItems(id)
+    expect(after.length).toBe(before.length)
+    expect(after[0].price).toBe(before[0].price)
+    expect((await db.quoteOrders.get(id))!.totalAmount).toBe(1000)
+  })
+})
+
+describe('经销商转销售单的闸门', () => {
+  it('经销商只能转「销售已确认」的单，销售侧不受限（源码级）', () => {
+    const src = SRC('src/views/sales/QuotesView.vue')
+    expect(src).toContain('const canConvertQuote = computed(')
+    const fn = src.slice(src.indexOf('const canConvertQuote'), src.indexOf('function partyName'))
+    expect(fn).toContain('isDealer')
+    expect(fn).toContain("q.status === 'sent'")
+    // 转单按钮改用这个开关，而不是旧的「非经销商即可」
+    expect(src).toContain('v-if="canConvertQuote"')
+    expect(src).not.toContain("quote.status !== 'converted' && !isDealer\" class=\"btn primary\" type=\"button\" :disabled=\"converting\"")
+  })
+
+  it('销售侧有「确认询价单」入口（详情 + 列表行）', () => {
+    const src = SRC('src/views/sales/QuotesView.vue')
+    expect(src).toContain("quote.status === 'draft'")
+    expect(src).toContain('handleConfirm')
+    expect(src).toContain('confirmFromList')
+    expect(src).toContain('确认询价单')
+  })
+
+  it('经销商看到的是流程语言：待确认 / 已确认，不是内部的「待报价」', () => {
+    const src = SRC('src/views/sales/QuotesView.vue')
+    const fn = src.slice(src.indexOf('function statusText'), src.indexOf('const canConvertQuote'))
+    expect(fn).toContain("draft: '待确认'")
+    expect(fn).toContain("sent: '已确认'")
+  })
+})
+
+describe('实时回传（Realtime）', () => {
+  it('订阅必须能被移除，且只在云端订阅（源码级）', () => {
+    const src = SRC('src/composables/useQuoteRealtime.ts')
+    expect(src).toContain('onUnmounted(stop)')
+    expect(src).toContain('removeChannel')
+    expect(src).toContain('USE_CLOUD')
+    expect(src).toContain('onSubscribed')
+  })
+
+  it('报价单页只在经销商身份下订阅，自己的单才收得到', () => {
+    const src = SRC('src/views/sales/QuotesView.vue')
+    const block = src.slice(src.indexOf('useQuoteRealtime({'), src.indexOf('</script>'))
+    expect(block).toContain('enabled: () => isDealer.value')
+    expect(block).toContain('customerId: () => userStore.currentUser?.id')
+  })
+
+  it('后台发布脚本存在：加 publication + REPLICA IDENTITY FULL', () => {
+    const p = resolve(__dirname, '..', 'supabase/migrate_v2.1-2_realtime_quote_orders.sql')
+    expect(existsSync(p)).toBe(true)
+    const sql = readFileSync(p, 'utf8')
+    expect(sql.toLowerCase()).toContain('supabase_realtime')
+    expect(sql.toLowerCase()).toContain('replica identity full')
+  })
+})

@@ -123,6 +123,44 @@ export const useQuotesStore = defineStore('quotes', () => {
     return { ok: true, message: '已保存' }
   }
 
+  /**
+   * 销售「确认询价单」（V2.1-2，窗口买票 / 售票员闭环里的「售票员确认」那一步）：
+   * `draft → sent`，**不动明细**，只回填确认人与确认时间。
+   *
+   * 为什么要单独一个动作而不是复用 updateQuote：
+   *  - 确认是「不改单直接放行」的场景（报价没问题就确认），改单是另一回事；
+   *  - 状态流转要留痕（审计 QUOTE_CONFIRM），混在 QUOTE_UPDATE 里分不清是谁确认的；
+   *  - 经销商侧的「转销售单」按钮以 `status === 'sent'` 为开关，
+   *    这一步就是把闸门交到销售手上——没确认前经销商转不了单。
+   */
+  async function confirmQuote(quoteId: number, operatorId: number): Promise<{ ok: boolean; message: string }> {
+    const q = await db.quoteOrders.get(quoteId)
+    if (!q) return { ok: false, message: '报价单不存在' }
+    if (q.status === 'converted') return { ok: false, message: '已转成销售单，无需再确认' }
+    if (q.status === 'void') return { ok: false, message: '已失效的报价单不能确认' }
+    if (q.status === 'sent') return { ok: false, message: '该报价单已确认' }
+
+    const items = await db.quoteOrderItems.where('quoteOrderId').equals(quoteId).toArray()
+    if (!items.length) return { ok: false, message: '报价单没有明细，无法确认' }
+
+    const now = new Date().toISOString()
+    // ⚠️ confirmedBy / confirmedAt 是 V2.1-2 新加的列，要用户先在 SQL Editor 跑过
+    // supabase/migrate_v2.1-2_realtime_quote_orders.sql 才存在。没跑脚本时整条 update 会被
+    // PostgREST 拒掉（column does not exist），确认就静默失败 —— 老板只看到「点了没反应」。
+    // 所以这里降级：写不进去就只改状态，确认本身照样生效，留痕字段等脚本跑过后自动补上。
+    try {
+      await db.quoteOrders.update(quoteId, { status: 'sent', confirmedBy: operatorId, confirmedAt: now })
+    } catch {
+      await db.quoteOrders.update(quoteId, { status: 'sent' })
+    }
+    await writeLog(
+      operatorId,
+      AUDIT_ACTIONS.QUOTE_CONFIRM,
+      `确认询价单 ${q.orderNo}，共 ${items.length} 项，金额 ¥${q.totalAmount}`
+    )
+    return { ok: true, message: '已确认，经销商现在可以转销售单' }
+  }
+
   async function removeQuote(id: number, operatorId: number): Promise<{ ok: boolean; message: string }> {
     const q = await db.quoteOrders.get(id)
     if (!q) return { ok: false, message: '报价单不存在' }
@@ -255,6 +293,6 @@ export const useQuotesStore = defineStore('quotes', () => {
   }
 
   return {
-    createQuote, listQuotes, getQuote, getQuoteItems, updateQuote, removeQuote, convertToSale, convertToPurchase
+    createQuote, listQuotes, getQuote, getQuoteItems, updateQuote, confirmQuote, removeQuote, convertToSale, convertToPurchase
   }
 })

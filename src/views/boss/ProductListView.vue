@@ -422,9 +422,30 @@ const canMergeSelected = computed(() => {
   return new Set(selected.value.map(s => s.key)).size === 1
 })
 
+/**
+ * 合并所选同名商品。
+ *
+ * ⚠️ 保留的是 **id 最小的那条**（最早建档的），不是勾选顺序里的第一条——
+ * 历史单据、库存行都以老商品为主，随手取第一条会把数据迁到后建的档案上。
+ * ⚠️ 必须判断 res.ok：旧实现无论成功失败都弹「已合并」，云端上 mergeProducts
+ * 其实一进来就抛错（见 utils/productIO.ts 里 db.transaction 的说明），
+ * 用户看到的是「数据没变但提示成功」。
+ */
 async function mergeSelected(): Promise<void> {
-  await mergeProducts(selectedIds.value[0], selectedIds.value)
-  showToast('已合并')
+  const ids = selectedIds.value
+  if (ids.length < 2) { showToast('请先选择两条以上同名商品'); return }
+  const keep = [...ids].sort((a, b) => a - b)[0]
+  try {
+    await showConfirmDialog({
+      title: '合并同名商品',
+      message:
+        `把所选 ${ids.length} 条同名商品合并到「#${keep}」：库存累加、历史单据改指向，` +
+        `其余 ${ids.length - 1} 条会被删除。此操作不可撤销。`
+    })
+  } catch { return }
+
+  const res = await mergeProducts(keep, ids)
+  showToast(res.ok ? `${res.message}（保留 #${keep}）` : `合并失败：${res.message}`)
   clearSelection()
   await reload()
   await refreshCategories()

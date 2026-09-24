@@ -415,6 +415,9 @@ export interface QuoteOrder {
   /** 转销售单后回填：销售单 ID 与单号，双向可查 */
   convertedSaleOrderId?: number
   convertedSaleNo?: string
+  /** 销售点「确认询价单」后回填（V2.1-2）：谁在什么时候确认的 */
+  confirmedBy?: number
+  confirmedAt?: string
   createdAt: string
 }
 
