@@ -215,7 +215,12 @@
     <!-- ==================== 详情态 ==================== -->
     <template v-else>
       <PageHeader title="报价单详情" sub="核对明细后可直接转成销售单" />
-      <section class="block" v-if="quote">
+      <!-- 加载中状态：点击后立即显示，给用户反馈 -->
+      <div v-if="detailLoading" class="loading-block" style="text-align:center; padding:60px 20px; color:#64748b;">
+        <div style="font-size:16px; margin-bottom:8px;">加载中...</div>
+        <div style="font-size:13px;">正在获取报价单详情</div>
+      </div>
+      <section class="block" v-else-if="quote">
         <div class="d-head">
           <div>
             <h3 class="d-no">{{ quote.orderNo }}</h3>
@@ -661,22 +666,37 @@ async function onSaveEdit(): Promise<void> {
   }
 }
 
+const detailLoading = ref(false)
+
 async function openDetail(id: number): Promise<void> {
-  const q = await quotesStore.getQuote(id)
-  if (!q) return
-  // 经销商只能打开自己的单；列表虽已按 customerId 过滤，这里再兜一道（防直接调用/URL）
-  if (isDealer.value && q.customerId !== userStore.currentUser?.id) {
-    showToast('无权查看该报价单')
-    return
+  // 立即显示加载状态，给用户点击反馈
+  detailLoading.value = true
+  mode.value = 'detail'  // 先切到详情模式，显示加载中的骨架屏
+  
+  try {
+    const q = await quotesStore.getQuote(id)
+    if (!q) {
+      mode.value = 'list'
+      detailLoading.value = false
+      return
+    }
+    // 经销商只能打开自己的单；列表虽已按 customerId 过滤，这里再兜一道（防直接调用/URL）
+    if (isDealer.value && q.customerId !== userStore.currentUser?.id) {
+      showToast('无权查看该报价单')
+      mode.value = 'list'
+      detailLoading.value = false
+      return
+    }
+    quote.value = q
+    detailItems.value = await quotesStore.getQuoteItems(id)
+    const ids = [...new Set(detailItems.value.map(it => it.productId))]
+    const list = await db_products(ids)
+    const m: Record<number, Product> = {}
+    for (const p of list) m[p.id!] = p
+    productMap.value = m
+  } finally {
+    detailLoading.value = false
   }
-  quote.value = q
-  detailItems.value = await quotesStore.getQuoteItems(id)
-  const ids = [...new Set(detailItems.value.map(it => it.productId))]
-  const list = await db_products(ids)
-  const m: Record<number, Product> = {}
-  for (const p of list) m[p.id!] = p
-  productMap.value = m
-  mode.value = 'detail'
 }
 
 async function db_products(ids: number[]): Promise<Product[]> {
