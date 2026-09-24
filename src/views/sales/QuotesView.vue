@@ -671,6 +671,8 @@ async function onSaveEdit(): Promise<void> {
 const detailLoading = ref(false)
 
 async function openDetail(id: number): Promise<void> {
+  // 记住当前详情id，刷新后自动回到详情
+  sessionStorage.setItem('sales_quote_detail_id', String(id))
   // 立即显示加载状态，给用户点击反馈
   detailLoading.value = true
   mode.value = 'detail'  // 先切到详情模式，显示加载中的骨架屏
@@ -822,6 +824,15 @@ async function openPreview(): Promise<void> {
 function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
+  // 刷新页面后，如果之前在详情页，自动恢复详情
+  const savedId = sessionStorage.getItem('sales_quote_detail_id')
+  if (savedId && mode.value === 'list') {
+    const id = Number(savedId)
+    if (id) {
+      await openDetail(id)
+      return
+    }
+  }
   // 经销商只看报价，不需要加载商品分类等其他数据
   if (isDealer.value) {
     customers.value = []

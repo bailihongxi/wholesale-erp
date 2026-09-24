@@ -676,6 +676,15 @@ async function openPreview(): Promise<void> {
 function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
+  // 刷新页面后，如果之前在详情页，自动恢复详情
+  const savedId = sessionStorage.getItem('purchase_quote_detail_id')
+  if (savedId && mode.value === 'list') {
+    const id = Number(savedId)
+    if (id) {
+      await openDetail(id)
+      return
+    }
+  }
   suppliers.value = await purchaseStore.listSuppliers()
   pickerCats.value = await productStore.pickerCategories()
 })

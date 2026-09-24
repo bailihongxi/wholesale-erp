@@ -380,7 +380,7 @@ function onFilterChange(): void { page.value = 1; reload() }
 watch([category, status], onFilterChange)
 watch(kwDebounced, onFilterChange)
 // 翻页
-function onPage(p: number): void { page.value = p; reload() }
+function onPage(p: number): void { page.value = p; reload(false) }
 
 const categoriesList = ref<string[]>([])
 async function loadCategories(): Promise<void> {
