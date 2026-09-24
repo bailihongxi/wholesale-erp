@@ -1,5 +1,5 @@
 /**
- * 列表数据短时间缓存工具（V2.1-2.4）
+ * 列表数据短时间缓存工具（V2.1-2.6 升级为sessionStorage持久化）
  * 
  * 用法：
  *   import { useListCache } from '../composables/useListCache'
@@ -32,26 +32,42 @@
  */
 
 const CACHE_DURATION = 30 * 1000 // 30秒
-const cacheMap = new Map<string, { data: any; time: number }>()
+const CACHE_PREFIX = 'erp_list_cache_'
 
 export function useListCache(key: string) {
+  const fullKey = CACHE_PREFIX + key
+
   function get<T = any>(): T | null {
-    if (!cacheMap.has(key)) return null
-    const cached = cacheMap.get(key)!
-    const age = Date.now() - cached.time
-    if (age > CACHE_DURATION) {
-      cacheMap.delete(key)
+    try {
+      const raw = sessionStorage.getItem(fullKey)
+      if (!raw) return null
+      const cached = JSON.parse(raw)
+      const age = Date.now() - cached.time
+      if (age > CACHE_DURATION) {
+        sessionStorage.removeItem(fullKey)
+        return null
+      }
+      return cached.data as T
+    } catch {
       return null
     }
-    return cached.data as T
   }
 
   function set(data: any) {
-    cacheMap.set(key, { data, time: Date.now() })
+    try {
+      sessionStorage.setItem(fullKey, JSON.stringify({
+        data,
+        time: Date.now()
+      }))
+    } catch {
+      // sessionStorage满了就忽略
+    }
   }
 
   function clear() {
-    cacheMap.delete(key)
+    try {
+      sessionStorage.removeItem(fullKey)
+    } catch {}
   }
 
   return { get, set, clear }

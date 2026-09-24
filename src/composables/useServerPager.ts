@@ -38,8 +38,36 @@ export interface ServerPager extends Pagination {
 }
 
 // 列表数据短时间缓存：30秒内从其他页面返回不重新请求，秒开
+// 用sessionStorage持久化，手机端切换后台/内存回收后缓存不丢
 const CACHE_DURATION = 30 * 1000 // 30秒
-const cacheMap = new Map<string, { data: { rows: any[]; total: number }; page: number; size: number; time: number }>()
+const CACHE_PREFIX = 'erp_list_cache_'
+
+function getCache(key: string) {
+  try {
+    const raw = sessionStorage.getItem(CACHE_PREFIX + key)
+    if (!raw) return null
+    const cached = JSON.parse(raw)
+    const age = Date.now() - cached.time
+    if (age > CACHE_DURATION) {
+      sessionStorage.removeItem(CACHE_PREFIX + key)
+      return null
+    }
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function setCache(key: string, data: any) {
+  try {
+    sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify({
+      ...data,
+      time: Date.now()
+    }))
+  } catch {
+    // sessionStorage满了就忽略，不影响功能
+  }
+}
 
 export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
   const page = ref(1)
@@ -58,11 +86,10 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
 
   async function load(useCache = true): Promise<void> {
     // 先看缓存有没有
-    if (useCache && cacheMap.has(cacheKey)) {
-      const cached = cacheMap.get(cacheKey)!
-      const age = Date.now() - cached.time
+    if (useCache) {
+      const cached = getCache(cacheKey)
       // 缓存有效且页码一致，直接用缓存
-      if (age < CACHE_DURATION && cached.page === page.value && cached.size === size.value) {
+      if (cached && cached.page === page.value && cached.size === size.value) {
         paged.value = cached.data.rows
         total.value = cached.data.total
         loading.value = false
@@ -76,11 +103,10 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
       paged.value = rows
       total.value = t
       // 写入缓存
-      cacheMap.set(cacheKey, {
+      setCache(cacheKey, {
         data: { rows, total: t },
         page: page.value,
         size: size.value,
-        time: Date.now(),
       })
     } finally {
       loading.value = false
