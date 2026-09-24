@@ -37,6 +37,10 @@ export interface ServerPager extends Pagination {
   reload: () => void
 }
 
+// 列表数据短时间缓存：30秒内从其他页面返回不重新请求，秒开
+const CACHE_DURATION = 30 * 1000 // 30秒
+const cacheMap = new Map<string, { data: { rows: any[]; total: number }; page: number; size: number; time: number }>()
+
 export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
   const page = ref(1)
   const size = ref(opts.size ?? PAGE_SIZE_LIST)
@@ -44,17 +48,40 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
   const total = ref(0)
   const loading = ref(true)
 
+  // 用loader函数toString当缓存key，不同页面各自缓存
+  const cacheKey = opts.loader.toString().slice(0, 100)
+
   const pageCount = computed(() => Math.max(1, Math.ceil(total.value / size.value)))
   const startIndex = computed(() => (page.value - 1) * size.value + 1)
   const hasPrev = computed(() => page.value > 1)
   const hasNext = computed(() => page.value < pageCount.value)
 
-  async function load(): Promise<void> {
+  async function load(useCache = true): Promise<void> {
+    // 先看缓存有没有
+    if (useCache && cacheMap.has(cacheKey)) {
+      const cached = cacheMap.get(cacheKey)!
+      const age = Date.now() - cached.time
+      // 缓存有效且页码一致，直接用缓存
+      if (age < CACHE_DURATION && cached.page === page.value && cached.size === size.value) {
+        paged.value = cached.data.rows
+        total.value = cached.data.total
+        loading.value = false
+        return
+      }
+    }
+
     loading.value = true
     try {
       const { rows, total: t } = await opts.loader(page.value, size.value)
       paged.value = rows
       total.value = t
+      // 写入缓存
+      cacheMap.set(cacheKey, {
+        data: { rows, total: t },
+        page: page.value,
+        size: size.value,
+        time: Date.now(),
+      })
     } finally {
       loading.value = false
     }
@@ -64,26 +91,19 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
     const n = Number.isFinite(p) ? Math.floor(p) : 1
     return Math.min(Math.max(1, n), pageCount.value)
   }
-  function go(p: number): void { page.value = clamp(p); void load() }
+  function go(p: number): void { page.value = clamp(p); void load(false) } // 翻页不用缓存
   function prev(): void { go(page.value - 1) }
   function next(): void { go(page.value + 1) }
-  function reset(): void { page.value = 1; void load() }
-  function reload(): void { page.value = 1; void load() }
+  function reset(): void { page.value = 1; void load(false) }
+  function reload(): void { page.value = 1; void load(false) } // 手动刷新不用缓存
 
   if (opts.watch && opts.watch.length) {
-    watch(opts.watch, () => { page.value = 1; void load() })
+    watch(opts.watch, () => { page.value = 1; void load(false) })
   }
-  // 自动首拉：挂在 onMounted 而非 setup 阶段，确保组件挂载完成、首次渲染
-  // （骨架占位）之后再拉数据并切到列表——与历史 onMounted(async(){await reload()})
-  // 的时序一致，避免测试里 flushPromises 后骨架未切回列表的问题。
   onMounted(() => { void load() })
 
-  // 全站路由组件被 App.vue 的 <keep-alive> 缓存：从列表页进新建页再跳回来时，
-  // 组件是「复活」而非「重新挂载」，onMounted 不会再跑，列表就一直是旧数据
-  // （表现为「新建的单子要整页刷新才出现」）。这里统一在回到本页时重拉一次。
-  // 首次挂载不会触发（由 useReloadOnActivate 内部的「离开过」标志挡掉），
-  // 且非 keep-alive 环境（如测试里直接 mount）完全不触发。
-  useReloadOnActivate(() => { void load() })
+  // 从其他页面返回时：用缓存，秒开；30秒内不重新请求
+  useReloadOnActivate(() => { void load(true) })
 
   return {
     page, size, pageCount, total, paged, startIndex, hasPrev, hasNext, loading,

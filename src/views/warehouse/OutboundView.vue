@@ -114,6 +114,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useRouter } from 'vue-router'
 import { useSalesStore } from '../../stores/sales'
 import { useStockDocStore, type StockDocRow } from '../../stores/stockDoc'
@@ -182,7 +183,20 @@ function resetFilter(): void {
   dateTo.value = ''
 }
 
-async function reload(): Promise<void> {
+const listCache = useListCache('outbound-list')
+
+async function reload(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{ orders: any[]; customers: any[]; counts: Record<number, number> }>()
+    if (cached) {
+      orders.value = cached.orders
+      customers.value = cached.customers
+      counts.value = cached.counts
+      return
+    }
+  }
+
   orders.value = await salesStore.listPendingOutbound()
   customers.value = await salesStore.listCustomers()
   const c: Record<number, number> = {}
@@ -190,10 +204,22 @@ async function reload(): Promise<void> {
     c[o.id!] = (await salesStore.getOrderItems(o.id!)).length
   }
   counts.value = c
+  // 写入缓存
+  listCache.set({ orders: orders.value, customers: customers.value, counts: c })
 }
 
-async function loadHistory(): Promise<void> {
+async function loadHistory(useCache = true): Promise<void> {
+  // 历史单据也加缓存
+  const historyCache = useListCache('outbound-history')
+  if (useCache) {
+    const cached = historyCache.get<any[]>()
+    if (cached) {
+      docs.value = cached
+      return
+    }
+  }
   docs.value = await docStore.listDocs('out')
+  historyCache.set(docs.value)
 }
 
 watch(tab, async v => {
@@ -222,7 +248,7 @@ onMounted(async () => {
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(async () => { await reload(); await loadHistory() })
+useReloadOnActivate(async () => { await reload(true); await loadHistory(true) })
 </script>
 
 <style scoped>

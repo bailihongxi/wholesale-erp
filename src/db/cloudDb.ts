@@ -342,7 +342,7 @@ export class CloudTable<T = any> {
     const pageSize = opts.pageSize ?? 20
     const start = (page - 1) * pageSize
     const end = start + pageSize - 1
-    let q: any = this.client.from(this.name).select('*', { count: 'exact' } as any)
+    let q: any = this.client.from(this.name).select('*', { count: 'estimated' } as any)
     if (opts.eq) {
       for (const [k, v] of Object.entries(opts.eq)) {
         if (v !== '' && v !== null && v !== undefined) q = q.eq(k, v)

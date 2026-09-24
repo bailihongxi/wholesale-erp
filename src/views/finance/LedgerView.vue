@@ -229,6 +229,7 @@ import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import TablePager from '../../components/TablePager.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { showConfirmDialog, showToast } from 'vant'
 import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
@@ -402,7 +403,19 @@ function linkCell(r: LedgerEntry): string {
   return label ? `${label} ${r.linkDocNo}` : r.linkDocNo
 }
 
-async function reload(): Promise<void> {
+const listCache = useListCache('ledger-list')
+
+async function reload(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{ rows: any[]; summary: any }>()
+    if (cached) {
+      rows.value = cached.rows
+      summary.value = cached.summary
+      return
+    }
+  }
+
   rows.value = await financeStore.listLedger({
     direction: filter.direction || undefined,
     category: filter.category || undefined,
@@ -410,14 +423,25 @@ async function reload(): Promise<void> {
     to: filter.to || undefined
   })
   summary.value = await financeStore.ledgerSummary(filter.from || undefined, filter.to || undefined)
+  // 写入缓存
+  listCache.set({ rows: rows.value, summary: summary.value })
 }
 
-async function loadParties(): Promise<void> {
+async function loadParties(useCache = true): Promise<void> {
+  const partiesCache = useListCache('parties-list')
+  if (useCache) {
+    const cached = partiesCache.get<string[]>()
+    if (cached) {
+      partyNames.value = cached
+      return
+    }
+  }
   const [cs, ss] = await Promise.all([db.customers.toArray(), db.suppliers.toArray()])
   partyNames.value = [...cs.map(c => c.name), ...ss.map(s => s.name)].filter(Boolean)
+  partiesCache.set(partyNames.value)
 }
 
-watch(filter, reload)
+watch(filter, () => reload(false))
 
 // 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
 // 合计仍按全部 rows 汇总，翻页不影响
@@ -432,7 +456,7 @@ onMounted(async () => {
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(async () => { await loadParties(); await reload() })
+useReloadOnActivate(async () => { await loadParties(true); await reload(true) })
 </script>
 
 <style scoped>

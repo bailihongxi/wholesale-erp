@@ -267,6 +267,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useListCache } from '../../composables/useListCache'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
@@ -324,7 +325,21 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE_P
 const startIndex = computed(() => (page.value - 1) * PAGE_SIZE_PRODUCT + 1)
 
 /** 服务端分页：只拉当前页商品 + 当前页库存，首屏不再全量拉 6281 条 */
-async function reload(): Promise<void> {
+const listCache = useListCache('product-list')
+
+async function reload(useCache = true): Promise<void> {
+  // 先看缓存
+  if (useCache) {
+    const cached = listCache.get<{ rows: any[]; total: number; stockMap: Record<number, number> }>()
+    if (cached) {
+      pageRows.value = cached.rows
+      total.value = cached.total
+      stockMap.value = cached.stockMap
+      loading.value = false
+      return
+    }
+  }
+
   loading.value = true
   try {
     const res = await productStore.listPage({
@@ -340,6 +355,8 @@ async function reload(): Promise<void> {
     stockMap.value = USE_CLOUD
       ? await loadStockMap(res.rows.map(r => r.id!))
       : await productStore.stockMap()
+    // 写入缓存
+    listCache.set({ rows: res.rows, total: res.total, stockMap: stockMap.value })
   } catch (e: any) {
     showToast('加载失败：' + (e?.message || '未知错误'))
   } finally {
@@ -642,7 +659,7 @@ onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(reload)
+useReloadOnActivate(() => reload(true))
 
 // 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
 function onKeydown(e: KeyboardEvent): void {
