@@ -167,7 +167,28 @@
         </div>
       </template>
 
-      <table v-if="rows.length" class="data-table">
+      <!-- 手机端卡片列表 -->
+<ul v-if="isMobile && rows.length" class="card-list zebra-list">
+  <li v-for="r in pager.paged.value" :key="r.id" class="ledger-card">
+    <div class="lc-head">
+      <span class="lc-no">{{ r.orderNo }}</span>
+      <span class="ui-badge" :class="r.direction === 'in' ? 'success' : 'danger'">
+        {{ categoryIcon(r.category) }} {{ categoryLabel(r.category) }}
+      </span>
+    </div>
+    <div class="lc-meta">
+      <span>{{ r.counterparty || '—' }}</span>
+      <span class="lc-amt" :class="r.direction === 'in' ? 'amt-in' : 'amt-out'">
+        {{ r.direction === 'in' ? '+' : '-' }}¥{{ money(r.amount) }}
+      </span>
+    </div>
+    <div class="lc-date">{{ r.entryDate }}</div>
+    <div class="lc-remark" v-if="r.remark">{{ r.remark }}</div>
+  </li>
+</ul>
+
+<!-- 电脑端表格 -->
+<table v-if="!isMobile && rows.length" class="data-table">
         <thead>
           <tr>
             <th>单号</th>
@@ -229,6 +250,7 @@ import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
 import TablePager from '../../components/TablePager.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useResponsive } from '../../composables/useResponsive'
 import { useListCache } from '../../composables/useListCache'
 import { showConfirmDialog, showToast } from 'vant'
 import { useFinanceStore } from '../../stores/finance'
@@ -248,6 +270,7 @@ useScrollRestore('ledger-list')
 const financeStore = useFinanceStore()
 const userStore = useUserStore()
 
+const { isMobile } = useResponsive()
 const rows = ref<LedgerEntry[]>([])
 const saving = ref(false)
 const lastNo = ref('')

@@ -132,7 +132,9 @@ const salesStore = useSalesStore()
 const docStore = useStockDocStore()
 const { isMobile } = useResponsive()
 
-const tab = ref<'pending' | 'history'>('pending')
+const tab = ref<'pending' | 'history'>(
+  (sessionStorage.getItem('outbound_tab') as 'pending' | 'history') || 'pending'
+)
 const orders = ref<SaleOrder[]>([])
 const customers = ref<Customer[]>([])
 const counts = ref<Record<number, number>>({})
@@ -223,6 +225,10 @@ async function loadHistory(useCache = true): Promise<void> {
   docs.value = await docStore.listDocs('out')
   historyCache.set(docs.value)
 }
+
+watch(tab, (v) => {
+  sessionStorage.setItem('outbound_tab', v)
+})
 
 watch(tab, async v => {
   if (v === 'history') await loadHistory()

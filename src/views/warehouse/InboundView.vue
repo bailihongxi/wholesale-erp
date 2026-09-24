@@ -132,7 +132,9 @@ const purchaseStore = usePurchaseStore()
 const docStore = useStockDocStore()
 const { isMobile } = useResponsive()
 
-const tab = ref<'pending' | 'history'>('pending')
+const tab = ref<'pending' | 'history'>(
+  (sessionStorage.getItem('inbound_tab') as 'pending' | 'history') || 'pending'
+)
 const orders = ref<PurchaseOrder[]>([])
 const suppliers = ref<Supplier[]>([])
 const counts = ref<Record<number, number>>({})
@@ -226,6 +228,10 @@ async function loadHistory(useCache = true): Promise<void> {
 }
 
 // 切到历史页时才加载流水，避免待收货页做无用查询
+watch(tab, (v) => {
+  sessionStorage.setItem('inbound_tab', v)
+})
+
 watch(tab, async v => {
   if (v === 'history') await loadHistory()
 })
