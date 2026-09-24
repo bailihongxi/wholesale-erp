@@ -310,6 +310,11 @@
       </EditModePanel>
 
       <p class="tip-line">预采询价单不占库存、不生成应收；供应商确认后点「转为采购单」，明细与价格自动带过去。</p>
+
+      <!-- 页面最底部的橘色「返回」（借 PageActions 的 tone-back）——
+           详情态此前没有任何返回入口（V2.1-2.1 老板要求补上），
+           与销售单 / 采购单 / 报价单详情页保持一致；编辑时收起，模块一关自动回来。 -->
+      <PageActions v-if="!showEdit" cancel-text="返回" @cancel="backToList" />
     </template>
 
     <PrintPreview

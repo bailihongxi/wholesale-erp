@@ -204,3 +204,48 @@ describe('三张单据页都按销售单那套接好了「修改」', () => {
     expect(src.slice(styleEnd + '</style>'.length).trim()).toBe('')
   })
 })
+
+/**
+ * V2.1-2.1（老板要求）：详情页的「返回」统一挪到**页面最下方**，用系统统一的橘色整行按钮
+ * （`<PageActions cancel-text="返回">` → `.pa-cancel.tone-back` 橘）—— 不再挤在单据标题右边
+ * 那颗小按钮里。预采询价单详情此前**完全没有**返回入口，这次一并补上。
+ *
+ * 四张详情页口径必须一致：销售单 / 采购单 / 报价单 / 预采询价单。
+ * 编辑态统一收起（`v-if="!showEdit"`），编辑模块一关（useEditMode.closeEdit）自动回来。
+ */
+describe('详情页「返回」统一放页面最底部（橘色整行）', () => {
+  const pages = [
+    { name: '销售单', file: 'src/views/sales/SaleOrderDetailView.vue' },
+    { name: '采购单', file: 'src/views/purchase/PurchaseOrderDetailView.vue' },
+    { name: '报价单', file: 'src/views/sales/QuotesView.vue' },
+    { name: '预采询价单', file: 'src/views/purchase/PurchaseQuotesView.vue' }
+  ]
+
+  for (const p of pages) {
+    it(`${p.name}：底部有橘色「返回」，编辑态收起`, () => {
+      const src = fileOf(p.file)
+      // 必须挂在 PageActions 上（橘色来自 .pa-cancel.tone-back 这条全局规范），
+      // 不能自己写一颗按钮 —— 否则配色/高度会和全站其它页面对不上。
+      expect(src, `${p.name} 缺少底部橘色返回键`).toMatch(
+        /<PageActions v-if="!showEdit" cancel-text="返回"/
+      )
+    })
+  }
+
+  it('报价单详情头部不再有「← 返回列表」小按钮（返回交给页面底部）', () => {
+    const src = fileOf('src/views/sales/QuotesView.vue')
+    expect(src).not.toContain('← 返回列表')
+    // 头部动作区不再出现返回按钮类名（底部返回走 PageActions，不叫 btn-back）
+    expect(src).not.toContain('btn btn-back')
+  })
+
+  it('底部返回键接的是回列表动作，不是路由推出', () => {
+    const salesSrc = fileOf('src/views/sales/QuotesView.vue')
+    const quoteSrc = fileOf('src/views/purchase/PurchaseQuotesView.vue')
+    expect(salesSrc).toContain('<PageActions v-if="!showEdit" cancel-text="返回" @cancel="backToList" />')
+    expect(quoteSrc).toContain('<PageActions v-if="!showEdit" cancel-text="返回" @cancel="backToList" />')
+    // 两个页面都是页内三态（list / create / detail），返回 = 回到列表态
+    expect(salesSrc).toContain("function backToList(): void { mode.value = 'list' }")
+    expect(quoteSrc).toContain("function backToList(): void { mode.value = 'list' }")
+  })
+})

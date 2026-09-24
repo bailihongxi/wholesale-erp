@@ -1,12 +1,12 @@
 /**
- * V2.1-2（B1 下）：销售「确认询价单」+ 实时回传 + 经销商转销售单放开。
+ * V2.1-2（B1 下）：销售「确认询价单」+ 实时回传；转单权限收紧为仅销售 / 管理。
  *
  * 闭环比喻：经销商在窗口买票（提交询价单）→ 售票员确认（confirmQuote，draft→sent）
- * → 结果实时回传到窗口（Realtime）→ 经销商拿到票（转销售单）。
+ * → 结果实时回传到窗口（Realtime）→ 经销商看到「已确认」，转销售单由销售 / 管理发起。
  *
  * 本文件锁三件事：
  *   1. confirmQuote 的状态机与留痕（错的状态不能确认、确认要能审计）；
- *   2. 经销商「转销售单」的闸门只认 sent（销售没确认就转不了）；
+ *   2. 转销售单权限：仅销售 / 管理账户可转，经销商及其它内部角色均无此权限；
  *   3. Realtime 订阅的三条硬约束（能停、有兜底、云端才订阅）与后台发布脚本存在。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -96,16 +96,18 @@ describe('确认询价单（confirmQuote）', () => {
   })
 })
 
-describe('经销商转销售单的闸门', () => {
-  it('经销商只能转「销售已确认」的单，销售侧不受限（源码级）', () => {
+describe('转销售单的权限', () => {
+  it('仅销售 / 管理账户可转；经销商彻底取消此权限（源码级）', () => {
     const src = SRC('src/views/sales/QuotesView.vue')
     expect(src).toContain('const canConvertQuote = computed(')
     const fn = src.slice(src.indexOf('const canConvertQuote'), src.indexOf('function partyName'))
-    expect(fn).toContain('isDealer')
-    expect(fn).toContain("q.status === 'sent'")
-    // 转单按钮改用这个开关，而不是旧的「非经销商即可」
+    expect(fn).toContain('isSales')
+    expect(fn).toContain('isBoss')
+    // 经销商不再出现在转单闸门里（不再有「经销商满足某状态即可转」的逻辑）
+    expect(fn).not.toContain('isDealer')
+    expect(fn).not.toContain("q.status === 'sent'")
+    // 转单按钮仍由这个开关控制，而不是旧的「非经销商即可」写法
     expect(src).toContain('v-if="canConvertQuote"')
-    expect(src).not.toContain("quote.status !== 'converted' && !isDealer\" class=\"btn primary\" type=\"button\" :disabled=\"converting\"")
   })
 
   it('销售侧有「确认询价单」入口（详情 + 列表行）', () => {

@@ -217,8 +217,9 @@
             <span class="d-badge" :class="quote.status">{{ statusText(quote.status) }}</span>
             <span v-if="quote.convertedSaleNo" class="d-badge conv">→ {{ quote.convertedSaleNo }}</span>
           </div>
+          <!-- 头部不再放「返回列表」（V2.1-2.1 老板要求）：返回语义统一交给页面最底部
+               那颗橘色「返回」键（PageActions），与销售单 / 采购单详情页一致。 -->
           <div class="d-actions">
-            <button class="btn btn-back" type="button" @click="backToList">← 返回列表</button>
             <button v-if="quote.status !== 'converted' && !isDealer" class="btn primary btn-edit" type="button" @click="beginEdit">✏️ 修改</button>
             <!-- 售票员确认：draft→sent，确认后经销商那侧才被允许转销售单（V2.1-2） -->
             <button
@@ -231,7 +232,7 @@
               {{ confirmingId === quote.id ? '确认中…' : '✅ 确认询价单' }}
             </button>
             <button class="btn btn-print" type="button" @click="openPreview">🖨 打印</button>
-            <!-- 经销商只能转「销售已确认」的单；销售侧不受限 -->
+            <!-- 转销售单：仅公司销售 / 老板 / 系统管理员（V2.1-2 内修订，经销商不再有此权限） -->
             <button v-if="canConvertQuote" class="btn primary" type="button" :disabled="converting" @click="handleConvert">
               {{ converting ? '转换中…' : '➜ 转为销售单' }}
             </button>
@@ -245,12 +246,12 @@
           <span v-if="quote.validDays"><i>有效期</i>{{ quote.validDays }} 天</span>
           <span><i>备注</i>{{ quote.remark || '无' }}</span>
         </div>
-        <!-- 经销商看不到「确认」按钮，用一条提示告诉他现在处在流程哪一步 -->
+        <!-- 经销商看不到「确认」按钮，也无权转单，用一条提示告诉他现在处在流程哪一步 -->
         <p v-if="isDealer && quote.status === 'draft'" class="wait-tip">
-          已提交，等待销售确认 —— 确认后这里会出现「转为销售单」。
+          已提交，等待销售确认 —— 确认后由销售为您生成销售单。
         </p>
         <p v-else-if="isDealer && quote.status === 'sent'" class="wait-tip ok">
-          ✅ 销售已确认，可以转销售单了。
+          ✅ 销售已确认，稍后由销售为您生成销售单。
         </p>
         <p v-else-if="isDealer && quote.status === 'converted'" class="wait-tip ok">
           已转为销售单 {{ quote.convertedSaleNo }}，本单流程结束。
@@ -348,7 +349,12 @@
         </section>
       </EditModePanel>
 
-      <p class="tip-line">报价单不占库存、不生成应收；客户确认后点「转为销售单」，明细与价格自动带过去。</p>
+      <p class="tip-line">报价单不占库存、不生成应收；客户确认后由销售点「转为销售单」，明细与价格自动带过去。</p>
+
+      <!-- 页面最底部的橘色「返回」（借 PageActions 的 tone-back）：
+           手机端在列表/卡片下方、固定底栏上方，电脑端跟着内容走。
+           编辑时收起，模块一关自动回来（useEditMode.closeEdit 会把它滚回视野）。 -->
+      <PageActions v-if="!showEdit" cancel-text="返回" @cancel="backToList" />
     </template>
 
     <PrintPreview
@@ -397,7 +403,7 @@ const productStore = useProductStore()
 const salesStore = useSalesStore()
 const userStore = useUserStore()
 const { isMobile } = useResponsive()
-const { canDeleteDoc, isDealer } = usePermission()
+const { canDeleteDoc, isDealer, isSales, isBoss, isSystemAdmin } = usePermission()
 
 type Mode = 'list' | 'create' | 'detail'
 const mode = ref<Mode>('list')
@@ -476,11 +482,16 @@ function statusText(s: string): string {
   return { draft: '待报价', sent: '已报价', converted: '已转销售单', void: '已失效' }[s] ?? s
 }
 
-/** 能否转销售单：销售随时可转；经销商必须等销售确认（sent）之后 */
+/**
+ * 转销售单权限：仅「公司销售账户」与「管理账户」（老板 / 系统管理员）可转。
+ * 经销商彻底取消此权限；其它内部角色（采购 / 财务 / 库房）也无权转。
+ * 这样报价单即便销售已确认（sent），经销商侧也不会再出现「转为销售单」按钮，
+ * 转单动作统一由公司销售或管理在后台发起。
+ */
 const canConvertQuote = computed(() => {
   const q = quote.value
   if (!q || q.status === 'converted' || q.status === 'void') return false
-  return !isDealer.value || q.status === 'sent'
+  return isSales.value || isBoss.value || isSystemAdmin.value
 })
 function partyName(q: QuoteOrder): string {
   return q.customerId > 0 ? customers.value.find(c => c.id === q.customerId)?.name ?? `客户#${q.customerId}` : q.customerName
@@ -705,7 +716,8 @@ async function handleConvert(): Promise<void> {
 
 /**
  * 确认询价单（销售侧）：draft → sent，不动明细。
- * 确认完经销商那侧的 Realtime 会立刻收到，页面出现「转为销售单」。
+ * 确认完经销商那侧的 Realtime 会立刻收到，页面显示「已确认」，
+ * 转销售单由销售 / 管理在后台发起（经销商无此权限）。
  */
 async function handleConfirm(): Promise<void> {
   const q = quote.value
