@@ -293,6 +293,25 @@ export class CloudTable<T = any> {
     return 1
   }
 
+  /**
+   * 批量更新：一次请求更新多个id的记录
+   * 每批最多500条，避免请求体过大
+   */
+  async bulkUpdate(ids: (number | string)[], changes: Partial<T>): Promise<number> {
+    if (!ids.length) return 0
+    const list = ids.filter(v => v !== null && v !== undefined)
+    let updated = 0
+    // 每批500条
+    for (let i = 0; i < list.length; i += 500) {
+      const chunk = list.slice(i, i + 500)
+      const { error } = await this.client.from(this.name).update(changes as any).in('id', chunk as any)
+      if (error) throw new Error(`${this.name}.bulkUpdate: ${error.message}`)
+      updated += chunk.length
+    }
+    this.invalidate()
+    return updated
+  }
+
   async count(): Promise<number> {
     // 缓存表：count 跟随 toArray 同一生命周期，避免首页/设置页每次重发请求
     if (this.useCache && this._countCache !== null) return this._countCache

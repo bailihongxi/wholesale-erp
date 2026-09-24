@@ -8,6 +8,7 @@
  *  - 合并商品时要把库存累加，并把历史单据明细改指向保留下来的那条，避免单据变孤儿。
  */
 import { db } from '../db'
+import { USE_CLOUD } from '../db/supabaseClient'
 import type { Product } from '../types'
 
 /** 导出模板 / 导入识别的表头（顺序即模板顺序） */
@@ -398,6 +399,13 @@ export async function bulkUpdateProducts(
   if (!ids.length) return 0
   const clean = { ...patch }
   delete clean.id
+  
+  // 云端：用批量更新，一次请求更新多个
+  if (USE_CLOUD) {
+    return await (db.products as any).bulkUpdate(ids, clean)
+  }
+  
+  // 本地IndexedDB：循环更新
   await db.products.bulkGet(ids).then(async list => {
     for (const p of list) {
       if (p?.id) await db.products.update(p.id, clean)

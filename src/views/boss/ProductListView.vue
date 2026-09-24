@@ -225,7 +225,7 @@
 
         <div class="modal-actions">
           <button class="ghost-btn dismiss btn-cancel" type="button" @click="showBulk = false">取消</button>
-          <button class="primary-btn" type="button" @click="doBulkEdit">应用</button>
+          <button class="primary-btn" type="button" :disabled="bulkSaving" @click="doBulkEdit">{{ bulkSaving ? "处理中..." : "应用" }}</button>
         </div>
       </div>
     </div>
@@ -610,6 +610,7 @@ async function deleteGroup(g: DuplicateGroup): Promise<void> {
 // ---------------------------------------------------------------- 批量编辑
 
 const showBulk = ref(false)
+const bulkSaving = ref(false) // 批量编辑加载状态
 const mk = <T,>(v: T) => reactive({ on: false, value: v })
 const bulk = reactive({
   category: mk(''),
@@ -625,34 +626,67 @@ function openBulkEdit(): void {
 }
 
 async function doBulkEdit(): Promise<void> {
-  const patch: Partial<Product> = {}
-  if (bulk.category.on && bulk.category.value) patch.category = bulk.category.value
-  if (bulk.unit.on && bulk.unit.value) patch.unit = bulk.unit.value
-  if (bulk.status.on) patch.status = bulk.status.value
-  if (bulk.warnStock.on) patch.warnStock = Number(bulk.warnStock.value)
+  if (!selectedIds.value.length) {
+    showToast('请先勾选要编辑的商品')
+    return
+  }
 
-  if (Object.keys(patch).length) await bulkUpdateProducts(selectedIds.value, patch)
+  bulkSaving.value = true
+  try {
+    const patch: Partial<Product> = {}
+    if (bulk.category.on && bulk.category.value) patch.category = bulk.category.value
+    if (bulk.unit.on && bulk.unit.value) patch.unit = bulk.unit.value
+    if (bulk.status.on) patch.status = bulk.status.value
+    if (bulk.warnStock.on) patch.warnStock = Number(bulk.warnStock.value)
 
-  // 按加价率重算：每件商品按自己的成本分别计算
-  if (bulk.reprice.on) {
-    const targets = await productStore.listAll(true)
-    for (const p of targets.filter(x => selectedIds.value.includes(x.id!))) {
-      await productStore.updateProduct(p.id!, {
-        wholesalePrice: calcWholesale(p.purchasePrice, rule.value),
-        retailPrice: calcRetail(p.purchasePrice, rule.value)
-      })
+    if (Object.keys(patch).length) {
+      await bulkUpdateProducts(selectedIds.value, patch)
     }
-  }
 
-  const uid = userStore.currentUser?.id
-  if (uid) {
-    await writeLog(uid, AUDIT_ACTIONS.PRODUCT_UPDATE, `批量编辑 ${selected.value.length} 个商品`)
+    // 按加价率重算：先批量算出所有要改的，再一次性批量更新
+    if (bulk.reprice.on) {
+      const targets = await productStore.listAll(true)
+      const updates: { id: number; wholesalePrice: number; retailPrice: number }[] = []
+      for (const p of targets.filter(x => selectedIds.value.includes(x.id!))) {
+        updates.push({
+          id: p.id!,
+          wholesalePrice: calcWholesale(p.purchasePrice, rule.value),
+          retailPrice: calcRetail(p.purchasePrice, rule.value)
+        })
+      }
+      // 批量更新价格
+      if (USE_CLOUD && updates.length) {
+        for (const u of updates) {
+          await productStore.updateProduct(u.id, {
+            wholesalePrice: u.wholesalePrice,
+            retailPrice: u.retailPrice
+          })
+        }
+      } else {
+        for (const u of updates) {
+          await productStore.updateProduct(u.id, {
+            wholesalePrice: u.wholesalePrice,
+            retailPrice: u.retailPrice
+          })
+        }
+      }
+    }
+
+    const uid = userStore.currentUser?.id
+    if (uid) {
+      await writeLog(uid, AUDIT_ACTIONS.PRODUCT_UPDATE, `批量编辑 ${selected.value.length} 个商品`)
+    }
+    showToast(`已成功更新 ${selected.value.length} 个商品`)
+    showBulk.value = false
+    clearSelection()
+    await reload()
+    await refreshCategories()
+  } catch (e: any) {
+    console.error('批量编辑失败:', e)
+    showToast('批量编辑失败：' + (e?.message || '未知错误'))
+  } finally {
+    bulkSaving.value = false
   }
-  showToast('已应用')
-  showBulk.value = false
-  clearSelection()
-  await reload()
-  await refreshCategories()
 }
 
 onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
