@@ -114,6 +114,7 @@
 import PageHeader from '../../components/ui/PageHeader.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { goBackOr } from '../../composables/useGoBack'
 import { showToast } from 'vant'
 import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import PageActions from '../../components/PageActions.vue'
@@ -188,7 +189,7 @@ function addItem(p: Product, stock = 0): void {
 function removeItem(idx: number): void { form.items.splice(idx, 1) }
 
 function goBack(): void {
-  router.back() }
+  goBackOr(router, '/purchase/orders') }
 
 async function handleSubmit(): Promise<void> {
   if (!canSubmit.value) {

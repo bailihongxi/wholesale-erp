@@ -42,15 +42,15 @@
 
         <div class="ui-items-calc">
           <span class="ui-items-qty">{{ it.qty }}{{ it.unit ? ' ' + it.unit : '' }}</span>
-          <template v-if="showPrice && it.note">
-            <span class="ui-items-note">{{ it.note }}</span>
-          </template>
-          <template v-else-if="showPrice">
+          <!-- V2.1-2.33：有无单价决定是否出「× ¥ = ¥」行——赠品行（无价）不显示金额；
+               note（库存 N / 赠品说明等）是附加信息，追加在行尾，不再顶替单价行 -->
+          <template v-if="showPrice && it.price != null">
             <span class="ui-items-op">×</span>
             <span class="ui-items-price">¥{{ money(it.price) }}</span>
             <span class="ui-items-op">=</span>
             <b class="ui-items-amount">¥{{ money(it.amount ?? (it.qty || 0) * (it.price || 0)) }}</b>
           </template>
+          <span v-if="it.note" class="ui-items-note">{{ it.note }}</span>
         </div>
       </li>
 

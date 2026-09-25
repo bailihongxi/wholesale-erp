@@ -2783,3 +2783,31 @@ V2.1-2.30 上线后，用手机视口实机跑 `/boss/products` 时发现：分�
 ### 测试与版本
 - 新增 `tests/ux-fixes-v232.test.ts`（10 例静态回归锁）
 - 版本号：V2.1-2.32（package.json 2.31.1 / SW erp-2.31.1）
+
+---
+
+## V2.1-2.33 · 单价行回归修复 + 全站返回键兜底 + 出入库列表提速（2026-09-25）
+
+### ① 报价明细手机卡片单价消失（2.32 回归）
+- 根因：ItemCards 模板 `v-if="showPrice && it.note"` 让 note（库存行）**顶替**了「× 单价 = 金额」整行
+- 修复：note 改为追加在行尾（`v-if="it.note"` 独立分支），与 showPrice 互不排斥
+
+### ② 二级页面「返回」路径异常（全站排查）
+- 根因：7 个页面 goBack 全是裸 `router.back()`——详情页是本次会话第一个页面时
+  （刷新 / PWA 直达 / 分享链接），历史栈为空，back 会退出应用或落空白页
+- 修复：新增 `composables/useGoBack.ts` 的 `goBackOr(router, fallback)`——
+  `history.state?.back != null` 才 back，否则 replace 到逻辑父列表；
+  接入 7 页：销售新建/详情、商品编辑、采购新建/详情、出库明细、入库明细
+
+### ③ 出库历史 / 待发货（入库同构）列表加载慢
+- 根因（三处串行 N+1）：
+  a. Outbound/InboundView.reload：逐单 `await getOrderItems(o.id)` 数件数（N 单 = N 次请求）+ 列表/客户两请求串行
+  b. stockDoc.listDocs：逐商品 `await db.products.get(pid)`（M 个商品 = M 次请求）+ users/locations/明细 3 趟串行
+     + 每张新单据逐单 `await orderNoOf/partyNameOf`（每张 2~4 次请求）
+- 修复：两列表页 Promise.all 并行 + 明细计数 `where().anyOf(ids)` 一次批量；
+  首页不再无条件拉历史（切 Tab 才加载，Tab 徽标未加载时不显示 0 张单）；
+  listDocs 四类关联数据并行 + 商品/来源单/往来单位全改 anyOf 批量（单号与往来单位预取成 Map）
+
+### 测试与版本
+- 新增 `tests/ux-fixes-v233.test.ts`（12 例静态回归锁）
+- 版本号：V2.1-2.33（package.json 2.32.1 / SW erp-2.32.1）

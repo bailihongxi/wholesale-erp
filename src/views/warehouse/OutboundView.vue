@@ -116,6 +116,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useListCache } from '../../composables/useListCache'
 import { useRouter } from 'vue-router'
+import { db } from '../../db'
 import { useSalesStore } from '../../stores/sales'
 import { useStockDocStore, type StockDocRow } from '../../stores/stockDoc'
 import { useResponsive } from '../../composables/useResponsive'
@@ -150,7 +151,8 @@ const hasFilter = computed(() => !!keyword.value || !!dateFrom.value || !!dateTo
 /** 页内 Tab 选项（数量随数据实时变化，故用 computed 生成） */
 const tabOptions = computed(() => [
   { value: 'pending', label: `待发货（${orders.value.length}）` },
-  { value: 'history', label: `出库历史（${filteredDocs.value.length} 张单）` }
+  // 历史未加载时（懒加载）不显示 0 张单，避免误导
+  { value: 'history', label: docs.value.length ? `出库历史（${filteredDocs.value.length} 张单）` : '出库历史' }
 ])
 
 const filteredDocs = computed<StockDocRow[]>(() => {
@@ -201,11 +203,19 @@ async function reload(useCache = true): Promise<void> {
     }
   }
 
-  orders.value = await salesStore.listPendingOutbound()
-  customers.value = await salesStore.listCustomers()
+  // V2.1-2.33 性能修复：原来三段全部串行（列表→客户→逐单 await 明细数，N 单 = N+2 次请求，
+  // 跨境弱网下 10 单要 6 秒以上）。现在两个列表请求并行，明细数一次 anyOf 批量查完。
+  const [os, cs] = await Promise.all([
+    salesStore.listPendingOutbound(),
+    salesStore.listCustomers()
+  ])
+  orders.value = os
+  customers.value = cs
+  const ids = os.map(o => o.id!)
   const c: Record<number, number> = {}
-  for (const o of orders.value) {
-    c[o.id!] = (await salesStore.getOrderItems(o.id!)).length
+  if (ids.length) {
+    const items = await db.saleOrderItems.where('saleOrderId').anyOf(ids).toArray()
+    for (const it of items) c[it.saleOrderId] = (c[it.saleOrderId] ?? 0) + 1
   }
   counts.value = c
   // 写入缓存
@@ -250,8 +260,9 @@ function openDoc(batchNo: string): void {
 }
 
 onMounted(async () => {
+  // 待发货列表优先出：历史单据较重（全量流水+关联名称），非历史 Tab 时切过去再加载
   await reload()
-  await loadHistory()
+  if (tab.value === 'history') await loadHistory()
 })
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，

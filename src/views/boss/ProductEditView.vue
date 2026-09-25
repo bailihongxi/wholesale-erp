@@ -102,6 +102,7 @@
 import PageHeader from '../../components/ui/PageHeader.vue'
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { goBackOr } from '../../composables/useGoBack'
 import { showToast } from 'vant'
 import { useProductStore } from '../../stores/product'
 import { usePermission } from '../../composables/usePermission'
@@ -165,7 +166,7 @@ function recalc(which: 'wholesale' | 'retail'): void {
 const previewName = computed(() => productStore.productName(form as Pick<Product, 'brand' | 'model'>))
 
 function goBack(): void {
-  router.back()
+  goBackOr(router, '/boss/products')
 }
 
 /**

@@ -176,6 +176,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { clearAllListCaches } from '../../composables/useListCache'
 import { useRoute, useRouter } from 'vue-router'
+import { goBackOr } from '../../composables/useGoBack'
 import { showToast, showConfirmDialog } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useProductStore } from '../../stores/product'
@@ -240,7 +241,8 @@ function fillAll(it: PurchaseOrderItem): void {
 }
 
 function goBack(): void {
-  router.back() }
+  // 刷新/直达时历史栈为空，back 会退出应用 → 回落到待收货列表（V2.1-2.33）
+  goBackOr(router, '/warehouse/inbound') }
 function openBatch(no: string): void { router.push(`/warehouse/inbound/doc/${no}`) }
 
 async function revertBatch(b: StockDocRow): Promise<void> {

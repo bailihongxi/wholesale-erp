@@ -84,27 +84,51 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     const records = await db.stockRecords.where('type').equals(recordType).toArray()
     if (!records.length) return []
 
-    const users = await db.users.toArray()
+    // V2.1-2.33 性能修复：四类关联数据一次并行拉取（原来串行 3 趟起步）
+    const productIds = [...new Set(records.map(r => r.productId))]
+    const [users, locs, itemRows, allProducts] = await Promise.all([
+      db.users.toArray(),
+      db.locations.toArray(),
+      type === 'in' ? db.purchaseOrderItems.toArray() : db.saleOrderItems.toArray(),
+      // 商品原来逐个 await products.get(pid)：N 个商品 = N 次网络请求，历史单据一多列表就卡死
+      productIds.length ? db.products.where('id').anyOf(productIds).toArray() : Promise.resolve([])
+    ])
     const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const locs = await db.locations.toArray()
     const locMap = new Map(locs.map(l => [l.id!, l.name]))
 
     // 取参与过的商品，用于名称与单价兜底
-    const productIds = [...new Set(records.map(r => r.productId))]
     const productMap = new Map<number, { name: string; model: string; unit: string; category: string }>()
-    for (const pid of productIds) {
-      const p = await db.products.get(pid)
-      if (p) productMap.set(pid, { name: `${p.brand} ${p.model}`.trim(), model: p.model, unit: p.unit, category: p.category })
+    for (const p of allProducts) {
+      productMap.set(p.id!, { name: `${p.brand} ${p.model}`.trim(), model: p.model, unit: p.unit, category: p.category })
     }
 
     // 来源单据明细的成交单价：按 refOrderId + productId 建立索引
     const priceMap = new Map<string, { price: number; orderedQty: number }>()
-    if (type === 'in') {
-      const items = await db.purchaseOrderItems.toArray()
-      for (const it of items) priceMap.set(`${it.purchaseOrderId}-${it.productId}`, { price: it.price, orderedQty: it.quantity })
-    } else {
-      const items = await db.saleOrderItems.toArray()
-      for (const it of items) priceMap.set(`${it.saleOrderId}-${it.productId}`, { price: it.price, orderedQty: it.quantity })
+    for (const it of itemRows as Array<Record<string, any>>) {
+      const oid = type === 'in' ? it.purchaseOrderId : it.saleOrderId
+      priceMap.set(`${oid}-${it.productId}`, { price: it.price, orderedQty: it.quantity })
+    }
+
+    // 来源单号 / 往来单位：原来每张新单据逐个 get（每张 2~4 次请求），改 anyOf 两次批量
+    const refOrderIds = [...new Set(records.map(r => r.refOrderId))]
+    const orderRows: any[] = refOrderIds.length
+      ? await (type === 'in' ? db.purchaseOrders : db.saleOrders).where('id').anyOf(refOrderIds).toArray()
+      : []
+    const orderMap = new Map(orderRows.map(o => [o.id!, o]))
+    const partyIds = [...new Set(orderRows
+      .map(o => (type === 'in' ? o.supplierId : o.customerId))
+      .filter((x): x is number => x != null))]
+    const partyRows: any[] = partyIds.length
+      ? await (type === 'in' ? db.suppliers : db.customers).where('id').anyOf(partyIds).toArray()
+      : []
+    const partyMap = new Map(partyRows.map(x => [x.id!, x.name]))
+    const orderNoOfBatch = (id: number): string =>
+      orderMap.get(id)?.orderNo ?? `已删除单据#${id}`
+    const partyNameOfBatch = (id: number): string => {
+      const o = orderMap.get(id)
+      if (!o) return '—'
+      const pid = type === 'in' ? o.supplierId : o.customerId
+      return partyMap.get(pid!) ?? (type === 'in' ? '未知供应商' : '未知客户')
     }
 
     // 聚合
@@ -134,8 +158,8 @@ export const useStockDocStore = defineStore('stockDoc', () => {
         }
       } else {
         // 同一张来源单据会反复出现，缓存后避免重复查库（商品多时能明显加快列表加载）
-        if (!orderNoCache.has(r.refOrderId)) orderNoCache.set(r.refOrderId, await orderNoOf(type, r.refOrderId))
-        if (!partyCache.has(r.refOrderId)) partyCache.set(r.refOrderId, await partyNameOf(type, r.refOrderId))
+        if (!orderNoCache.has(r.refOrderId)) orderNoCache.set(r.refOrderId, orderNoOfBatch(r.refOrderId))
+        if (!partyCache.has(r.refOrderId)) partyCache.set(r.refOrderId, partyNameOfBatch(r.refOrderId))
         const locId = r.locationId ?? locs[0]?.id
         buckets.set(key, {
           batchNo: key,

@@ -213,6 +213,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useProductCache } from '../../composables/useProductCache'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
+import { goBackOr } from '../../composables/useGoBack'
 import { showConfirmDialog, showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
 import { useUserStore } from '../../stores/user'
@@ -384,7 +385,7 @@ function percentOf(it: SaleOrderItem): number {
 }
 
 function goBack(): void {
-  router.back()
+  goBackOr(router, '/sales/orders')
 }
 
 /** 删除整张销售单：仅老板 / 系统管理员，且只能删「待出库」的单 */
