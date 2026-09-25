@@ -1,22 +1,17 @@
 <template>
   <!--
-    全站统一分页条。所有商品类列表都必须用它，保证交互一致：
-    ← → 翻页、页码窗口、每页条数下拉、直接跳页。
+    全站统一分页条。所有列表都必须用它，保证交互一致：← → 翻页、页码窗口、直接跳页。
     页面只需要 v-model:page 与 :total 两个必填项。
+
+    ⚠️ 这里**没有**「每页条数下拉」。分页粒度是定值 20（见 usePagination.ts 的 PAGE_SIZE_LIST），
+    以前商品档案页还留了个「每页 100/200/500 条」的下拉，2026-09-25 V2.1-2.30 按老板
+    「分页一律 20，定值不允许更改」的要求把该 prop 连同下拉一起删掉，不给任何页面留后门。
   -->
   <nav v-if="total > 0 || always" class="pager" aria-label="分页">
     <span class="pager-info">
       共 <b>{{ total }}</b> 条
       <template v-if="pageCount > 1"> · 第 {{ page }} / {{ pageCount }} 页</template>
     </span>
-
-    <label v-if="sizeOptions.length" class="pager-size">
-      每页
-      <select :value="size" @change="onSize">
-        <option v-for="s in sizeOptions" :key="s" :value="s">{{ s }}</option>
-      </select>
-      条
-    </label>
 
     <div class="pager-btns">
       <button
@@ -70,19 +65,17 @@ const props = withDefaults(
     page: number
     pageCount: number
     total: number
+    /** 每页条数，只用于展示，实际粒度由调用方从 PAGE_SIZE_LIST 传进来 */
     size?: number
-    /** 可选的每页条数；留空则不显示下拉，遵循调用方指定的粒度 */
-    sizeOptions?: number[]
     showJump?: boolean
     /** 无数据时也显示（列表加载中保持布局稳定） */
     always?: boolean
   }>(),
-  { size: 20, sizeOptions: () => [], showJump: false, always: false }
+  { size: 20, showJump: false, always: false }
 )
 
 const emit = defineEmits<{
   (e: 'update:page', v: number): void
-  (e: 'update:size', v: number): void
 }>()
 
 const jumpValue = ref<number | null>(null)
@@ -115,10 +108,6 @@ function onJump(e: Event): void {
   jumpValue.value = null
 }
 
-function onSize(e: Event): void {
-  const v = Number((e.target as HTMLSelectElement).value)
-  if (Number.isFinite(v)) emit('update:size', v)
-}
 </script>
 
 <style scoped>
@@ -134,12 +123,7 @@ function onSize(e: Event): void {
   color: var(--c-muted);
 }
 .pager-info b { color: var(--c-primary); }
-.pager-size { display: inline-flex; align-items: center; gap: 6px; }
-.pager-size select {
-  height: 30px; border: 1px solid var(--c-border); border-radius: 6px;
-  padding: 0 6px; font-size: 13px; background: #fff; color: var(--c-text);
-}
-.pager-btns { display: inline-flex; gap: 4px; }
+.pager-btns { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .pager-btn {
   min-width: 30px; height: 30px; padding: 0 6px;
   border: 1px solid var(--c-border); border-radius: 6px;

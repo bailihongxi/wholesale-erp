@@ -2721,3 +2721,21 @@ PAGE_SIZE_LIST = PAGE_SIZE_PRODUCT = PAGE_SIZE_ALERT = 20」）冲突。
 - `npm run build` 0 错
 
 - 版本号：V2.1-2.30（package.json 2.29.1 / SW erp-2.29.1）
+
+---
+
+## V2.1-2.31 · 拆掉「每页条数」下拉后门（V2.1-2.30 线上实测漏网的缺口）
+
+V2.1-2.30 上线后，用手机视口实机跑 `/boss/products` 时发现：分页粒度确实变成 20 了，
+但商品档案页的分页条上还留着一个「每页 100 / 200 / 500 条」的**下拉框**——
+只要用户手点一下，`PAGE_SIZE_LIST = 20` 就被绕过去了，「20 是定值」形同虚设。
+
+### 改动
+- `src/views/boss/ProductListView.vue`：删掉 `:size-options="[100, 200, 500]"`
+- `src/components/TablePager.vue`：把这个 prop 的**整套实现**删干净，不留复活的可能
+  - 模板删掉 `.pager-size` 下拉块
+  - props 删 `sizeOptions`，`emits` 删 `update:size`，函数删 `onSize`
+  - CSS 删 `.pager-size` / `.pager-size select`，`.pager-btns` 补 `flex-wrap: wrap`
+- `tests/pagination-20.test.ts` 加 2 例把缺口焊死：
+  「源码里不得出现非 20 的 `pageSize`/`size` 字面量」「`TablePager.vue` 不得保留每页条数下拉后门」
+- 版本号：V2.1-2.31（package.json 2.30.1 / SW erp-2.30.1）

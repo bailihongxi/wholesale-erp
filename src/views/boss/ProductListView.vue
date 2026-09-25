@@ -131,7 +131,6 @@
       :total="total"
       :page-count="pageCount"
       :size="PAGE_SIZE_PRODUCT"
-      :size-options="[100, 200, 500]"
       show-jump
       @update:page="onPage"
     />

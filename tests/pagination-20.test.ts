@@ -52,6 +52,25 @@ describe('分页粒度：全站一律 20 条/页（定值）', () => {
     expect(pager.paged.value.length).toBe(5)
   })
 
+  it('TablePager 不得再提供「每页条数下拉」这种改粒度的后门', () => {
+    const src = readFileSync(
+      join(__dirname, '..', 'src', 'components', 'TablePager.vue'), 'utf-8'
+    )
+    expect(src).not.toContain('sizeOptions')
+    expect(src).not.toContain('update:size')
+    // 遗留样式也要清掉，否则改回下拉时样式对不上
+    expect(src).not.toContain('.pager-size')
+    // 调用方也不许再把「可选每页条数」传进来（注释里提到过的措辞不算，只看代码）
+    for (const f of walk(join(__dirname, '..', 'src'))) {
+      const lines = readFileSync(f, 'utf-8').split('\n')
+      const rel = f.replace(join(__dirname, '..') + '/', '')
+      lines.forEach((ln, i) => {
+        if (ln.trim().startsWith('//') || ln.trim().startsWith('*') || ln.trim().startsWith('<!--')) return
+        expect(ln.includes('size-options'), `${rel}:${i + 1} 传了 ${ln.trim()}`).toBe(false)
+      })
+    }
+  })
+
   it('源码里不得出现「不是 20 的分页大小」硬编码', () => {
     const files = walk(join(__dirname, '..', 'src'))
     // 白名单：这些位置允许出现非 20 的数字，且都已注明理由
