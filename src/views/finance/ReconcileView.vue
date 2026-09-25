@@ -31,7 +31,8 @@
         <b>¥{{ balanceTotal.toLocaleString() }}</b>
       </div>
 
-      <ul class="card-list zebra-list">
+      <!-- 手机端：卡片（与采购单 / 销售单列表同一范式，卡片外壳样式保持一致） -->
+      <ul v-if="isMobile" class="card-list zebra-list">
         <li v-for="r in reconPager.paged.value" :key="r.orderId" class="recon-card">
           <div class="rc-head">
             <span class="rc-no">{{ r.orderNo }}</span>
@@ -62,6 +63,50 @@
           {{ mode === 'receivable' ? '没有符合条件的应收' : '没有符合条件的应付' }}
         </li>
       </ul>
+
+      <!-- 电脑端：表格（全站范式 —— 电脑端台账/对账看表格，卡片在宽屏上信息密度低、把页面拉得过高） -->
+      <table v-else class="data-table recon-table">
+        <thead>
+          <tr>
+            <th>单号</th>
+            <th>{{ mode === 'receivable' ? '客户' : '供应商' }}</th>
+            <th>日期</th>
+            <th class="num">总额</th>
+            <th class="num">已{{ mode === 'receivable' ? '收' : '付' }}</th>
+            <th class="num">余额</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in reconPager.paged.value" :key="r.orderId">
+            <td>{{ r.orderNo }}</td>
+            <td>{{ partyName(r) }}</td>
+            <td>{{ (r.date ?? '').slice(0, 10) }}</td>
+            <td class="num">¥{{ r.totalAmount.toLocaleString() }}</td>
+            <td class="num">¥{{ (r.totalAmount - r.balance).toLocaleString() }}</td>
+            <td class="num bal" :class="{ settled: r.balance <= 0 }">
+              {{ r.balance > 0 ? `¥${r.balance.toLocaleString()}` : '已结清' }}
+            </td>
+            <td>
+              <span v-if="editingId !== r.orderId" class="op-cell">
+                <button v-if="r.balance > 0" class="link-btn" type="button" @click="startEdit(r)">
+                  {{ mode === 'receivable' ? '登记收款' : '登记付款' }}
+                </button>
+              </span>
+              <div v-else class="edit-row">
+                <input v-model.number="editAmount" type="number" min="0" class="amt-input" aria-label="金额" />
+                <button class="confirm-btn" type="button" @click="confirmEdit(r)">确认</button>
+                <button class="cancel-btn" type="button" @click="editingId = null">取消</button>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="!reconPager.total.value">
+            <td colspan="7" class="empty">
+              {{ mode === 'receivable' ? '没有符合条件的应收' : '没有符合条件的应付' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       <TablePager
         v-if="reconPager.total.value"
@@ -394,10 +439,17 @@ watch([keyword, payType, dateFrom, dateTo], () => payPager.reset())
 .cancel-btn:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); }
 .link-btn { margin-top: 8px; border: none; background: none; color: var(--c-accent); cursor: pointer; font-size: 14px; }
 
-/* 表格外观交给全站 .data-table（含斑马纹），这里只留业务排版 */
+/* 表格外观交给全站 .data-table（含斑马纹），这里只留业务排版，
+   不要再写 background / border-radius / box-shadow，否则会把设计系统盖掉 */
 .pay-table th, .pay-table td { font-size: 14px; }
 .pay-table .num { text-align: right; }
 .pay-table td.receive { color: var(--c-success); }
 .pay-table td.pay { color: var(--c-danger, #dc2626); }
+
+/* 电脑端应收应付表：与收付款流水、采购单列表同一套排版口径 */
+.recon-table th, .recon-table td { font-size: 14px; }
+.recon-table .num { text-align: right; }
+.recon-table .bal { font-weight: 700; color: var(--c-danger, #dc2626); }
+.recon-table .bal.settled { font-weight: 500; color: var(--c-success); }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; }
 </style>

@@ -2602,3 +2602,52 @@ catch 里保留 console.error + toast，但把 toast 改成不 `await` 的 `impo
 `loading` 这类 UI 复位标志位一律放 `finally`，不放 `catch`。
 
 - 版本号：V2.1-2.27（package.json 2.26.1 / SW erp-2.26.1）
+
+---
+
+## V2.1-2.28（2026-09-25）· 付款记录串单 + 对账页两端范式统一
+
+### ① 事故：采购单「付款记录」列出了所有采购单的付款（老板截图发现）
+
+**现象**：采购单详情「付款记录（5）」，但那张单其实一笔没付 —— 5 笔全是别的单的。
+
+**根因**：`src/db/cloudDb.ts` 的 `CloudQuery.toArray()` 在「一页就取完」的快路径上
+`return rows` **把 `_filterFn` 静默丢了**（不报错）：
+
+```ts
+const total = count ?? rows.length
+if (total <= ROW_PAGE) return rows            // ← 这里，filter 被吞
+...
+return this._filterFn ? all.filter(this._filterFn) : all   // 只有翻页路径是对的
+```
+
+即：**数据量 ≤ 1000 行时 filter 完全失效，> 1000 行才碰巧正确**，所以本地小数据
+永远复现不了。受影响调用点四处，全部连带出错：
+
+| 调用点 | 错误表现 |
+|---|---|
+| `PurchaseOrderDetailView` 付款记录 | 列出所有采购单的付款 |
+| `SaleOrderDetailView` 收款记录 | 列出所有销售单的收款 |
+| `finance.recordPay` 已付合计 | 把别的单据的付款算进本单 → paid/partial 状态判断跟着错 |
+| `finance.recordReceive` 已收合计 | 同上（receive 侧） |
+
+**修复**：抽出唯一落地点 `applyFilter()`，快路径与翻页路径都必须走它；
+`count()` 挂钩 `filter()` 时也改为按过滤结果计数（服务端 count 无法先 count 后过滤）。
+
+### ② 对账页「电脑端表格 / 手机端卡片」范式统一（老板拍板）
+
+原来这页两端都渲染大卡片：电脑端 ERP 看台账/对账习惯表格，卡片在宽屏上信息密度低、
+把页面拉得很高，和采购单/销售单列表（电脑端 `data-table` + 手机端 `card-list`）不是一套范式。
+现在与全站一致：
+
+- 电脑端：`<table class="data-table recon-table">`，列＝单号 / 往来单位 / 日期 / 总额 / 已收付 / 余额 / 操作，20 条/页 + 斑马纹
+- 手机端：`card-list zebra-list` 卡片，卡片外壳（白底 / 12px 圆角 / 同款阴影）与其它列表页一致
+
+### 测试
+- 新增 `tests/cloud-query-filter-chain.test.ts`（7 例）：≤1000 行快路径 filter 必须生效
+  （用严格复刻 PostgREST 语义的假客户端，含 >1000 行翻页路径、count()、first()）
+- 新增 `tests/reconcile-dual-layout.test.ts`（4 例）：电脑端出表格不出卡片、手机端出卡片不出表格、
+  模板必须按 `isMobile` 二选一、卡片外壳样式与其它列表页一致
+- 更新 `tests/history-search.test.ts` 中 1 处断言：`.recon-card` → `.recon-table tbody tr`（仍要求恰好 1 行）
+
+- 版本号：V2.1-2.28（package.json 2.27.1 / SW erp-2.27.1）

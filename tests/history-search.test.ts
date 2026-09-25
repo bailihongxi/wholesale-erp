@@ -293,7 +293,10 @@ describe('各模块查询与历史痕迹', () => {
     const settleSelect = wrapper.find('select')
     await settleSelect.setValue('settled')
     await flushPromises()
-    await vi.waitFor(() => expect(wrapper.findAll('.recon-card').length).toBe(1), { timeout: 3000 })
+    // 电脑端（jsdom 宽度 1024）对应的是表格分支 —— 该页已按全站范式改为
+    // 「电脑端表格 / 手机端卡片」，断言随之指向表格行；仍然要求「恰好 1 行」，
+    // 即只有这笔已结清的单据被筛出来，严格程度不变。
+    await vi.waitFor(() => expect(wrapper.findAll('.recon-table tbody tr').length).toBe(1), { timeout: 3000 })
     expect(wrapper.text()).toContain(order!.orderNo)
     expect(wrapper.text()).toContain('已结清')
   })

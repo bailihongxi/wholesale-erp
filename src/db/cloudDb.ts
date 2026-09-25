@@ -91,7 +91,15 @@ class CloudQuery {
     if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
     const rows = (firstPage as T[]) || []
     const total = count ?? rows.length
-    if (total <= ROW_PAGE) return rows
+    // ⚠️ 铁律：filter() 必须在下面那条「一页就取完」的快路径上也生效。
+    //
+    // 2026-09-25 事故：这行原本是 `return rows`，把 _filterFn 静默丢了（不报错）。
+    // 于是 `db.payments.where('type').equals('pay').filter(p => p.refOrderId === id)`
+    // 返回的是**全表同类型流水**：采购单详情的「付款记录」列出了所有采购单的付款，
+    // 收款记录同理；recordPay/recordReceive 里的「已付合计」也把别的单据算进来，
+    // 单据的 paid/partial 状态判断跟着一起错。
+    // 只有超过 1000 行（走下面的翻页分支）才碰巧是对的 —— 数据量小的时候永远发现不了。
+    if (total <= ROW_PAGE) return this.applyFilter(rows)
     // 并行拉剩余页：6281 行 = 1 + 6 个请求，而不是 7 次串行
     const pages = Math.ceil(total / ROW_PAGE) - 1
     const promises = []
@@ -104,7 +112,12 @@ class CloudQuery {
       if (r.error) throw new Error(`CloudQuery.toArray: ${r.error.message}`)
       all.push(...((r.data as T[]) || []))
     }
-    return this._filterFn ? all.filter(this._filterFn) : all
+    return this.applyFilter(all)
+  }
+
+  /** filter() 的唯一落地点：快路径与翻页路径都必须走这里，别再各写一份 */
+  private applyFilter<T>(rows: T[]): T[] {
+    return this._filterFn ? rows.filter(this._filterFn) : rows
   }
 
   async first<T = any>(): Promise<T | undefined> {
@@ -120,6 +133,10 @@ class CloudQuery {
   private _filterFn?: (row: any) => boolean
 
   async count(): Promise<number> {
+    // 挂了 filter() 就必须按过滤后的行数算（Dexie 语义如此）。服务端 count 是
+    // 「先 count 再过滤」做不到的，只能走 toArray 拿过滤结果 —— 这也是
+    // 2026-09-25 那个 filter 被吞的 bug 的同一类陷阱：不要以为 count() 会自动带上条件。
+    if (this._filterFn) return (await this.toArray()).length
     const { count, error } = await this.build({ count: true, head: true })
     if (error) throw new Error(`CloudQuery.count: ${error.message}`)
     return count || 0
