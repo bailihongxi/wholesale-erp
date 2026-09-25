@@ -5,7 +5,10 @@
  * 静态资源：缓存优先，文件名带hash，内容不会变
  */
 
-const BUILD_VERSION = "2.24.0";
+// 构建期由 scripts/inject-sw-version.mjs 从 package.json 注入，禁止手改字面量。
+// 写成手写常量（2026-09-25 发生过一次）会导致下次发版忘改 →
+// sw.js 内容不变 → 浏览器认为 SW 没更新 → 旧缓存永远不清 → 用户看不到新版本。
+const BUILD_VERSION = "__BUILD_VERSION__";
 const CACHE_NAME = 'erp-' + BUILD_VERSION;
 
 self.addEventListener('install', () => {

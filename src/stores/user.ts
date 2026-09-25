@@ -85,8 +85,15 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
-   * 同步校验账号有效性：等云端确认账号还是active状态，再继续
-   * 避免先闪系统页面再跳回登录页
+   * 校验账号是否仍有效：云端确认「查得到」且处于 active 才放行。
+   *
+   * ⚠️ 判定语义（2026-09-25 登录误踢事故的根因，改回时务必保留）：
+   * 只有「确实查到这条记录、且 status 已不是 active」才踢下线。
+   * 绝不能写成 `if (!row || row.status !== 'active')`——网络抖动 / 超时 /
+   * 云端抽风时 cloudDb.get() 会返回 undefined，那表达的是「我没拿到数据」，
+   * 而不是「这个账号不存在」。按后者处理就会把正常用户误踢回登录页
+   * （弱网、手机切后台再回来的场景必现）。
+   * 取不到时一律保持原登录态，等下次巡检或写操作再确认。
    */
   async function validateSession(session: { id: number; kind: 'staff' | 'dealer' }): Promise<void> {
     if (!USE_CLOUD) return // 本地模式：本地库即真相，无需云端校验
@@ -94,13 +101,38 @@ export const useUserStore = defineStore('user', () => {
       const row = session.kind === 'dealer'
         ? await db.customers.get(session.id)
         : await db.users.get(session.id)
-      if (!row || row.status !== 'active') {
+      if (row && row.status !== 'active') {
         clearSession()
         currentUser.value = null
       }
     } catch {
       /* 离线 / 超时：以本地快照为准，不登出 */
     }
+  }
+
+  /**
+   * 定期巡检：每 10 分钟静默校验一次当前账号。
+   * 用来补齐「老板停用员工」的生效延迟——不靠启动校验（那会拖慢首屏），
+   * 而是开着页面时慢慢确认，发现已停用就清掉会话，下次导航自然被送回登录页。
+   * 停用最迟 10 分钟内生效；期间该用户自己的写操作仍会被服务端语义拒绝。
+   */
+  const SESSION_WATCH_MS = 10 * 60 * 1000
+  let watchTimer: ReturnType<typeof setInterval> | null = null
+
+  function stopSessionWatch(): void {
+    if (watchTimer !== null) {
+      clearInterval(watchTimer)
+      watchTimer = null
+    }
+  }
+
+  function startSessionWatch(): void {
+    if (watchTimer !== null) return
+    watchTimer = setInterval(() => {
+      const u = currentUser.value
+      if (!u || !u.id) return
+      void validateSession({ id: u.id, kind: u.role === 'dealer' ? 'dealer' : 'staff' })
+    }, SESSION_WATCH_MS)
   }
 
   /**
@@ -167,6 +199,7 @@ export const useUserStore = defineStore('user', () => {
     currentUser.value = null
     sessionExpired.value = false
     clearSession()
+    stopSessionWatch()
   }
 
   /**
@@ -209,8 +242,11 @@ export const useUserStore = defineStore('user', () => {
       }
       touchSession()
       db.warmUp()
-      // 同步校验账号有效性：等查完再继续路由，避免先闪系统再跳登录
-      await validateSession({ id: session.id, kind: session.kind })
+      // 校验**不在启动关键路径上 await**：云端在新加坡，一轮往返实测 230ms+，
+      // 挂在导航上每次冷启动都要白屏等一轮（V2.1-2.23 就是这么回退的）。
+      // 本地快照已经能建登录态，账号是否仍有效交给 10 分钟一次的巡检去兜底。
+      void validateSession({ id: session.id, kind: session.kind })
+      startSessionWatch()
       return
     }
 

@@ -2483,3 +2483,39 @@ alter table "quoteOrders" replica identity full;
 - [x] 明细页返回改用router.back()，保留浏览状态
 - [x] PWA Service Worker优化，解决启动闪屏问题
 - [x] 修复采购单详情商品名称显示bug
+
+
+## 六十三、V2.1-2.25（2026-09-25）：登录误踢修复 + 启动链路回归回退（性能优化第 1 期）
+
+### 背景
+V2.1-2.23 针对「登录后先跳工作台再跳回登录页」的乱跳转做了修复，但堵的是症状：
+真正的病因在 `cloudDb.get()` 会把「请求失败」静默成 `undefined`，
+`validateSession()` 里的 `if (!row || row.status !== 'active')` 于是把网络抖动
+解读成「账号已停用」→ 直接 `clearSession()` 踢下线。弱网、手机切后台再回来必现。
+
+### 改动
+1. `src/stores/user.ts` `validateSession()`：判定收紧为「确实查到且 status !== 'active'」才踢；
+   取不到 / 抛错一律保持原登录态，不再误踢。
+2. `src/stores/user.ts`：新增 10 分钟一次静默巡检（`startSessionWatch` / `stopSessionWatch`），
+   补齐「老板停用账号」的生效延迟；登出时随 `logout()` 一起停掉。
+3. `src/stores/user.ts` `restoreSession()`：`await validateSession(...)` 改回 `void`——
+   本地快照分支本就不读云端，挂在启动路径上只会白屏多等一轮（云端往返实测 230ms+）。
+4. `src/App.vue`：去掉 `await router.isReady()` 门控（原来等于在守卫那层 await 之外又套一层）。
+5. `public/sw.js`：`BUILD_VERSION` 改回 `__BUILD_VERSION__` 占位符，由 `scripts/inject-sw-version.mjs`
+   在构建期注入——手写字面量会导致下次发版忘改、sw.js 内容不变、浏览器认为 SW 没更新、
+   旧缓存永远不清（本项目曾经因此连续四轮发版用户看不到新版）。
+6. `src/db/cloudDb.ts`：`get()` 补注释，写清 PostgREST `.single()` 的 PGRST116 陷阱与未来改造方案。
+
+### 未动
+`src/router/index.ts` 守卫里的 `await restoreSession()` —— 保留。
+它只在未登录时执行，且走本地快照快路径（不碰云端）；去掉反而会闪一下受保护页。
+
+### 测试
+新增 `tests/session-validate.test.ts`（5 例）：查不到不踢 / 已停用才踢 / 正常保持 /
+断网抛错不踢 / 经销商同口径。既有 `tests/restore-session-instant.test.ts` 7 例仍全绿。
+
+### 效果
+- 弱网、切后台再回来不再被无端踢回登录页
+- 冷启动少等一轮云端往返
+- 发版时 SW 版本号自动跟随 package.json，不再退回旧版
+- 版本号：V2.1-2.25（package.json 2.24.1）

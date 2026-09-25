@@ -199,6 +199,18 @@ export class CloudTable<T = any> {
     return all
   }
 
+  /**
+   * ⚠️ 语义陷阱（2026-09-25 登录误踢事故的根源，改动前务必读完）：
+   * PostgREST 的 `.single()` 在「一条都没查到」时**也会返回 error**（code=PGRST116），
+   * 所以「拿不到数据」和「请求失败」在这里是同一个信号——无法只凭 error 区分二者。
+   * 因此本方法目前把任何失败都收敛成 `undefined`，**调用方只能当「没有这一行」处理**，
+   * 绝不能推导出「这个记录不存在」以外的结论。
+   *
+   * 若将来要区分「没找到」与「请求失败」（例如启动时校验账号是否仍有效），
+   * 正确做法是按 `error.code === 'PGRST116'` 分流：PGRST116 → undefined，其余 → throw。
+   * 但那会让本方法对全部 50+ 个调用方从「软失败」变成「硬失败」，
+   * 属于独立档次的改造，需逐个页面实机验证，不要夹带在日常发版里。
+   */
   async get(id: number | string): Promise<T | undefined> {
     const { data, error } = await this.client.from(this.name).select('*').eq('id', id).single()
     if (error) return undefined
