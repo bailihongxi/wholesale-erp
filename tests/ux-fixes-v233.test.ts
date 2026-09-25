@@ -61,6 +61,21 @@ describe('② 二级页面返回：goBackOr 统一兜底', () => {
       expect(read(file)).toContain(`goBackOr(router, '${fallback}')`)
     })
   }
+
+  it('出入库操作页左键文案是「返回」不是「取消」（详情/操作页口径）', () => {
+    expect(read('src/views/warehouse/OutboundDetailView.vue')).toContain('cancel-text="返回"')
+    expect(read('src/views/warehouse/InboundDetailView.vue')).toContain('cancel-text="返回"')
+  })
+
+  it('返回列表时不得强行恢复历史 Tab（返回应停在离开时的 Tab）', () => {
+    for (const [f, key] of [['src/views/warehouse/OutboundView.vue', 'outbound_tab'], ['src/views/warehouse/InboundView.vue', 'inbound_tab']] as const) {
+      const src = read(f)
+      // 只允许 setup 初始值读一次（整页刷新恢复用）；activate 回调里的强切已删
+      const count = src.split(`getItem('${key}')`).length - 1
+      expect(count, `${f} 里 getItem('${key}') 只能出现在 setup 初始值一处`).toBe(1)
+      expect(src, 'activate 回调不得再读 tab 强切').not.toMatch(/savedTab/)
+    }
+  })
 })
 
 describe('③ 列表加载：批量查询替代逐条 await（N+1 清零）', () => {

@@ -268,11 +268,9 @@ onMounted(async () => {
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
 useReloadOnActivate(async () => {
-  // 激活时从sessionStorage恢复tab
-  const savedTab = sessionStorage.getItem('outbound_tab') as 'pending' | 'history'
-  if (savedTab && tab.value !== savedTab) {
-    tab.value = savedTab
-  }
+  // V2.1-2.33：不再从 sessionStorage 强行恢复 Tab——从明细「返回」时应停在
+  // 用户离开时的 Tab（旧逻辑会切回上次看过的历史 Tab，被老板当成「返回路径错了」）。
+  // sessionStorage 的 tab 值只在整页刷新时由 setup 里的初始值读取生效。
   await reload(true)
   if (tab.value === 'history') await loadHistory(true)
 })

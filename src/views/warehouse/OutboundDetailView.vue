@@ -166,7 +166,7 @@
     </section>
 
     <PageActions
-      cancel-text="取消"
+      cancel-text="返回"
       confirm-text="确认出库"
       :loading="loading"
       :confirm-disabled="!items.length || thisTotal <= 0"
