@@ -384,7 +384,7 @@ function percentOf(it: SaleOrderItem): number {
 }
 
 function goBack(): void {
-  router.push('/sales/orders')
+  router.back()
 }
 
 /** 删除整张销售单：仅老板 / 系统管理员，且只能删「待出库」的单 */

@@ -232,7 +232,8 @@ function addItem(p: Product, stock = 0): void {
 
 function removeItem(idx: number): void { form.items.splice(idx, 1) }
 
-function goBack(): void { router.push('/sales/orders') }
+function goBack(): void {
+  router.back() }
 
 async function handleSubmit(): Promise<void> {
   if (!form.customerId) { showToast('请选择客户'); return }

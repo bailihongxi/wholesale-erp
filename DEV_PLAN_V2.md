@@ -2476,3 +2476,10 @@ alter table "quoteOrders" replica identity full;
 - 手机端收支流水不再撑破屏幕
 - 返回列表时tab状态保持，体验更流畅
 - 版本号：V2.1-2.10
+
+
+## V2.1-2.22 完成项
+- [x] 移除列表sessionStorage缓存，保证数据实时性
+- [x] 明细页返回改用router.back()，保留浏览状态
+- [x] PWA Service Worker优化，解决启动闪屏问题
+- [x] 修复采购单详情商品名称显示bug

@@ -186,7 +186,8 @@ function addItem(p: Product, stock = 0): void {
 
 function removeItem(idx: number): void { form.items.splice(idx, 1) }
 
-function goBack(): void { router.push('/purchase/orders') }
+function goBack(): void {
+  router.back() }
 
 async function handleSubmit(): Promise<void> {
   if (!canSubmit.value) {

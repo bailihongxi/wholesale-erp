@@ -238,7 +238,8 @@ function fillAll(it: PurchaseOrderItem): void {
   inboundQty.value[it.productId] = remainOf(it)
 }
 
-function goBack(): void { router.push('/warehouse/inbound') }
+function goBack(): void {
+  router.back() }
 function openBatch(no: string): void { router.push(`/warehouse/inbound/doc/${no}`) }
 
 async function revertBatch(b: StockDocRow): Promise<void> {

@@ -250,7 +250,8 @@ function fillMax(it: SaleOrderItem): void {
   outboundQty.value[it.productId] = Math.min(remainOf(it), shortOf(it))
 }
 
-function goBack(): void { router.push('/warehouse/outbound') }
+function goBack(): void {
+  router.back() }
 function openBatch(no: string): void { router.push(`/warehouse/outbound/doc/${no}`) }
 
 async function revertBatch(b: StockDocRow): Promise<void> {

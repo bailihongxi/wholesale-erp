@@ -85,23 +85,22 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
-   * 后台非阻塞校验：云端若已把账号停用 / 删除，再静默登出。
-   * 绝不在启动关键路径上 await —— 否则又会回到「首屏白屏 3 秒」的老问题。
+   * 同步校验账号有效性：等云端确认账号还是active状态，再继续
+   * 避免先闪系统页面再跳回登录页
    */
-  function validateSessionInBackground(session: { id: number; kind: 'staff' | 'dealer' }): void {
+  async function validateSession(session: { id: number; kind: 'staff' | 'dealer' }): Promise<void> {
     if (!USE_CLOUD) return // 本地模式：本地库即真相，无需云端校验
-    const run: Promise<{ status: string } | undefined> =
-      session.kind === 'dealer'
-        ? db.customers.get(session.id)
-        : db.users.get(session.id)
-    run.then((row) => {
+    try {
+      const row = session.kind === 'dealer'
+        ? await db.customers.get(session.id)
+        : await db.users.get(session.id)
       if (!row || row.status !== 'active') {
         clearSession()
         currentUser.value = null
       }
-    }).catch(() => {
+    } catch {
       /* 离线 / 超时：以本地快照为准，不登出 */
-    })
+    }
   }
 
   /**
@@ -210,8 +209,8 @@ export const useUserStore = defineStore('user', () => {
       }
       touchSession()
       db.warmUp()
-      // 后台非阻塞校验：云端若已停用 / 删除该账号，再静默登出（不阻塞首屏）
-      validateSessionInBackground({ id: session.id, kind: session.kind })
+      // 同步校验账号有效性：等查完再继续路由，避免先闪系统再跳登录
+      await validateSession({ id: session.id, kind: session.kind })
       return
     }
 

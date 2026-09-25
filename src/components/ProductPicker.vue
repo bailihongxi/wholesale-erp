@@ -43,7 +43,7 @@
             <th>类别</th>
             <th class="col-spec">型号 / 规格</th>
             <th class="center" style="width:56px">单位</th>
-            <th class="num" style="width:90px">可用库存</th>
+            <th v-if="!hideStock" class="num" style="width:90px">可用库存</th>
             <th v-if="showPrice" class="num" style="width:100px">{{ priceHeader }}</th>
             <th class="center" style="width:96px">操作</th>
           </tr>
@@ -63,9 +63,11 @@
             <td class="pk-sub col-spec">{{ p.product.spec || p.product.model || '-' }}</td>
             <td class="center">{{ p.product.unit }}</td>
             <td class="num">
-              <span :class="stockClass(p)">{{ p.stock }}</span>
-              <span v-if="p.stock <= 0" class="tag tag-danger">无货</span>
-              <span v-else-if="p.stock <= p.product.warnStock" class="tag tag-warn">偏低</span>
+              <template v-if="!hideStock">
+                <span :class="stockClass(p)">{{ p.stock }}</span>
+                <span v-if="p.stock <= 0" class="tag tag-danger">无货</span>
+                <span v-else-if="p.stock <= p.product.warnStock" class="tag tag-warn">偏低</span>
+              </template>
             </td>
             <td v-if="showPrice" class="num">¥{{ money(priceOf(p.product)) }}</td>
             <td class="center">
@@ -139,6 +141,8 @@ const props = withDefaults(
     showPrice?: boolean
     /** 库存为 0 时禁止添加（销售出库场景必须开，采购进货场景不开） */
     blockNoStock?: boolean
+    /** 是否隐藏库存列和无货标签（经销商看报价单用） */
+    hideStock?: boolean
     title?: string
     pageSize?: number
   }>(),
@@ -148,6 +152,7 @@ const props = withDefaults(
     priceMode: 'wholesale',
     showPrice: true,
     blockNoStock: false,
+    hideStock: false,
     title: '商品列表',
     pageSize: PAGE_SIZE_LIST
   }

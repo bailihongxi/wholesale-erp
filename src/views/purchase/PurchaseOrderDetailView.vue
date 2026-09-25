@@ -232,7 +232,7 @@ const items = ref<PurchaseOrderItem[]>([])
 const supplier = ref<Supplier | null>(null)
 const payments = ref<Payment[]>([])
 const inboundRecords = ref<StockRecord[]>([])
-const { cache: productCache } = useProductCache()
+const { cache: productCache, productName, productUnit } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 const receivedMap = ref<Record<number, number>>({})
 const userMap = ref<Record<number, string>>({})
@@ -347,11 +347,10 @@ function fmtTime(s: string): string {
   return s ? s.slice(0, 16).replace('T', ' ') : '-'
 }
 function nameOf(id: number): string {
-  const p = productMap.value[id]
-  return p ? `${p.brand} ${p.model}` : `商品#${id}`
+  return productName(id)
 }
 function unitOf(id: number): string {
-  return productMap.value[id]?.unit ?? '-'
+  return productUnit(id) || '-'
 }
 function operatorName(id: number): string {
   return userMap.value[id] ?? `#${id}`
@@ -371,7 +370,7 @@ function percentOf(it: PurchaseOrderItem): number {
 }
 
 function goBack(): void {
-  router.push('/purchase/orders')
+  router.back()
 }
 
 /** 删除整张采购单：仅老板 / 系统管理员，且只能删「待入库」的单 */

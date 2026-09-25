@@ -44,7 +44,26 @@
             </div>
           </template>
 
-          <table v-if="filtered.length" class="data-table">
+          <!-- 手机端卡片列表 -->
+<ul v-if="isMobile && filtered.length" class="card-list zebra-list">
+  <li v-for="r in pager.paged.value" :key="r.key" class="ops-card">
+    <div class="oc-head">
+      <span class="oc-date">{{ r.date }}</span>
+      <span class="ui-badge" :class="r.badge">{{ r.kindLabel }}</span>
+    </div>
+    <div class="oc-row">
+      <span class="oc-no">{{ r.orderNo }}</span>
+      <span class="oc-amt-text" :class="r.in ? 'amt-in' : 'amt-out'">
+        {{ r.in ? '+' : '-' }}¥{{ money(r.in || r.out) }}
+      </span>
+    </div>
+    <div class="oc-party">{{ r.party }}</div>
+    <div class="oc-remark" v-if="r.remark">{{ r.remark }}</div>
+  </li>
+</ul>
+
+<!-- 电脑端表格 -->
+<table v-if="!isMobile && filtered.length" class="data-table">
             <thead>
               <tr>
                 <th>日期</th>
@@ -92,6 +111,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useResponsive } from '../../composables/useResponsive'
 import { useListCache } from '../../composables/useListCache'
 import { useRoute } from 'vue-router'
 import { db } from '../../db'
@@ -129,6 +149,9 @@ interface FlowRow {
   kindLabel: string
   badge: string
   summary: string
+  orderNo?: string
+  party?: string
+  remark?: string
   in: number
   out: number
 }
@@ -178,6 +201,7 @@ const outTotal = computed(() => outRows.value.reduce((s, r) => s + r.out, 0))
 
 
 // 全站统一：列表每页 20 条 + 斑马纹（表格已挂 data-table）
+const { isMobile } = useResponsive()
 const pager = usePagination(filtered, PAGE_SIZE_LIST)
 watch([kind, from, to], () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
@@ -221,6 +245,9 @@ async function loadFlow(useCache = true): Promise<void> {
       kind: p.type,
       kindLabel: KIND_LABEL[p.type] ?? p.type,
       badge: KIND_BADGE[p.type] ?? 'muted',
+      orderNo: p.orderNo,
+      party: p.counterpartyName,
+      remark: p.remark || '',
       summary: `${p.orderNo} · ${p.counterpartyName}${p.remark ? ` · ${p.remark}` : ''}`,
       in: isIn ? p.amount : 0,
       out: moneyOut ? p.amount : 0
@@ -234,6 +261,9 @@ async function loadFlow(useCache = true): Promise<void> {
       kind: 'ledger',
       kindLabel: '记一笔',
       badge: 'info',
+      orderNo: e.orderNo,
+      party: e.counterparty || categoryLabel(e.category),
+      remark: e.remark || (e.linkDocNo ? `关联${linkTypeLabel(e.linkDocType ?? '')}${e.linkDocNo}` : ''),
       summary: `${e.orderNo} · ${categoryLabel(e.category)}` +
         (e.counterparty ? ` · ${e.counterparty}` : '') + (e.remark ? ` · ${e.remark}` : '') +
         (e.linkDocNo ? ` · 关联${linkTypeLabel(e.linkDocType ?? '')}${e.linkDocNo}` : ''),
@@ -270,4 +300,64 @@ useReloadOnActivate(() => loadFlow(true))
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+</style>
+
+<style scoped>
+.ops-card {
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.oc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.oc-date {
+  font-size: 13px;
+  color: #888;
+}
+.oc-summary {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+.oc-amt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.amt-in { color: #16a34a; font-weight: 600; }
+.amt-out { color: #dc2626; font-weight: 600; }
+.oc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.oc-no {
+  font-size: 13px;
+  color: #888;
+  font-family: monospace;
+}
+.oc-amt-text {
+  font-size: 18px;
+  font-weight: 700;
+}
+.oc-party {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 6px;
+}
+.oc-remark {
+  font-size: 12px;
+  color: #6b7280;
+}
 </style>

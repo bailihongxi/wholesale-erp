@@ -165,7 +165,7 @@ function recalc(which: 'wholesale' | 'retail'): void {
 const previewName = computed(() => productStore.productName(form as Pick<Product, 'brand' | 'model'>))
 
 function goBack(): void {
-  router.push('/boss/products')
+  router.back()
 }
 
 /**

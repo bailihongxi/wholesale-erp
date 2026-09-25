@@ -172,18 +172,20 @@
   <li v-for="r in pager.paged.value" :key="r.id" class="ledger-card">
     <div class="lc-head">
       <span class="lc-no">{{ r.orderNo }}</span>
-      <span class="ui-badge" :class="r.direction === 'in' ? 'success' : 'danger'">
-        {{ categoryIcon(r.category) }} {{ categoryLabel(r.category) }}
-      </span>
-    </div>
-    <div class="lc-meta">
-      <span>{{ r.counterparty || '—' }}</span>
       <span class="lc-amt" :class="r.direction === 'in' ? 'amt-in' : 'amt-out'">
         {{ r.direction === 'in' ? '+' : '-' }}¥{{ money(r.amount) }}
       </span>
     </div>
-    <div class="lc-date">{{ r.entryDate }}</div>
-    <div class="lc-remark" v-if="r.remark">{{ r.remark }}</div>
+    <div class="lc-body">
+      <span class="lc-party">{{ r.counterparty || '—' }}</span>
+      <span class="lc-tag" :class="r.direction === 'in' ? 'success' : 'danger'">
+        {{ categoryIcon(r.category) }} {{ categoryLabel(r.category) }}
+      </span>
+    </div>
+    <div class="lc-foot">
+      <span class="lc-date">{{ r.entryDate }}</span>
+      <span class="lc-remark" v-if="r.remark">{{ r.remark }}</span>
+    </div>
   </li>
 </ul>
 
@@ -575,4 +577,63 @@ useReloadOnActivate(async () => { await loadParties(true); await reload(true) })
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+
+/* 手机端收支流水卡片样式 */
+.card-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ledger-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.lc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.lc-no {
+  font-size: 13px;
+  color: #888;
+  font-family: monospace;
+}
+.lc-amt {
+  font-size: 18px;
+  font-weight: 700;
+}
+.lc-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.lc-party {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.lc-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #f3f4f6;
+}
+.lc-tag.success { background: #dcfce7; color: #166534; }
+.lc-tag.danger { background: #fee2e2; color: #991b1b; }
+.lc-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #9ca3af;
+}
+.lc-remark {
+  color: #6b7280;
+}
 </style>

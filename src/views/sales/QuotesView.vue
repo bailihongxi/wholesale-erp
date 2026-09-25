@@ -32,6 +32,7 @@
 
       <ul v-else-if="isMobile" class="card-list zebra-list">
         <li v-for="o in pager.paged.value" :key="o.id" class="quote-card" @click="openDetail(o.id!)">
+          <div v-if="o.status === 'converted'" class="stamp-stamp">已转销售单</div>
           <div class="qc-head">
             <span class="qc-no">{{ o.orderNo }}</span>
             <span class="qc-status" :class="o.status">{{ statusText(o.status) }}</span>
@@ -196,6 +197,7 @@
         :price-mode="priceMode"
         :show-price="true"
         :block-no-stock="false"
+        :hide-stock="isDealer"
         title="选择商品（报价不占库存）"
         @pick="addItem"
       />
@@ -1017,5 +1019,25 @@ useQuoteRealtime({
   .items-edit tfoot td { border: none; padding: 0; width: auto; }
   .items-edit tfoot td.total-label { text-align: left; }
   .items-edit tfoot td.t-amount { margin-left: auto; font-size: 20px; }
+}
+
+/* 椭圆红色印章 */
+.stamp-stamp {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  border: 2px solid #e53935;
+  border-radius: 6px;
+  color: #e53935;
+  font-weight: bold;
+  font-size: 13px;
+  transform: rotate(-10deg);
+  opacity: 0.9;
+  background: rgba(229, 57, 53, 0.05);
+  pointer-events: none;
+}
+.quote-card {
+  position: relative;
 }
 </style>

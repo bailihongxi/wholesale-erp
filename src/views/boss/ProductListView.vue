@@ -267,7 +267,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
-import { useListCache } from '../../composables/useListCache'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
@@ -326,44 +325,44 @@ const pageRows = ref<Product[]>([])
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE_PRODUCT)))
 const startIndex = computed(() => (page.value - 1) * PAGE_SIZE_PRODUCT + 1)
 
-/** 服务端分页：只拉当前页商品 + 当前页库存，首屏不再全量拉 6281 条 */
-const listCache = useListCache('product-list')
+// 全量商品加载到内存，搜索直接本地过滤，秒出结果
+const allProducts = ref<Product[]>([])
 
-async function reload(useCache = true): Promise<void> {
-  // 先看缓存
-  if (useCache) {
-    const cached = listCache.get<{ rows: any[]; total: number; stockMap: Record<number, number> }>()
-    if (cached) {
-      pageRows.value = cached.rows
-      total.value = cached.total
-      stockMap.value = cached.stockMap
-      loading.value = false
-      return
-    }
+/** 前端过滤：关键词 + 分类 + 状态 */
+const filteredProducts = computed(() => {
+  let list = allProducts.value
+  // 状态过滤
+  if (status.value) list = list.filter(p => p.status === status.value)
+  // 分类过滤
+  if (category.value) list = list.filter(p => p.category === category.value)
+  // 关键词搜索：匹配商品名称（品牌+型号）、编号、分类
+  const kw = kwDebounced.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(p => 
+      (p.brand + p.model).toLowerCase().includes(kw) ||
+      (p.category || '').toLowerCase().includes(kw) ||
+      (p.brand || '').toLowerCase().includes(kw) ||
+      (p.model || '').toLowerCase().includes(kw)
+    )
   }
+  return list
+})
 
-  loading.value = true
-  try {
-    const res = await productStore.listPage({
-      page: page.value,
-      pageSize: PAGE_SIZE_PRODUCT,
-      status: status.value,
-      category: category.value,
-      keyword: kwDebounced.value.trim(),
-    })
-    pageRows.value = res.rows
-    total.value = res.total
-    // 库存：云端按当前页商品 id 精准拉取；本地（测试 / 离线）用整表聚合（与既有测试行为一致）
-    stockMap.value = USE_CLOUD
-      ? await loadStockMap(res.rows.map(r => r.id!))
-      : await productStore.stockMap()
-    // 写入缓存
-    listCache.set({ rows: res.rows, total: res.total, stockMap: stockMap.value })
-  } catch (e: any) {
-    showToast('加载失败：' + (e?.message || '未知错误'))
-  } finally {
-    loading.value = false
-  }
+/** 翻页：从过滤后的结果里取当前页 */
+watch(filteredProducts, () => {
+  total.value = filteredProducts.value.length
+  updatePageRows()
+}, { immediate: true })
+
+/** 更新当前页显示的数据 + 加载对应库存 */
+async function updatePageRows() {
+  const start = (page.value - 1) * PAGE_SIZE_PRODUCT
+  const end = start + PAGE_SIZE_PRODUCT
+  pageRows.value = filteredProducts.value.slice(start, end)
+  // 加载当前页商品的库存
+  stockMap.value = USE_CLOUD
+    ? await loadStockMap(pageRows.value.map(r => r.id!))
+    : await productStore.stockMap()
 }
 
 /** 当前页商品的库存汇总：按 id 批量查 stock，而非全表 */
@@ -375,12 +374,26 @@ async function loadStockMap(ids: number[]): Promise<Record<number, number>> {
   return m
 }
 
-// 筛选 / 搜索变化：回到第一页并重新从服务端拉取
-function onFilterChange(): void { page.value = 1; reload() }
+/** 首次加载：一次性拉全量商品到内存（Dexie本地查询，毫秒级） */
+async function reload(): Promise<void> {
+  loading.value = true
+  try {
+    allProducts.value = await db.products.toArray()
+    // 按创建时间倒序
+    allProducts.value.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
+  } catch (e: any) {
+    showToast('加载失败：' + (e?.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// 筛选 / 搜索变化：回到第一页
+function onFilterChange(): void { page.value = 1; updatePageRows() }
 watch([category, status], onFilterChange)
 watch(kwDebounced, onFilterChange)
 // 翻页
-function onPage(p: number): void { page.value = p; reload(false) }
+function onPage(p: number): void { page.value = p; updatePageRows() }
 
 const categoriesList = ref<string[]>([])
 async function loadCategories(): Promise<void> {
@@ -657,19 +670,15 @@ async function doBulkEdit(): Promise<void> {
         })
       }
       // 批量更新价格
-      if (USE_CLOUD && updates.length) {
-        for (const u of updates) {
-          await productStore.updateProduct(u.id, {
-            wholesalePrice: u.wholesalePrice,
-            retailPrice: u.retailPrice
-          })
-        }
-      } else {
-        for (const u of updates) {
-          await productStore.updateProduct(u.id, {
-            wholesalePrice: u.wholesalePrice,
-            retailPrice: u.retailPrice
-          })
+      for (const u of updates) {
+        await productStore.updateProduct(u.id, {
+          wholesalePrice: u.wholesalePrice,
+          retailPrice: u.retailPrice
+        })
+        // 直接更新内存里的商品，不用全量重新加载
+        const idx = allProducts.value.findIndex(p => p.id === u.id)
+        if (idx >= 0) {
+          allProducts.value[idx] = { ...allProducts.value[idx], wholesalePrice: u.wholesalePrice, retailPrice: u.retailPrice }
         }
       }
     }
@@ -695,7 +704,7 @@ onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(() => reload(true))
+useReloadOnActivate(() => reload())
 
 // 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
 function onKeydown(e: KeyboardEvent): void {

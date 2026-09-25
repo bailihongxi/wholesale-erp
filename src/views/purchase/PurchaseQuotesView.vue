@@ -32,6 +32,7 @@
 
       <ul v-else-if="isMobile" class="card-list zebra-list">
         <li v-for="o in pager.paged.value" :key="o.id" class="quote-card" @click="openDetail(o.id!)">
+          <div v-if="o.status === 'converted'" class="stamp-stamp">已转采购单</div>
           <div class="qc-head">
             <span class="qc-no">{{ o.orderNo }}</span>
             <span class="qc-status" :class="o.status">{{ statusText(o.status) }}</span>
@@ -804,4 +805,24 @@ onMounted(async () => {
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
    display/width/margin，不管 padding/border/background，于是「只改全局不生效」。
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
+
+/* 椭圆红色印章 */
+.stamp-stamp {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  border: 2px solid #e53935;
+  border-radius: 6px;
+  color: #e53935;
+  font-weight: bold;
+  font-size: 13px;
+  transform: rotate(-10deg);
+  opacity: 0.9;
+  background: rgba(229, 57, 53, 0.05);
+  pointer-events: none;
+}
+.quote-card {
+  position: relative;
+}
 </style>
