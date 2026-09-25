@@ -28,15 +28,25 @@ export interface Pagination {
   reset(): void
 }
 
-/** 约定的分页粒度：全站所有列表一律 20 条/页（第十五轮起无例外） */
-export const PAGE_SIZE_LIST = 50
+/**
+ * ★ 全站唯一的列表分页粒度：一律 20 条/页，定值，不允许更改。
+ *
+ * 老板 2026-09-25 拍板：「本系统的分页一律按照 20，代码如有冲突一律以 20 为基准」。
+ * 与 `PRD.md` §分页粒度条款（「任意列表每页最多 20 行；
+ * PAGE_SIZE_LIST = PAGE_SIZE_PRODUCT = PAGE_SIZE_ALERT = 20」）一致。
+ * 以前这里写的是 50，属于代码与规范冲突，已于 V2.1-2.30 改回 20。
+ *
+ * ⚠️ 不要再出现第二个分页常量：任何列表想改粒度都必须用这个常量，
+ *    想破例先改规范。tests/pagination-20.test.ts 会断言这个值是 20。
+ */
+export const PAGE_SIZE_LIST = 20
 
 /**
- * 历史专用粒度，现已与 PAGE_SIZE_LIST 统一。
+ * 别名，三个值恒等于 PAGE_SIZE_LIST（全站一律 20）。
  *
- * 这两个名字曾经分别代表「商品档案 100 条」与「库存预警 50 条」，
- * 第十五轮按「所有列表都 20 条/页」的要求合并为同一个值。
- * 保留导出是为了让既有调用点与测试不必改动，新增列表请直接用 PAGE_SIZE_LIST。
+ * 这三个名字历史上分别代表「商品档案 100 条」与「库存预警 50 条」，
+ * 第十五轮按「所有列表都 20 条/页」要求合并。保留导出是为了让既有调用点与测试
+ * 不必改动，新增列表请直接用 PAGE_SIZE_LIST（别再引别名，别再造常量）。
  */
 export const PAGE_SIZE_PRODUCT = PAGE_SIZE_LIST
 export const PAGE_SIZE_ALERT = PAGE_SIZE_LIST

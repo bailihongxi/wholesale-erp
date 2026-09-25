@@ -2684,3 +2684,40 @@ return this._filterFn ? all.filter(this._filterFn) : all   // 只有翻页路径
   「徽章＝未付 / 金额在 body / 操作在 foot」；外壳一致性断言改为校验 theme.css 全局类
 
 - 版本号：V2.1-2.29（package.json 2.28.1 / SW erp-2.28.1）
+
+---
+
+## V2.1-2.30 · 分页粒度收口为定值 20
+
+老板拍板：「本系统的分页一律按照 20，如果有页面不符直接更改，代码有误的一律更改到 20，
+这是定值不允许以后有更改，代码如果有冲突的，一律按照 20 来做基准。」
+
+### 根因
+`src/composables/usePagination.ts` 的 `PAGE_SIZE_LIST` 实际值是 **50**，
+与 `PRD.md` §分页粒度条款（「任意列表每页最多 20 行；
+PAGE_SIZE_LIST = PAGE_SIZE_PRODUCT = PAGE_SIZE_ALERT = 20」）冲突。
+注释里写着「全站一律 20 条/页」，值与注释自相矛盾，所以 `tests/stock-hub.test.ts`
+的「每页 20 行」用例一直是红的。
+
+### 改动
+- `src/composables/usePagination.ts`：`PAGE_SIZE_LIST = 50` → `20`，注释写明这是定值、
+  来源（老板 2026-09-25 拍板 + PRD 条款）、以及不许再造第二个分页常量；三个别名
+  （PAGE_SIZE_PRODUCT / PAGE_SIZE_ALERT）注释同步改为「恒等于 PAGE_SIZE_LIST」
+- `src/stores/product.ts`：`findSameName()` 里硬编码的 `pageSize: 100` → `PAGE_SIZE_LIST`
+- 新增 `tests/pagination-20.test.ts`（4 例）把这个定值锁死：
+  常量值 / 三别名同源 / `usePagination` 切片与翻页边界 / 源码扫描不得出现非 20 的 `pageSize` 字面量
+
+### 说明：未改动的部分（不是漏改，是本来就是对的）
+- `serverPage.ts` / `cloudDb.ts` 的 `pageSize ?? 20`、`TablePager` 的 `size: 20`、
+  各 `useServerPager` 调用方 —— 本来就是 20 / 跟随 `PAGE_SIZE_LIST`
+- `cloudDb.ts` 的 `ROW_PAGE`（1000）是 PostgREST 单次请求上限（取全表用），
+  **不是列表分页粒度**，不在本次范围内
+- `TablePager` 的 `pageCount` 窗口 `span = 5`：20 条/页时 1000 条也只有 50 页，不会撑爆一行
+
+### 影响面（全部转绿，无新增红）
+- `tests/stock-hub.test.ts`：2 红 → 22 全绿（直接证明 50 就是历史红因）
+- `tests/product-batch.test.ts` 20 例、`tests/app-icon-install.test.ts` 39 例、
+  `tests/ui-polish-v14.test.ts` 9 例、`tests/reconcile-dual-layout.test.ts` 4 例全绿
+- `npm run build` 0 错
+
+- 版本号：V2.1-2.30（package.json 2.29.1 / SW erp-2.29.1）

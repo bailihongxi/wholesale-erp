@@ -195,7 +195,7 @@ export const useProductStore = defineStore('product', () => {
     const m = normName(model)
     if (!b || !m) return []
     const { rows } = await serverPage<Product>(db.products, {
-      page: 1, pageSize: 100, eq: { brand: b, model: m }
+      page: 1, pageSize: PAGE_SIZE_LIST, eq: { brand: b, model: m }
     })
     return rows.filter(p => p.id !== excludeId)
   }
