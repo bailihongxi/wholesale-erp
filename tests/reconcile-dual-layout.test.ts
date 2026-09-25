@@ -92,7 +92,7 @@ describe('对账页 · 双端渲染范式', () => {
     const wrapper = await mountPayable()
 
     expect(wrapper.find('.recon-table').exists()).toBe(true)
-    expect(wrapper.find('.recon-card').exists()).toBe(false)
+    expect(wrapper.find('.card').exists()).toBe(false)
 
     const header = wrapper.findAll('.recon-table thead th').map(th => th.text())
     expect(header).toEqual(['单号', '供应商', '日期', '总额', '已付', '余额', '操作'])
@@ -112,14 +112,18 @@ describe('对账页 · 双端渲染范式', () => {
     setWidth(390)
     const wrapper = await mountPayable()
 
-    expect(wrapper.find('.recon-card').exists()).toBe(true)
+    expect(wrapper.find('.card').exists()).toBe(true)
     expect(wrapper.find('.recon-table').exists()).toBe(false)
 
-    const card = wrapper.find('.recon-card').text()
+    const card = wrapper.find('.card').text()
     expect(card).toContain('CG20260922-602')
     expect(card).toContain('测试供应商')
     expect(card).toContain('¥3,260')
     expect(card).toContain('登记付款')
+    // 统一后的三行结构：结清状态徽章（head）、余额（body）、日期+操作（foot）
+    expect(wrapper.find('.card .ui-badge').text()).toBe('未付')
+    expect(wrapper.find('.card .card-amt').text()).toContain('¥3,260')
+    expect(wrapper.find('.card .card-foot').text()).toContain('登记付款')
 
     wrapper.unmount()
     setWidth(1280)
@@ -130,11 +134,15 @@ describe('对账页 · 双端渲染范式', () => {
     expect(template).toMatch(/<table\s+v-else\s+class="data-table recon-table">/)
   })
 
-  it('手机卡片外壳样式与其它列表页一致（白底 / 12px 圆角 / 同款阴影）', () => {
-    const css = SFC.slice(SFC.indexOf('<style'))
-    const block = css.slice(css.indexOf('.recon-card'), css.indexOf('.rc-head'))
-    expect(block).toContain('background: #fff')
+  it('手机卡片外壳走 theme.css 全局类，本页 scoped 里不再各写一份', () => {
+    const theme = readFileSync(join(__dirname, '../src/styles/theme.css'), 'utf8')
+    const block = theme.slice(theme.indexOf('12A. 手机端列表卡片'), theme.indexOf('13. 全站表格规范'))
+    expect(block).toContain('.card {')
     expect(block).toContain('border-radius: 12px')
     expect(block).toContain('box-shadow: 0 2px 10px rgba(26,54,93,0.06)')
+
+    // scoped 副本特异性 (0,2,0) 高于全局 (0,1,0)，留着就会把全局盖掉 —— 所以必须为空
+    const scoped = SFC.slice(SFC.indexOf('<style'))
+    expect(scoped).not.toMatch(/\.recon-card\b|\.pay-card\b|\.rc-head\b|\.rc-sub\b|\.card\s*\{/)
   })
 })

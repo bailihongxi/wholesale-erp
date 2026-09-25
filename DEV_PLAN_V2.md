@@ -2651,3 +2651,36 @@ return this._filterFn ? all.filter(this._filterFn) : all   // 只有翻页路径
 - 更新 `tests/history-search.test.ts` 中 1 处断言：`.recon-card` → `.recon-table tbody tr`（仍要求恰好 1 行）
 
 - 版本号：V2.1-2.28（package.json 2.27.1 / SW erp-2.27.1）
+
+---
+
+## V2.1-2.29 · 手机端卡片结构统一（对账页 + 记一笔）
+
+老板拍板：把「应收 / 应付列表」与「记一笔」统一到同一套卡片形态。
+
+### 统一后的卡片规范（theme.css「12A. 手机端列表卡片」）
+- 外壳：白底 / `12px` 圆角 / `0 2px 10px rgba(26,54,93,.06)` / `padding 14px 16px` / 卡间距 `10px`
+- 三行结构（字段顺序固定，不许自加行）：
+  - `.card-head` 左 `.card-no` 单号 ｜ 右 状态或分类徽章（直接用全局 `.ui-badge`）
+  - `.card-body` 左 `.card-party` 往来单位 ｜ 右 `.card-amt` 金额
+  - `.card-foot` 左 `.card-date` 日期（可再拼备注）｜ 右 操作（`.card-act` 按钮 / `.card-del`）
+- 操作位统一用 `.card-act` / `.card-del`，不再各写各的按钮
+
+### 改动
+- `src/styles/theme.css`：新增「12A. 手机端列表卡片」段（唯一外壳 + 结构类 + ⚠️ 注释说明
+  scoped 副本特异性 (0,2,0) 会盖掉全局 (0,1,0)，老页面想跟版必须删掉自己的副本）
+- `src/views/finance/ReconcileView.vue`：应收应付卡片改三行结构，右上角加结清状态徽章
+  （已结清 / 未收·未付 / 部分收·部分付），foot 放日期·总额·已收付 + 「登记收付款」按钮；
+  同页「收付历史」同步改版，删除按钮从 foot 右上角走 `.card-del`；
+  删掉 scoped 里的 `.recon-card / .pay-card / .rc-head / .rc-no / .rc-bal / .rc-sub`
+- `src/views/finance/LedgerView.vue`：记一笔卡片从「10px + 灰阴影的自造三行」改为同一套全局类，
+  标签从自造 `.lc-tag` 换成全局 `ui-badge`，foot 补「删除」按钮，备注并入 foot 左侧；
+  删掉 scoped 里的 `.card-list / .ledger-card / .lc-*`（并补上此前全站缺失的 `.amt-in/.amt-out` 定义）
+
+### 测试
+- 新增 `tests/mobile-card-unify.test.ts`（4 例）：theme.css 唯一外壳值、两页 scoped 无副本、
+  两页同用一组 `card-*` 结构类、旧卡片类名已清除
+- 更新 `tests/reconcile-dual-layout.test.ts`：卡片类名 `.recon-card` → `.card`，并加断言锁死
+  「徽章＝未付 / 金额在 body / 操作在 foot」；外壳一致性断言改为校验 theme.css 全局类
+
+- 版本号：V2.1-2.29（package.json 2.28.1 / SW erp-2.28.1）

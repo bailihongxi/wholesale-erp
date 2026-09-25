@@ -33,27 +33,33 @@
 
       <!-- 手机端：卡片（与采购单 / 销售单列表同一范式，卡片外壳样式保持一致） -->
       <ul v-if="isMobile" class="card-list zebra-list">
-        <li v-for="r in reconPager.paged.value" :key="r.orderId" class="recon-card">
-          <div class="rc-head">
-            <span class="rc-no">{{ r.orderNo }}</span>
-            <span class="rc-bal" :class="{ settled: r.balance <= 0 }">
+        <li v-for="r in reconPager.paged.value" :key="r.orderId" class="card">
+          <div class="card-head">
+            <span class="card-no">{{ r.orderNo }}</span>
+            <span class="ui-badge" :class="settleBadge(r).cls">{{ settleBadge(r).text }}</span>
+          </div>
+          <div class="card-body">
+            <span class="card-party">{{ partyName(r) }}</span>
+            <span class="card-amt" :class="{ settled: r.balance <= 0 }">
               {{ r.balance > 0 ? `¥${r.balance.toLocaleString()}` : '已结清' }}
             </span>
           </div>
-          <div class="rc-sub">
-            {{ partyName(r) }} · {{ (r.date ?? '').slice(0, 10) }}
-          </div>
-          <div class="rc-sub">
-            总额 ¥{{ r.totalAmount.toLocaleString() }} ·
-            已{{ mode === 'receivable' ? '收' : '付' }} ¥{{ (r.totalAmount - r.balance).toLocaleString() }}
-          </div>
-
-          <div v-if="editingId !== r.orderId">
-            <button v-if="r.balance > 0" class="link-btn" type="button" @click="startEdit(r)">
+          <div class="card-foot">
+            <span class="card-date">
+              {{ (r.date ?? '').slice(0, 10) }} · 总额 ¥{{ r.totalAmount.toLocaleString() }} ·
+              已{{ mode === 'receivable' ? '收' : '付' }} ¥{{ (r.totalAmount - r.balance).toLocaleString() }}
+            </span>
+            <button
+              v-if="editingId !== r.orderId && r.balance > 0"
+              class="card-act"
+              type="button"
+              @click="startEdit(r)"
+            >
               {{ mode === 'receivable' ? '登记收款' : '登记付款' }}
             </button>
           </div>
-          <div v-else class="edit-row">
+
+          <div v-if="editingId === r.orderId" class="edit-row">
             <input v-model.number="editAmount" type="number" min="0" class="amt-input" aria-label="金额" />
             <button class="confirm-btn" type="button" @click="confirmEdit(r)">确认</button>
             <button class="cancel-btn" type="button" @click="editingId = null">取消</button>
@@ -145,14 +151,23 @@
       </div>
 
       <ul v-if="isMobile" class="card-list zebra-list">
-        <li v-for="p in payPager.paged.value" :key="p.id" class="pay-card">
-          <div class="rc-head">
-            <span class="rc-no">{{ p.orderNo }}</span>
-            <span class="rc-bal" :class="p.type">{{ p.type === 'receive' ? '+' : '-' }}¥{{ p.amount.toLocaleString() }}</span>
+        <li v-for="p in payPager.paged.value" :key="p.id" class="card">
+          <div class="card-head">
+            <span class="card-no">{{ p.orderNo }}</span>
+            <span class="ui-badge" :class="p.type === 'receive' ? 'success' : 'danger'">
+              {{ p.type === 'receive' ? '收款' : '付款' }}
+            </span>
           </div>
-          <div class="rc-sub">{{ p.counterpartyName }} · {{ p.type === 'receive' ? '收款' : '付款' }}</div>
-          <div class="rc-sub">{{ fmtTime(p.payDate) }} · {{ p.operatorName }}{{ p.remark ? ` · ${p.remark}` : '' }}</div>
-          <button class="link-btn danger" type="button" @click="removePayment(p)" style="margin-top:4px">删除此笔</button>
+          <div class="card-body">
+            <span class="card-party">{{ p.counterpartyName || '—' }}</span>
+            <span class="card-amt">{{ p.type === 'receive' ? '+' : '-' }}¥{{ p.amount.toLocaleString() }}</span>
+          </div>
+          <div class="card-foot">
+            <span class="card-date">
+              {{ fmtTime(p.payDate) }} · {{ p.operatorName }}{{ p.remark ? ` · ${p.remark}` : '' }}
+            </span>
+            <button class="card-del" type="button" @click="removePayment(p)">删除</button>
+          </div>
         </li>
         <li v-if="!payPager.total.value" class="empty">没有符合条件的收付款记录</li>
       </ul>
@@ -337,6 +352,15 @@ function partyName(r: ReconRow): string {
   return supplierMap.value[r.supplierId ?? -1] ?? '未知供应商'
 }
 
+/** 卡片右上角结清状态徽章（2026-09-25 统一手机端卡片结构时加，电脑端表格仍按列显示） */
+function settleBadge(r: ReconRow): { text: string; cls: string } {
+  if (r.balance <= 0) return { text: '已结清', cls: 'success' }
+  if (r.balance >= r.totalAmount) {
+    return { text: mode.value === 'receivable' ? '未收' : '未付', cls: 'danger' }
+  }
+  return { text: mode.value === 'receivable' ? '部分收' : '部分付', cls: 'warning' }
+}
+
 function switchMode(m: Mode): void {
   mode.value = m
   editingId.value = null
@@ -417,18 +441,13 @@ watch([keyword, payType, dateFrom, dateTo], () => payPager.reset())
 .sum-line .in { color: var(--c-success); }
 .sum-line .out { color: var(--c-danger, #dc2626); }
 
-.card-list { list-style: none; }
-.recon-card, .pay-card {
-  background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
-  box-shadow: 0 2px 10px rgba(26,54,93,0.06);
-}
-.rc-head { display: flex; justify-content: space-between; align-items: center; }
-.rc-no { font-weight: 600; color: var(--c-primary); }
-.rc-bal { font-weight: 700; color: var(--c-danger, #dc2626); }
-.rc-bal.settled { color: var(--c-success); font-weight: 500; }
-.rc-bal.receive { color: var(--c-success); }
-.rc-bal.pay { color: var(--c-danger, #dc2626); }
-.rc-sub { font-size: 13px; color: var(--c-muted); margin-top: 4px; }
+/* 手机端卡片外壳 / 三行结构已收到 theme.css「12A. 手机端列表卡片」全局类，
+   这里不要再写一份 —— 2026-09-25 统一卡片结构时，本页旧的 recon-card / pay-card 外壳
+   与 rc-head / rc-sub / rc-bal 等卡内类已全部删除。
+   ⚠️ 老页面 scoped 副本特异性 (0,2,0) 高于全局 (0,1,0)，留着会盖掉全局，属已知坑 */
+
+/* 卡片内「已结清」金额转绿（全局 .card-amt 是深色 600，这里只改颜色与字重） */
+.card-amt.settled { color: var(--c-success); font-weight: 500; }
 
 .edit-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 /* 双类选择器提特异性，压过全局原生控件基线 :where(input)，固定金额框宽度不撑满整行 */

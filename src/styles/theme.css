@@ -705,6 +705,94 @@ body {
 
 .ui-toolbar .grow { flex: 1; min-width: 170px; }
 
+/* ---------- 12A. 手机端列表卡片（全站统一外壳） ----------
+   2026-09-25 新增。此前 19 个页面各自在 scoped style 里写了一份卡片外壳，圆角/阴影
+   还不统一（「记一笔」是 10px + 灰阴影，其余是 12px + 蓝灰阴影），本次把外壳收口到
+   这一处，之后新页面 / 改造页面都直接用这几个类，不要在 scoped style 里再写一份。
+   统一口径：白底 / 12px 圆角 / 0 2px 10px rgba(26,54,93,.06) / padding 14px 16px / 卡间距 10px。
+   三行结构（字段顺序固定，别自己加行）：
+     .card-head   左 .card-no 单号 ｜ 右 状态徽章（直接用全局 .ui-badge，别再造 .lc-tag）
+     .card-body   左 .card-party 往来单位 ｜ 右 .card-amt 金额
+     .card-foot   左 .card-date 日期（可再拼备注） ｜ 右 操作（按钮 / .link-btn）
+   ⚠️ 老页面的 scoped 副本编译后特异性为 (0,2,0)，高于这里的 (0,1,0)，不会被引发覆盖；
+   想跟版必须删掉自己 scoped 里的同名副本，否则那份会一直生效。 */
+.card-list { list-style: none; padding: 0; margin: 0; }
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 10px rgba(26,54,93,0.06);
+}
+
+.card-head,
+.card-body,
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-head { margin-bottom: 6px; }
+.card-body { margin-bottom: 6px; }
+
+.card-no {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-primary);
+  white-space: nowrap;
+}
+
+.card-party {
+  font-size: 14px;
+  color: var(--c-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-amt {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+
+.card-foot {
+  padding-top: 6px;
+  border-top: 1px solid #f0f3f8;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.card-date { flex: 1; min-width: 0; overflow: hidden; }
+
+/* 卡片右下角操作位：统一用 .card-act，别再造第四种按钮 */
+.card-act {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--c-accent);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.card-del {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--c-danger, #dc2626);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
 /* ---------- 13. 全站表格规范 ---------- */
 .data-table {
   width: 100%;

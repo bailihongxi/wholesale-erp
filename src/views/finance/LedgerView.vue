@@ -169,22 +169,24 @@
 
       <!-- 手机端卡片列表 -->
 <ul v-if="isMobile && rows.length" class="card-list zebra-list">
-  <li v-for="r in pager.paged.value" :key="r.id" class="ledger-card">
-    <div class="lc-head">
-      <span class="lc-no">{{ r.orderNo }}</span>
-      <span class="lc-amt" :class="r.direction === 'in' ? 'amt-in' : 'amt-out'">
-        {{ r.direction === 'in' ? '+' : '-' }}¥{{ money(r.amount) }}
-      </span>
-    </div>
-    <div class="lc-body">
-      <span class="lc-party">{{ r.counterparty || '—' }}</span>
-      <span class="lc-tag" :class="r.direction === 'in' ? 'success' : 'danger'">
+  <li v-for="r in pager.paged.value" :key="r.id" class="card">
+    <div class="card-head">
+      <span class="card-no">{{ r.orderNo }}</span>
+      <span class="ui-badge" :class="r.direction === 'in' ? 'success' : 'danger'">
         {{ categoryIcon(r.category) }} {{ categoryLabel(r.category) }}
       </span>
     </div>
-    <div class="lc-foot">
-      <span class="lc-date">{{ r.entryDate }}</span>
-      <span class="lc-remark" v-if="r.remark">{{ r.remark }}</span>
+    <div class="card-body">
+      <span class="card-party">{{ r.counterparty || '—' }}</span>
+      <span class="card-amt" :class="r.direction === 'in' ? 'amt-in' : 'amt-out'">
+        {{ r.direction === 'in' ? '+' : '-' }}¥{{ money(r.amount) }}
+      </span>
+    </div>
+    <div class="card-foot">
+      <span class="card-date">
+        {{ r.entryDate }}<template v-if="r.remark"> · {{ r.remark }}</template>
+      </span>
+      <button class="card-del" type="button" @click="remove(r)">删除</button>
     </div>
   </li>
 </ul>
@@ -579,61 +581,10 @@ useReloadOnActivate(async () => { await loadParties(true); await reload(true) })
    详见 theme.css 中「手机端：合计行通栏」那段 ⚠️ 注释。 */
 
 
-/* 手机端收支流水卡片样式 */
-.card-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.ledger-card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-.lc-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.lc-no {
-  font-size: 13px;
-  color: #888;
-  font-family: monospace;
-}
-.lc-amt {
-  font-size: 18px;
-  font-weight: 700;
-}
-.lc-body {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.lc-party {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.lc-tag {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: #f3f4f6;
-}
-.lc-tag.success { background: #dcfce7; color: #166534; }
-.lc-tag.danger { background: #fee2e2; color: #991b1b; }
-.lc-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: #9ca3af;
-}
-.lc-remark {
-  color: #6b7280;
-}
+/* 手机端收支流水卡片：外壳与三行结构全部走 theme.css「12A. 手机端列表卡片」全局类
+   （2026-09-25 统一卡片结构）。此前本页自己写了一份 10px + 灰阴影的「三行」卡片，
+   与其余 15 个页面的 12px + 蓝灰阴影不是一套，现已删除，本页与其它列表页同一口径。
+   ⚠️ scoped 副本特异性 (0,2,0) 高于全局 (0,1,0)，别再抄一份回来把全局盖掉。 */
+.amt-in { color: var(--c-success); }
+.amt-out { color: var(--c-danger, #dc2626); }
 </style>
