@@ -5,7 +5,7 @@
  * 静态资源：缓存优先，文件名带hash，内容不会变
  */
 
-const BUILD_VERSION = "2.23.0";
+const BUILD_VERSION = "2.24.0";
 const CACHE_NAME = 'erp-' + BUILD_VERSION;
 
 self.addEventListener('install', () => {

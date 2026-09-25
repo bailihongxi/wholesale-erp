@@ -28,6 +28,7 @@
           <div class="c-head">
             <span class="c-name">{{ c.name }}</span>
             <span v-if="c.loginPhone" class="badge dealer">经销商</span>
+            <button class="link-btn danger" type="button" @click.stop="remove(c)" style="margin-left:auto; font-size:13px">删除</button>
           </div>
           <div class="c-sub">{{ c.level }} 级 · {{ c.contact }} · {{ c.phone }}</div>
           <div v-if="c.loginPhone" class="c-login">登录号：{{ c.loginPhone }}</div>
@@ -76,7 +77,10 @@
                 {{ invoiceComplete(c) ? '完整' : (hasInvoice(c) ? '不全' : '未填') }}
               </span>
             </td>
-            <td><button class="link-btn" type="button" @click="openEdit(c)">编辑</button></td>
+            <td>
+              <button class="link-btn" type="button" @click="openEdit(c)">编辑</button>
+              <button class="link-btn danger" type="button" @click="remove(c)" style="margin-left:8px">删除</button>
+            </td>
           </tr>
           <tr v-if="!pager.total.value">
             <td colspan="8" class="empty">
@@ -236,6 +240,24 @@ function openEdit(c: Customer): void {
   // 老数据没有开票字段也能安全回填（缺字段按空串）
   invoice.value = invoiceOf(c)
   showForm.value = true
+}
+
+async function remove(c: Customer): Promise<void> {
+  const { showConfirmDialog } = await import('vant')
+  const { db } = await import('../../db')
+  // 检查有没有关联的销售单
+  const orderCount = await db.saleOrders.where({ customerId: c.id }).count()
+  if (orderCount > 0) {
+    showToast(`该客户有 ${orderCount} 张销售单，不能删除`)
+    return
+  }
+  await showConfirmDialog({
+    title: '删除客户',
+    message: `确定删除客户「${c.name}」？删除后不可恢复。`
+  })
+  await db.customers.delete(c.id!)
+  showToast('已删除')
+  pager.reload()
 }
 
 async function save(): Promise<void> {

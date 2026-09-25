@@ -27,6 +27,7 @@
             >
               {{ invoiceComplete(s) ? '开票资料完整' : (hasInvoice(s) ? '开票资料不全' : '未填开票资料') }}
             </span>
+            <button class="link-btn danger" type="button" @click.stop="remove(s)" style="margin-left:auto; font-size:13px">删除</button>
           </div>
           <div class="i-sub">{{ s.contact }} · {{ s.phone }} · {{ s.paymentTerm || '未设账期' }}</div>
           <div v-if="invoiceSummary(s)" class="i-inv">{{ invoiceSummary(s) }}</div>
@@ -132,6 +133,22 @@ function openEdit(s: Supplier): void {
   }
   invoice.value = invoiceOf(s)
   showForm.value = true
+}
+
+async function remove(s: Supplier): Promise<void> {
+  const { showConfirmDialog } = await import('vant')
+  const orderCount = await db.purchaseOrders.where({ supplierId: s.id }).count()
+  if (orderCount > 0) {
+    showToast(`该供应商有 ${orderCount} 张采购单，不能删除`)
+    return
+  }
+  await showConfirmDialog({
+    title: '删除供应商',
+    message: `确定删除供应商「${s.name}」？删除后不可恢复。`
+  })
+  await db.suppliers.delete(s.id!)
+  showToast('已删除')
+  pager.reload()
 }
 
 async function save(): Promise<void> {
