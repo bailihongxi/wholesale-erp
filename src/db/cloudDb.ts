@@ -342,6 +342,22 @@ export class CloudTable<T = any> {
     return new CloudQuery(this.client, this.name, field)
   }
 
+  /**
+   * Dexie 兼容：拉全表后在内存里过滤。
+   *
+   * ⚠️ 返回值是 **Promise**，不是数组——Dexie 的 filter() 返回 Collection，
+   * 这里简化成一次性返回过滤后的数组，用 `await db.x.filter(f)` 取。
+   * 需要条数请用 `(await db.x.filter(f)).length`，不要写 `.count()`（Promise 上没有）。
+   *
+   * 注意这是「先取回再过滤」，不是索引过滤：大表慎用。
+   * 能走 where()/queryPage() 的服务端过滤优先用服务端，只有 pairs 这种
+   * 「需要先拿到全量再按业务规则筛」的场景才用这里。
+   */
+  async filter(fn: (row: any) => boolean): Promise<T[]> {
+    const rows = await this.toArray()
+    return rows.filter(fn) as T[]
+  }
+
   /** Dexie 兼容：按字段排序（走 toArray 缓存，大表也不会每次重拉全量）；reverse()/limit(n) 可链式 */
   orderBy(field: string): OrderChain<T> {
     const self = this

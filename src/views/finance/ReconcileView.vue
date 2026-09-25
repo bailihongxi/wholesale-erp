@@ -256,8 +256,12 @@ async function reload(): Promise<void> {
   // 每次都拉最新数据，保证新单据实时显示
   try {
     await loadAll()
-  } finally {
+  } catch (e: any) {
+    // 取数失败必须让用户看见，不能停在空列表里不明不白（2026-09-25 应收应付空白事故的教训）
     loading.value = false
+    const { showToast } = await import('vant')
+    showToast({ type: 'fail', message: `数据加载失败：${e?.message ?? '请检查网络'}`, duration: 3000 })
+    console.error('[ReconcileView] 加载失败', e)
   }
 }
 

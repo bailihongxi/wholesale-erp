@@ -369,7 +369,12 @@ export const useUserStore = defineStore('user', () => {
     if (user.role === 'boss') return { ok: false, message: '老板账号不可停用' }
     if (user.id === currentUser.value?.id) return { ok: false, message: '不能停用当前登录的账号' }
     if (status === 'disabled') {
-      const active = await db.users.filter(u => u.status === 'active').count()
+      // 员工表很小，直接取全表数在职人数。
+      // 曾经写成 db.users.filter(...).count()——那是 Dexie 写法，
+      // 云端 db 是 CloudTable 没这个方法（filter 只存在于 where() 返回的 CloudQuery 上），
+      // 会直接抛 TypeError，导致停用账号时弹出报错而不是友好提示。
+      const staff = await db.users.toArray()
+      const active = staff.filter(u => u.status === 'active').length
       if (active <= 1) return { ok: false, message: '至少要保留一个可登录的账号' }
     }
     await db.users.update(id, { status })

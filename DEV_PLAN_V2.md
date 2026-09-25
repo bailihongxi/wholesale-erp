@@ -2519,3 +2519,45 @@ V2.1-2.23 针对「登录后先跳工作台再跳回登录页」的乱跳转做�
 - 冷启动少等一轮云端往返
 - 发版时 SW 版本号自动跟随 package.json，不再退回旧版
 - 版本号：V2.1-2.25（package.json 2.24.1）
+
+---
+
+## 六十四、V2.1-2.26 · 应收应付查不到未结清单据（**线上 bug 修复**）
+
+### 现象
+财务对账页「应付（欠供应商）」一片空白。云端明明有 5 笔 `payStatus=unpaid` 的采购单、
+且 `payments` 流水为空（应付余额应等于全额），单据却一条都列不出来。
+
+### 根因
+`src/stores/finance.ts` 里写的是 Dexie 用法：
+
+```ts
+await db.payments.filter(p => p.refOrderId === o.id && ...).toArray()
+```
+
+但云端的 `db` 是 `CloudTable`，**CloudTable 只有 `where()`，没有 `filter()`**
+（`filter()` 只存在于 `where()` 返回的 `CloudQuery` 上）。于是这行直接抛 TypeError，
+`listReceivables` / `listPayables` 整体崩掉 → 列表空白 → 异常又被 `onMounted` 吞掉，
+页面上没有任何提示。同一个写法在 `stores/user.ts` 也有一处
+（`db.users.filter(...).count()`），老板停用员工时同样会抛错而不是给友好提示。
+
+### 改动
+1. `db/cloudDb.ts`：给 `CloudTable` 补 `filter()`（Dexie 兼容，取全表后内存过滤），
+   并注明「返回 Promise 不是数组，取条数用 `.length` 不要用 `.count()`」。
+2. `stores/finance.ts`：应收 / 应付都改成**一次性取回 payments 再按单据聚合**。
+   顺带消灭了 N+1——原来每个订单发一次 payments 请求，500 单就是 500 次往返。
+3. `stores/user.ts`：`db.users.filter(...).count()` 改为 `(await ...).length`。
+4. `views/finance/ReconcileView.vue`：`reload()` 加 try/catch + toast，
+   取数失败要让用户看见，不能再停在空列表里不明不白。
+
+### 测试
+新增 `tests/finance-reconcile-balance.test.ts`（8 例）：无流水仍算得出余额 /
+多笔流水累加 / 已结清过滤 / 退货冲减 / 空表总额为 0。
+新增 `tests/cloud-db-filter-compat.test.ts`（2 例）：锁住 `CloudTable.filter()` 存在且行为正确。
+回归 `session-validate` 5 例 + `restore-session-instant` 7 例全绿。
+
+### 备注
+排查时确认：云端 `saleOrders` 表是空的（一张销售单都没有），
+所以「应收看不见销售单」目前是**没有数据**，不是 bug；等有销售单后会自动显示。
+
+- 版本号：V2.1-2.26（package.json 2.25.1 / SW erp-2.25.1）

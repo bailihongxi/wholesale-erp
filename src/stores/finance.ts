@@ -10,6 +10,17 @@ export const useFinanceStore = defineStore('finance', () => {
   // 传 true 则返回全部销售单（含已结清），供财务查看完整历史。
   async function listReceivables(includeSettled = false) {
     const orders = await db.saleOrders.toArray()
+    // 收付款流水一次性取回后按单据聚合。
+    // 原来写法是「每个订单一次 payments 请求」，500 单 = 500 次往返（N+1），
+    // 订单一多这页就会卡住；且 payments 表若没数据会直接抛错导致整页空白。
+    const pays = await db.payments.toArray()
+    const agg = new Map<number, { receive: number; refund: number }>()
+    for (const p of pays) {
+      if (p.type !== 'receive' && p.type !== 'refund') continue
+      const cur = agg.get(p.refOrderId) ?? { receive: 0, refund: 0 }
+      cur[p.type] += p.amount
+      agg.set(p.refOrderId, cur)
+    }
     const result: Array<{
       orderId: number
       orderNo: string
@@ -20,10 +31,10 @@ export const useFinanceStore = defineStore('finance', () => {
       date: string
     }> = []
     for (const o of orders) {
-      const pays = await db.payments.filter(p => p.refOrderId === o.id && (p.type === 'receive' || p.type === 'refund')).toArray()
-      const received = pays.filter(p => p.type === 'receive').reduce((sum, p) => sum + p.amount, 0)
+      const a = agg.get(o.id!) ?? { receive: 0, refund: 0 }
+      const received = a.receive
       // 销售退货记为客户 Credit（贷方），从应收余额中扣除
-      const credited = pays.filter(p => p.type === 'refund').reduce((sum, p) => sum + p.amount, 0)
+      const credited = a.refund
       const balance = o.totalAmount - received - credited
       if (includeSettled || balance > 0) {
         result.push({
@@ -38,6 +49,17 @@ export const useFinanceStore = defineStore('finance', () => {
   // ===== 应付：欠供应商 =====
   async function listPayables(includeSettled = false) {
     const orders = await db.purchaseOrders.toArray()
+    // 同 listReceivables：一次性取回流水再聚合，避免每单一请求
+    const pays = await db.payments.toArray()
+    const agg = new Map<number, { pay: number; credit: number }>()
+    for (const p of pays) {
+      if (p.type !== 'pay' && p.type !== 'supplier_credit') continue
+      const cur = agg.get(p.refOrderId) ?? { pay: 0, credit: 0 }
+      // 逐个字段累加，不要写 cur[p.type]：字段名是 pay/credit，跟流水 type 不是一回事
+      if (p.type === 'pay') cur.pay += p.amount
+      else cur.credit += p.amount
+      agg.set(p.refOrderId, cur)
+    }
     const result: Array<{
       orderId: number
       orderNo: string
@@ -48,10 +70,10 @@ export const useFinanceStore = defineStore('finance', () => {
       date: string
     }> = []
     for (const o of orders) {
-      const pays = await db.payments.filter(p => p.refOrderId === o.id && (p.type === 'pay' || p.type === 'supplier_credit')).toArray()
-      const paid = pays.filter(p => p.type === 'pay').reduce((sum, p) => sum + p.amount, 0)
+      const a = agg.get(o.id!) ?? { pay: 0, credit: 0 }
+      const paid = a.pay
       // 采购退货记为供应商 Credit（贷方），从应付余额中扣除
-      const credited = pays.filter(p => p.type === 'supplier_credit').reduce((sum, p) => sum + p.amount, 0)
+      const credited = a.credit
       const balance = o.totalAmount - paid - credited
       if (includeSettled || balance > 0) {
         result.push({
