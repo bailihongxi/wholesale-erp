@@ -61,8 +61,8 @@
 
           <div v-if="editingId === r.orderId" class="edit-row">
             <input v-model.number="editAmount" type="number" min="0" class="amt-input" aria-label="金额" />
-            <button class="confirm-btn" type="button" @click="confirmEdit(r)">确认</button>
-            <button class="cancel-btn" type="button" @click="editingId = null">取消</button>
+            <button class="confirm-btn" type="button" :disabled="submittingPayment" @click="confirmEdit(r)">确认</button>
+            <button class="cancel-btn" type="button" :disabled="submittingPayment" @click="editingId = null">取消</button>
           </div>
         </li>
         <li v-if="!reconPager.total.value" class="empty">
@@ -101,8 +101,8 @@
               </span>
               <div v-else class="edit-row">
                 <input v-model.number="editAmount" type="number" min="0" class="amt-input" aria-label="金额" />
-                <button class="confirm-btn" type="button" @click="confirmEdit(r)">确认</button>
-                <button class="cancel-btn" type="button" @click="editingId = null">取消</button>
+                <button class="confirm-btn" type="button" :disabled="submittingPayment" @click="confirmEdit(r)">确认</button>
+                <button class="cancel-btn" type="button" :disabled="submittingPayment" @click="editingId = null">取消</button>
               </div>
             </td>
           </tr>
@@ -208,7 +208,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { clearAllListCaches } from '../../composables/useListCache'
 import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
@@ -333,17 +335,27 @@ async function reload(): Promise<void> {
 }
 
 async function loadAll(): Promise<void> {
-  // 传 true 取全部单据（含已结清），财务才能查到完整历史
-  receivables.value = (await financeStore.listReceivables(true)) as ReconRow[]
-  payables.value = (await financeStore.listPayables(true)) as ReconRow[]
-  payments.value = await financeStore.listPaymentHistory()
-
+  // V2.1-2.32 提速：payments 全表只拉一次传给三个加载器（原来各拉一次=3 次全表），
+  // 五组请求全部并行（原来应收→应付→流水→客户→供应商五段串行，弱网下登记一笔要等十几趟往返）
   const { db } = await import('../../db')
+  const paysAll = await db.payments.toArray()
+  const [recs, paysRows, history, cs, ss] = await Promise.all([
+    financeStore.listReceivables(true, paysAll),
+    financeStore.listPayables(true, paysAll),
+    financeStore.listPaymentHistory(paysAll as any),
+    db.customers.toArray(),
+    db.suppliers.toArray(),
+  ])
+  // 传 true 取全部单据（含已结清），财务才能查到完整历史
+  receivables.value = recs as ReconRow[]
+  payables.value = paysRows as ReconRow[]
+  payments.value = history
+
   const c: Record<number, string> = {}
-  for (const x of await db.customers.toArray()) c[x.id!] = x.name
+  for (const x of cs) c[x.id!] = x.name
   customerMap.value = c
   const s: Record<number, string> = {}
-  for (const x of await db.suppliers.toArray()) s[x.id!] = x.name
+  for (const x of ss) s[x.id!] = x.name
   supplierMap.value = s
 }
 
@@ -387,22 +399,61 @@ async function removePayment(p: any): Promise<void> {
   const { db } = await import('../../db')
   await db.payments.delete(p.id)
   showToast('已删除')
+  clearAllListCaches()
   await reload()
 }
 
+/** 登记付款/收款提交中：防连点（一次确认 = 一笔真金白银，重复点击会重复记账） */
+const submittingPayment = ref(false)
+
 async function confirmEdit(r: ReconRow): Promise<void> {
-  const payload = {
-    orderId: r.orderId,
-    amount: editAmount.value,
-    operatorId: userStore.currentUser?.id ?? 1,
-    remark: ''
+  if (submittingPayment.value) return
+  const amount = Number(editAmount.value)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showToast('请填写大于 0 的金额')
+    return
   }
-  const res = mode.value === 'payable'
-    ? await financeStore.recordPay(payload)
-    : await financeStore.recordReceive(payload)
-  if (res.ok) {
-    editingId.value = null
-    await reload()
+  const isPay = mode.value === 'payable'
+  submittingPayment.value = true
+  // 点下去立即给反馈：整链要几秒，不能让用户以为没点上而连点（2026-09-25 老板反馈）
+  showLoadingToast({
+    message: isPay ? '正在登记付款…' : '正在登记收款…',
+    duration: 0,
+    forbidClick: true,
+  })
+  try {
+    const payload = {
+      orderId: r.orderId,
+      amount,
+      operatorId: userStore.currentUser?.id ?? 1,
+      remark: ''
+    }
+    const res = isPay
+      ? await financeStore.recordPay(payload)
+      : await financeStore.recordReceive(payload)
+    closeToast()
+    if (res.ok) {
+      // 收付款变了：清收付款页/记一笔等列表页的 30 秒缓存（V2.1-2.32）
+      clearAllListCaches()
+      editingId.value = null
+      // 提示词对齐「新建采购单-已选-已增加数量，现为xxx」的口径：
+      // 告诉用户登记了多少钱、单据现在一共收/付到多少（老板 2026-09-25 拍板的需求）
+      showToast(
+        res.paid !== undefined
+          ? `已登记${isPay ? '付款' : '收款'} ¥${amount.toLocaleString()}，已${isPay ? '付' : '收'}合计 ¥${res.paid.toLocaleString()}`
+          : (res.message || '登记成功')
+      )
+      await reload()
+    } else {
+      // 失败必须出提示：原来失败路径什么都不弹，按钮像「没反应」
+      showToast({ type: 'fail', message: res.message || '登记失败，请重试' })
+    }
+  } catch (e: any) {
+    closeToast()
+    showToast({ type: 'fail', message: '登记失败：' + (e?.message || '网络错误，请重试') })
+  } finally {
+    // ⚠️ 必须在 finally 复位（2026-09-25 骨架屏事故的教训：放 catch 里成功路径永不复位）
+    submittingPayment.value = false
   }
 }
 
@@ -453,6 +504,7 @@ watch([keyword, payType, dateFrom, dateTo], () => payPager.reset())
 /* 双类选择器提特异性，压过全局原生控件基线 :where(input)，固定金额框宽度不撑满整行 */
 .edit-row .amt-input { width: 120px; flex: none; height: 40px; border: 1px solid var(--c-border); border-radius: 8px; padding: 0 8px; }
 .confirm-btn { height: 40px; padding: 0 16px; border: none; border-radius: 8px; background: var(--c-success); color: #fff; cursor: pointer; white-space: nowrap; }
+.confirm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 /* 取消按钮：橘红实底白字（全站规范），white-space 防止汉字竖排 */
 .cancel-btn { height: 40px; padding: 0 14px; border: 1px solid var(--c-amber); border-radius: 8px; background: var(--c-amber); color: #fff; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .cancel-btn:hover { background: var(--c-amber-hover); border-color: var(--c-amber-hover); }

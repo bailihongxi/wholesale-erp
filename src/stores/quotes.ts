@@ -224,11 +224,22 @@ export const useQuotesStore = defineStore('quotes', () => {
     if (!res.ok || res.orderId == null) return { ok: false, message: res.message }
 
     const sale = await db.saleOrders.get(res.orderId)
-    await db.quoteOrders.update(quoteId, {
-      status: 'converted',
-      convertedSaleOrderId: res.orderId,
-      convertedSaleNo: sale?.orderNo ?? ''
-    })
+    try {
+      await db.quoteOrders.update(quoteId, {
+        status: 'converted',
+        convertedSaleOrderId: res.orderId,
+        convertedSaleNo: sale?.orderNo ?? ''
+      })
+    } catch (e: any) {
+      // V2.1-2.32：销售单已建成但报价单回填失败时必须提示——
+      // 原来异常直接穿出去无任何提示，用户以为「没转成」，去列表里找一张
+      // 根本不存在的已转单（孤儿单 BJ20260924-114 就是这么产生的观感来源之一）
+      console.error('[quotes] 转单回填报价单状态失败', e)
+      return {
+        ok: false,
+        message: `销售单 ${sale?.orderNo ?? ''} 已创建，但报价单状态回填失败：${e?.message ?? '请重试'}。请勿重复转换，联系管理员核查`
+      }
+    }
     await writeLog(
       salesId,
       AUDIT_ACTIONS.QUOTE_CONVERT,

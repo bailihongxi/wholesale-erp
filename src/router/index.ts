@@ -8,7 +8,20 @@ import { touchSession } from '../utils/loginGuard'
 // 导致老板点「采购管理 / 销售管理 / 供应商 / 财务管理」会被守卫弹回工作台）。
 
 const routes = [
-  { path: '/', redirect: '/login' },
+  {
+    path: '/',
+    // V2.1-2.32：按登录态分流。原来无条件打到 /login，已登录用户从桌面图标
+    // 重进系统会先看到登录页再被弹回工作台（闪屏观感的来源之一）。
+    // 注意：redirect 阶段守卫还没跑 restoreSession，所以冷启动有快照时
+    // 会先落 /login，再由守卫（to.path==='/login' 分支）送回工作台，最终效果正确。
+    redirect: () => {
+      const userStore = useUserStore()
+      const role = userStore.role
+      return userStore.isLoggedIn && role
+        ? userStore.homeRouteForRole(role)
+        : '/login'
+    }
+  },
   {
     path: '/login',
     name: 'Login',
@@ -98,7 +111,16 @@ router.beforeEach(async (to) => {
     // 活跃使用期间滑动续期：每次导航都顺延 7 天，闲置满 7 天才需重新登录
     touchSession()
   }
-  if (to.path === '/login') return true
+  if (to.path === '/login') {
+    // V2.1-2.32：已登录访问登录页直接送回角色工作台。
+    // 原来无条件放行，登录页上没有任何「已登录跳转」逻辑，
+    // 已登录用户每次进来都要先看一眼登录页（重进系统闪屏的另一半根因）。
+    // role 为空时放行登录页，避免 homeRouteForRole 返回 /login 造成死循环。
+    const role = userStore.role
+    return userStore.isLoggedIn && role
+      ? userStore.homeRouteForRole(role)
+      : true
+  }
   if (!userStore.isLoggedIn) return '/login'
 
   const role = userStore.role as string

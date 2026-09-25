@@ -284,7 +284,8 @@
         <h4 class="block-title">报价明细（{{ detailItems.length }}）</h4>
         <table v-if="detailItems.length" class="data-table">
           <thead>
-            <tr><th>#</th><th>商品名称</th><th>单位</th><th class="num">数量</th><th class="num">报价</th><th class="num">金额</th></tr>
+            <!-- V2.1-2.32：库存列仅非经销商显示（老板拍板） -->
+            <tr><th>#</th><th>商品名称</th><th>单位</th><th class="num">数量</th><th v-if="!isDealer" class="num">库存</th><th class="num">报价</th><th class="num">金额</th></tr>
           </thead>
           <tbody>
             <tr v-for="(it, i) in detailItems" :key="i">
@@ -292,13 +293,14 @@
               <td>{{ nameOf(it.productId) }}</td>
               <td>{{ unitOf(it.productId) }}</td>
               <td class="num">{{ it.quantity }}</td>
+              <td v-if="!isDealer" class="num" :class="stockClass(it.productId)">{{ stockText(it.productId) }}</td>
               <td class="num">¥{{ money(it.price) }}</td>
               <td class="num">¥{{ money(it.subtotal) }}</td>
             </tr>
           </tbody>
           <tfoot v-if="detailItems.length">
             <tr>
-              <td colspan="4" class="total-label">合计</td>
+              <td :colspan="isDealer ? 4 : 5" class="total-label">合计</td>
               <td class="num"></td>
               <td class="num"><b>¥{{ money(quote?.totalAmount ?? 0) }}</b></td>
             </tr>
@@ -675,8 +677,9 @@ async function onSaveEdit(): Promise<void> {
 const detailLoading = ref(false)
 
 async function openDetail(id: number): Promise<void> {
-  // 记住当前详情id，刷新后自动回到详情
-  sessionStorage.setItem('sales_quote_detail_id', String(id))
+  // V2.1-2.32：不再把详情 id 写进 sessionStorage。
+  // 原来的「刷新后自动恢复详情」有一个副作用：下拉误触进过一次明细后，
+  // 下次进系统还会自己弹开那张明细，放大了误触的困扰（误触本身已在 AppLayout 全局拦截）。
   // 立即显示加载状态，给用户点击反馈
   detailLoading.value = true
   mode.value = 'detail'  // 先切到详情模式，显示加载中的骨架屏
@@ -703,9 +706,34 @@ async function openDetail(id: number): Promise<void> {
     detailItems.value = items
     // 用全局商品缓存，不用再拉商品表了
     productMap.value = {}
+    // V2.1-2.32：明细显示当前库存（老板拍板：经销商不可见，员工/管理员/老板可见）。
+    // stockOf 按 id 批量取（1 个请求，无 N+1）；fire-and-forget 单独拉、响应式补上，
+    // 不增加明细显示的等待。口径与选商品弹窗一致 = 全部库位合计。
+    if (!isDealer.value) {
+      stockMap.value = {}
+      productStore
+        .stockOf(items.map(i => i.productId))
+        .then(m => { stockMap.value = m })
+        .catch(() => { stockMap.value = {} })
+    } else {
+      stockMap.value = {}
+    }
   } finally {
     detailLoading.value = false
   }
+}
+
+/** 明细当前库存（productId → 全库位合计）。经销商恒为空对象 → 界面不显示该列 */
+const stockMap = ref<Record<number, number>>({})
+
+function stockText(id: number): string {
+  const n = stockMap.value[id]
+  return n === undefined ? '…' : String(n)
+}
+/** 库存配色：无货红 / ≤10 橙 / 正常绿（同 ProductPicker 分级口径） */
+function stockClass(id: number): string {
+  const n = stockMap.value[id] ?? 0
+  return n <= 0 ? 'stock-out' : n <= 10 ? 'stock-low' : 'stock-ok'
 }
 
 
@@ -719,7 +747,9 @@ const detailCards = computed<ItemCardRow[]>(() =>
     unit: unitOf(it.productId),
     qty: it.quantity,
     price: it.price,
-    amount: it.subtotal
+    amount: it.subtotal,
+    // V2.1-2.32：非经销商在卡片里带一行当前库存（经销商不可见）
+    note: isDealer.value ? undefined : `库存 ${stockText(it.productId)}`
   }))
 )
 function fmtDate(s: string): string { return s ? s.slice(0, 10) : '-' }
@@ -825,15 +855,8 @@ async function openPreview(): Promise<void> {
 function go(p: string): void { router.push(p) }
 
 onMounted(async () => {
-  // 刷新页面后，如果之前在详情页，自动恢复详情
-  const savedId = sessionStorage.getItem('sales_quote_detail_id')
-  if (savedId && mode.value === 'list') {
-    const id = Number(savedId)
-    if (id) {
-      await openDetail(id)
-      return
-    }
-  }
+  // V2.1-2.32：删掉了「sessionStorage 恢复详情」——它会把误触打开的明细
+  // 在下次进系统时再弹一次；防误触后只有真实点击才会进详情，无需恢复。
   // 经销商只看报价，不需要加载商品分类等其他数据
   if (isDealer.value) {
     customers.value = []
@@ -1040,4 +1063,9 @@ useQuoteRealtime({
 .quote-card {
   position: relative;
 }
+
+/* 明细库存列配色（V2.1-2.32）：无货红 / 偏低橙 / 正常绿，同 ProductPicker 分级口径 */
+.stock-out { color: #dc2626; font-weight: 600; }
+.stock-low { color: #d97706; font-weight: 600; }
+.stock-ok { color: #16a34a; }
 </style>

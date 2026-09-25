@@ -174,6 +174,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { clearAllListCaches } from '../../composables/useListCache'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -338,6 +339,9 @@ async function handleInbound(): Promise<void> {
   loading.value = false
   if (res.ok) {
     showToast(res.batchNo ? `已生成入库单 ${res.batchNo}` : '入库成功')
+    // 库存/单据状态变了：清掉所有列表页的 30 秒 sessionStorage 缓存，
+    // 否则待收货/入库历史列表最长 30 秒内怎么刷新都是旧数据（2026-09-25 事故）
+    clearAllListCaches()
     await loadOrder()
   } else {
     showToast(res.message)

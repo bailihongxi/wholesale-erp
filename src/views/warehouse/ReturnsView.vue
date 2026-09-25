@@ -149,7 +149,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
-import { useListCache } from '../../composables/useListCache'
+import { useListCache, clearAllListCaches } from '../../composables/useListCache'
 import { showToast } from 'vant'
 import { useSalesStore } from '../../stores/sales'
 import { usePurchaseStore } from '../../stores/purchase'
@@ -242,6 +242,8 @@ async function submit(): Promise<void> {
     : await returnsStore.purchaseReturn({ refOrderId: selOrderId.value, items: payload, operatorId, remark: docRemark.value || undefined, locationId: locationId.value || undefined })
   if (!res.ok) { showToast(res.message); return }
   showToast(`已生成${tab.value === 'sale' ? '销售退货单' : '采购退货单'} ${res.orderNo}`)
+  // 退货影响库存/单据状态：清列表页 30 秒缓存（同入库事故）
+  clearAllListCaches()
   clearLines()
   await loadHistory()
   activeDetail.value = null

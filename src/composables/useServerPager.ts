@@ -3,6 +3,7 @@
  * 数据直接从服务端拉，不做本地缓存，避免编辑/删除后列表数据不同步
  */
 import { ref, computed, watch, onMounted, type Ref, type WatchSource } from 'vue'
+import { showToast } from 'vant'
 import { PAGE_SIZE_LIST, type Pagination } from './usePagination'
 import { useReloadOnActivate } from './useReloadOnActivate'
 
@@ -44,6 +45,14 @@ export function useServerPager<T>(opts: ServerPagerOpts<T>): ServerPager {
       const { rows, total: t } = await opts.loader(page.value, size.value)
       paged.value = rows
       total.value = t
+    } catch (e: any) {
+      // V2.1-2.32：加载失败必须让用户看见。原来无 catch，任何一次网络抖动/
+      // 附属数据（客户、供应商）拉取失败都会静默停在旧列表或空列表——
+      // 「明明有单却查不出来」的观感就是它造成的（同 V2.1-2.26 应收空白事故模式）。
+      console.error('[useServerPager] 列表加载失败', e)
+      try {
+        showToast({ type: 'fail', message: `列表加载失败：${e?.message ?? '网络异常，请重试'}`, duration: 3000 })
+      } catch { /* toast 环境不可用时忽略 */ }
     } finally {
       loading.value = false
     }

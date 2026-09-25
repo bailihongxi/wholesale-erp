@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useResponsive } from '../composables/useResponsive'
 import { useUserStore } from '../stores/user'
@@ -45,6 +45,35 @@ import { useBrand } from '../utils/brand'
 import SideBar from './SideBar.vue'
 import MobileTabBar from './MobileTabBar.vue'
 import MobileTopNav from './MobileTopNav.vue'
+
+// —— 手机端防误触（V2.1-2.32，老板反馈：下拉报价单列表会误进某张明细）——
+// 机制：列表停在顶部时向下拉（橡皮筋/原生下拉手势），滚动容器没有产生位移，
+// 浏览器的「位移大就不合成 click」启发式不触发，touchend 后照常在落点合成 click，
+// 正好命中整卡 @click → 误进明细。
+// 对策：按下→抬起位移超过 10px 就视为滚动手势，在 touchend 上 preventDefault
+// 拦掉本次合成 click。监听挂在 document 捕获段，全站所有列表页一次生效。
+let guardTouchX = 0
+let guardTouchY = 0
+function onGuardTouchStart(e: TouchEvent): void {
+  const t = e.touches[0]
+  guardTouchX = t.clientX
+  guardTouchY = t.clientY
+}
+function onGuardTouchEnd(e: TouchEvent): void {
+  const t = e.changedTouches[0]
+  if (!t) return
+  const dx = Math.abs(t.clientX - guardTouchX)
+  const dy = Math.abs(t.clientY - guardTouchY)
+  if (dx > 10 || dy > 10) e.preventDefault()
+}
+onMounted(() => {
+  document.addEventListener('touchstart', onGuardTouchStart, { passive: true, capture: true })
+  document.addEventListener('touchend', onGuardTouchEnd, { passive: false, capture: true })
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('touchstart', onGuardTouchStart, { capture: true })
+  document.removeEventListener('touchend', onGuardTouchEnd, { capture: true })
+})
 
 const { isMobile, isDesktop } = useResponsive()
 const userStore = useUserStore()
@@ -172,6 +201,9 @@ function handleLogout(): void {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  /* 手机端列表顶部下拉时不产生回弹/原生下拉（V2.1-2.32 防误触配套）：
+     回弹会被浏览器判定为「页面没滚动」，导致 touchend 合成 click 误进明细 */
+  overscroll-behavior: contain;
 }
 .content.with-tabbar {
   padding-bottom: 76px;

@@ -255,7 +255,7 @@ import TablePager from '../../components/TablePager.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useResponsive } from '../../composables/useResponsive'
-import { useListCache } from '../../composables/useListCache'
+import { useListCache, clearAllListCaches } from '../../composables/useListCache'
 import { showConfirmDialog, showToast } from 'vant'
 import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
@@ -397,9 +397,10 @@ async function submit(): Promise<void> {
   saving.value = false
   showToast(res.message)
   if (res.ok) {
+    // 记一笔影响收支流水：清列表页 30 秒缓存（同入库事故）
+    clearAllListCaches()
     lastNo.value = res.orderNo ?? ''
     resetForm()
-    lastNo.value = res.orderNo ?? ''
     await reload()
   }
 }
@@ -415,7 +416,7 @@ async function remove(r: LedgerEntry): Promise<void> {
   }
   const res = await financeStore.deleteLedger(r.id!, userStore.currentUser?.id ?? 1)
   showToast(res.message)
-  if (res.ok) await reload()
+  if (res.ok) { clearAllListCaches(); await reload() }
 }
 
 function clearFilter(): void {

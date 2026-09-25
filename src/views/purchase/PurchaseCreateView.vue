@@ -121,6 +121,7 @@ import { usePurchaseStore } from '../../stores/purchase'
 import { useProductStore } from '../../stores/product'
 import { useUserStore } from '../../stores/user'
 import { usePermission } from '../../composables/usePermission'
+import { clearAllListCaches } from '../../composables/useListCache'
 import type { Product, Supplier } from '../../types'
 
 const router = useRouter()
@@ -210,6 +211,8 @@ async function handleSubmit(): Promise<void> {
     })
     if (res.ok) {
       showToast('采购单创建成功')
+      // 新采购单要让「待收货」等列表立即可见：清列表页 30 秒缓存（同入库事故）
+      clearAllListCaches()
       router.push('/purchase/orders')
     } else {
       showToast(res.message)

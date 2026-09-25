@@ -8,12 +8,14 @@ export const useFinanceStore = defineStore('finance', () => {
   // ===== 应收：客户欠款 =====
   // includeSettled=false（默认）只返回还有余额的应收；
   // 传 true 则返回全部销售单（含已结清），供财务查看完整历史。
-  async function listReceivables(includeSettled = false) {
+  // paysAll：调用方若已拉过 payments 全表（如对账页 loadAll），传进来复用，
+  // 避免同一页面对 payments 表重复全量拉取（V2.1-2.32 提速）。
+  async function listReceivables(includeSettled = false, paysAll?: Array<{ type: string; refOrderId: number; amount: number }>) {
     const orders = await db.saleOrders.toArray()
     // 收付款流水一次性取回后按单据聚合。
     // 原来写法是「每个订单一次 payments 请求」，500 单 = 500 次往返（N+1），
     // 订单一多这页就会卡住；且 payments 表若没数据会直接抛错导致整页空白。
-    const pays = await db.payments.toArray()
+    const pays = paysAll ?? await db.payments.toArray()
     const agg = new Map<number, { receive: number; refund: number }>()
     for (const p of pays) {
       if (p.type !== 'receive' && p.type !== 'refund') continue
@@ -47,10 +49,11 @@ export const useFinanceStore = defineStore('finance', () => {
   }
 
   // ===== 应付：欠供应商 =====
-  async function listPayables(includeSettled = false) {
+  // paysAll：同 listReceivables，复用调用方已拉取的 payments 全表
+  async function listPayables(includeSettled = false, paysAll?: Array<{ type: string; refOrderId: number; amount: number }>) {
     const orders = await db.purchaseOrders.toArray()
     // 同 listReceivables：一次性取回流水再聚合，避免每单一请求
-    const pays = await db.payments.toArray()
+    const pays = paysAll ?? await db.payments.toArray()
     const agg = new Map<number, { pay: number; credit: number }>()
     for (const p of pays) {
       if (p.type !== 'pay' && p.type !== 'supplier_credit') continue
@@ -88,13 +91,17 @@ export const useFinanceStore = defineStore('finance', () => {
   // ===== 收付款流水（财务的完整历史痕迹） =====
   // 每笔收款/付款登记都会写入 payments，这里把流水与单据、往来单位、
   // 操作人关联起来，让财务能逐笔回查，而不是只看到一个余额数字。
-  async function listPaymentHistory(): Promise<PaymentHistoryRow[]> {
-    const payments = await db.payments.toArray()
-    const saleOrders = await db.saleOrders.toArray()
-    const purchaseOrders = await db.purchaseOrders.toArray()
-    const customers = await db.customers.toArray()
-    const suppliers = await db.suppliers.toArray()
-    const users = await db.users.toArray()
+  async function listPaymentHistory(paysAll?: Array<{ type: string; refOrderId: number; amount: number; payDate: string; counterpartyId: number; operatorId: number; remark?: string; id?: number }>): Promise<PaymentHistoryRow[]> {
+    // V2.1-2.32：六张表原来串行 await，弱网下一次历史加载要串六趟；
+    // 改为并行，且 payments 可复用调用方已拉的全表
+    const [payments, saleOrders, purchaseOrders, customers, suppliers, users] = await Promise.all([
+      paysAll ? Promise.resolve(paysAll as any[]) : db.payments.toArray(),
+      db.saleOrders.toArray(),
+      db.purchaseOrders.toArray(),
+      db.customers.toArray(),
+      db.suppliers.toArray(),
+      db.users.toArray(),
+    ])
 
     const saleMap = new Map(saleOrders.map(o => [o.id!, o.orderNo]))
     const purchaseMap = new Map(purchaseOrders.map(o => [o.id!, o.orderNo]))
@@ -128,7 +135,7 @@ export const useFinanceStore = defineStore('finance', () => {
     amount: number
     operatorId: number
     remark: string
-  }): Promise<{ ok: boolean; message: string }> {
+  }): Promise<{ ok: boolean; message: string; paid?: number }> {
     const order = await db.saleOrders.get(data.orderId)
     if (!order) return { ok: false, message: '销售单不存在' }
     await db.payments.add({
@@ -150,7 +157,8 @@ export const useFinanceStore = defineStore('finance', () => {
       AUDIT_ACTIONS.PAYMENT_RECEIVE,
       `销售单 ${order.orderNo} 收款 ¥${data.amount}（当前状态：${status}）`
     )
-    return { ok: true, message: '收款登记成功' }
+    // paid：登记后的已收合计，供调用方直接弹「已登记收款 ¥x，已收合计 ¥y」（V2.1-2.32）
+    return { ok: true, message: '收款登记成功', paid: received }
   }
 
   async function recordPay(data: {
@@ -158,7 +166,7 @@ export const useFinanceStore = defineStore('finance', () => {
     amount: number
     operatorId: number
     remark: string
-  }): Promise<{ ok: boolean; message: string }> {
+  }): Promise<{ ok: boolean; message: string; paid?: number }> {
     const order = await db.purchaseOrders.get(data.orderId)
     if (!order) return { ok: false, message: '采购单不存在' }
     await db.payments.add({
@@ -179,7 +187,8 @@ export const useFinanceStore = defineStore('finance', () => {
       AUDIT_ACTIONS.PAYMENT_PAY,
       `采购单 ${order.orderNo} 付款 ¥${data.amount}（当前状态：${status}）`
     )
-    return { ok: true, message: '付款登记成功' }
+    // paid：登记后的已付合计，供调用方直接弹「已登记付款 ¥x，已付合计 ¥y」（V2.1-2.32）
+    return { ok: true, message: '付款登记成功', paid }
   }
 
   // ===== 毛利统计 =====

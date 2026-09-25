@@ -179,6 +179,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { clearAllListCaches } from '../../composables/useListCache'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { useSalesStore } from '../../stores/sales'
@@ -368,6 +369,8 @@ async function handleOutbound(): Promise<void> {
   loading.value = false
   if (res.ok) {
     showToast(res.batchNo ? `已生成出库单 ${res.batchNo}` : '出库成功')
+    // 清列表页 30 秒缓存：否则出库后待发货/出库历史最长 30 秒都是旧数据（同入库事故）
+    clearAllListCaches()
     await loadOrder()
   } else {
     showToast(res.message)

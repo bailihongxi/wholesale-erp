@@ -2739,3 +2739,47 @@ V2.1-2.30 上线后，用手机视口实机跑 `/boss/products` 时发现：分�
 - `tests/pagination-20.test.ts` 加 2 例把缺口焊死：
   「源码里不得出现非 20 的 `pageSize`/`size` 字面量」「`TablePager.vue` 不得保留每页条数下拉后门」
 - 版本号：V2.1-2.31（package.json 2.30.1 / SW erp-2.30.1）
+
+---
+
+## V2.1-2.32 · 六项体验修复（2026-09-25 老板反馈清单，全部按推荐方案落地）
+
+> 2.31 未单独部署，与本版一起上线。
+
+### ① 已转销售单的报价单「查不出来」
+- 实测数据没丢（BJ20260925-243 ↔ XS20260925-681 两侧都在）；观感来自三层：
+  useServerPager 加载失败静默停旧列表（无 catch）／孤儿单 BJ20260924-114 指向已删销售单 ／旧 bundle
+- 修复：`useServerPager.load` 加 catch + fail toast；`convertToSale` 回填报错改提示（防误判重复转换）；
+  孤儿单 BJ20260924-114 已退回「已报价 sent」并清空关联（云端直改）
+
+### ② 手机端登录闪屏（先跳主页再跳登录 / 重进闪屏）
+- 根因：App.vue 挂载即放行渲染，首次导航未确认时 route.meta 为空 → 先渲染 AppLayout 空壳；
+  已登录访问 /login 无人送回工作台
+- 修复：App.vue 等 `router.isReady()` 再放行（品牌启动页兜住，3 秒提示网络慢，8 秒绝对兜底）；
+  `/` redirect 按登录态分流；守卫对已登录访问 /login 送回 homeRouteForRole
+
+### ③ 入库后收货单列表要刷四次等 30 秒
+- 根因：`useListCache` 30 秒 sessionStorage 缓存在写操作成功后没人清（30s 就是 CACHE_DURATION）
+- 修复：`clearAllListCaches()` 统一清除，挂到六个写入口：入库 / 出库 / 退货 / 记一笔（保存+删除）/
+  登记收付款（含删除付款）/ 新建采购单
+
+### ④ 报价单明细显示库存（非经销商）
+- `stockOf` 按 id 批量 1 请求（无 N+1），fire-and-forget 不阻塞明细渲染；
+  电脑端加「库存」列、手机端卡片加 note 行；无货红 / ≤10 橙 / 正常绿；
+  经销商复用 isDealer 不显示不拉取
+
+### ⑤ 手机端下拉列表误进明细
+- 机制：顶部下拉时页面无位移 → 浏览器照常合成 click 命中整卡 @click
+- 修复：AppLayout 挂 document 捕获段 touchstart/touchend，位移>10px 拦截合成 click；
+  `.content` 加 `overscroll-behavior: contain`；删掉报价单 sessionStorage 自动弹详情
+
+### ⑥ 登记付款慢 + 无提示易连点
+- 根因：确认后 12~15 次串行往返（payments 全表拉 3 次）、无 loading 无防重无 toast
+- 修复：submittingPayment 防重 + 确认/取消按钮禁用；showLoadingToast「正在登记付款…」→
+  成功「已登记付款 ¥x，已付合计 ¥y」（口径同「已增加数量，现为xxx」）；失败必弹提示；
+  loadAll 五组请求并行 + payments 全表复用只拉一次；listPaymentHistory 六表并行；
+  recordPay/recordReceive 返回 paid
+
+### 测试与版本
+- 新增 `tests/ux-fixes-v232.test.ts`（10 例静态回归锁）
+- 版本号：V2.1-2.32（package.json 2.31.1 / SW erp-2.31.1）
