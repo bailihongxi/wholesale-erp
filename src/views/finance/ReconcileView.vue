@@ -257,11 +257,18 @@ async function reload(): Promise<void> {
   try {
     await loadAll()
   } catch (e: any) {
-    // 取数失败必须让用户看见，不能停在空列表里不明不白（2026-09-25 应收应付空白事故的教训）
-    loading.value = false
-    const { showToast } = await import('vant')
-    showToast({ type: 'fail', message: `数据加载失败：${e?.message ?? '请检查网络'}`, duration: 3000 })
+    // 取数失败必须让用户看见，不能停在空白列表里不明不白（2026-09-25 应收应付空白事故的教训）
     console.error('[ReconcileView] 加载失败', e)
+    // 这里刻意不 await：动态引入本身失败也不能连累 loading 复位
+    import('vant')
+      .then(({ showToast }) => {
+        showToast({ type: 'fail', message: `数据加载失败：${e?.message ?? '请检查网络'}`, duration: 3000 })
+      })
+      .catch(() => {})
+  } finally {
+    // ⚠️ loading 必须放在 finally：放 catch 里会导致「成功路径永不复位」，
+    // 页面永远停在骨架屏（2026-09-25 线上复验发现，V2.1-2.26 引入的回归）
+    loading.value = false
   }
 }
 

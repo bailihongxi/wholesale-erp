@@ -2561,3 +2561,44 @@ await db.payments.filter(p => p.refOrderId === o.id && ...).toArray()
 所以「应收看不见销售单」目前是**没有数据**，不是 bug；等有销售单后会自动显示。
 
 - 版本号：V2.1-2.26（package.json 2.25.1 / SW erp-2.25.1）
+
+---
+
+## 六十五、V2.1-2.27 · 对账页永远停在骨架屏（**V2.1-2.26 引入的回归**）
+
+### 现象
+V2.1-2.26 部署后线上复验：财务对账页「应收」「应付」两个 Tab 都是**空白大卡片**，
+既没有单据列表，也没有「没有符合条件的应付」空态、没有搜索栏和「共 X 笔」汇总行。
+
+### 根因
+V2.1-2.26 给 `ReconcileView.reload()` 加 try/catch 时，把复位语句挪错了位置：
+
+```ts
+// 原写法（正确）
+try { await loadAll() } finally { loading.value = false }
+
+// V2.1-2.26 误写成（只在失败路径复位）
+try { await loadAll() } catch (e) { loading.value = false; showToast(...) }
+```
+
+`loading` 初值为 `true`，成功路径不再复位 → 模板里 `v-if="loading"` 的 `LoadingBlock`
+骨架屏常驻，`v-else-if` 的真实内容永远不渲染。
+**取数其实已经成功**（这正是本轮要修的 bug 已修好的证据），只是页面渲染不出来，
+看起来和「查不到单据」一模一样 —— 极具欺骗性。
+
+### 改动
+`views/finance/ReconcileView.vue`：恢复 `finally { loading.value = false }`；
+catch 里保留 console.error + toast，但把 toast 改成不 `await` 的 `import('vant').then(...)`，
+避免动态引入本身失败时连累 loading 复位。
+
+### 测试
+新增 `tests/reconcile-loading-reset.test.ts`（2 例）：挂载对账页后
+① 骨架屏必须消失且单据 / 供应商名 / `¥3,260` 真的渲染出来；
+② 无单据时也要退出骨架屏并显示空态文案。
+连同 `finance-reconcile-balance` 8 例、`cloud-db-filter-compat` 2 例，共 12 例全绿。
+
+### 教训
+改「异常处理」时，凡是把语句从一个分支挪到另一个分支，都必须回看**正常路径**是否还成立。
+`loading` 这类 UI 复位标志位一律放 `finally`，不放 `catch`。
+
+- 版本号：V2.1-2.27（package.json 2.26.1 / SW erp-2.26.1）
