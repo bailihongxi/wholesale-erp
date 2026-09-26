@@ -5,9 +5,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
   // 老板经营看板
   async function getBossSummary() {
     const today = new Date().toDateString()
-    const [saleOrders, purchaseOrders] = await Promise.all([
+
+    // 库存预警与订单统计互不依赖，一起并发（C 档 V2.1-2.34-C）
+    const { useProductStore } = await import('./product')
+    const productStore = useProductStore()
+    const [saleOrders, purchaseOrders, lowStock] = await Promise.all([
       db.saleOrders.toArray(),
       db.purchaseOrders.toArray(),
+      productStore.getLowStockProducts()
     ])
 
     let todaySales = 0
@@ -26,11 +31,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       }
     }
 
-    // 低库存预警
-    const { useProductStore } = await import('./product')
-    const productStore = useProductStore()
-    const lowStock = await productStore.getLowStockProducts()
-
+    // 低库存预警（与上面并发已取回）
     return {
       todaySales,
       todayPurchases,
@@ -62,17 +63,36 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   // 财务工作台待办
+  //
+  // C 档（V2.1-2.34-C）提速：应收、应付都需要 payments 全表，原来各自内部拉一次，
+  // 同一屏对同一张表拉两遍。现在只拉一次再同时喂给两边（沿用 listXxx 的 paysAll 约定）。
   async function getFinanceTodo() {
     const { useFinanceStore } = await import('./finance')
     const financeStore = useFinanceStore()
-    const receivables = await financeStore.listReceivables()
-    const payables = await financeStore.listPayables()
+    const pays = await db.payments.toArray()
+    const [receivables, payables] = await Promise.all([
+      financeStore.listReceivables(false, pays),
+      financeStore.listPayables(false, pays)
+    ])
     const totalReceivable = receivables.reduce((s, r) => s + r.balance, 0)
     const totalPayable = payables.reduce((s, p) => s + p.balance, 0)
     return { totalReceivable, totalPayable }
   }
 
-  // 老板经营看板（真实汇总数据）
+  // ==================== 老板经营看板（真实汇总数据）====================
+  //
+  // ⚠️ C 档（V2.1-2.34-C）提速前的串行链路：
+  //   ① saleOrders/purchaseOrders（并行 2 请求）
+  //   ② saleOrderItems 全表（等 ①）
+  //   ③ 商品 bulkGet（等 ②）
+  //   ④ listReceivables → 又拉一次 saleOrders + payments
+  //   ⑤ listPayables   → 又拉一次 purchaseOrders + payments
+  //   ⑥ 库存预警       → 商品窄表 + stock 全表
+  //   六段串行 ≈ 8~10 次往返（新加坡节点每次 200~400ms）。
+  //
+  // 现在拆成两轮 Promise.all：第一轮把所有互不依赖的原材料一次性并发拉齐，
+  // 第二轮把原料喂给 listReceivables/listPayables 做纯内存聚合（0 请求）。
+  // 全程不改动任何一个计算口径 —— 只是把「等待」从串行改成并行，把重复拉的表改成复用。
   async function getBossDashboard() {
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -82,9 +102,13 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const { useFinanceStore } = await import('./finance')
     const financeStore = useFinanceStore()
 
-    const [saleOrders, purchaseOrders] = await Promise.all([
+    // —— 第一轮：原材料全部并发 ——
+    const [saleOrders, purchaseOrders, saleItems, pays, lowStock] = await Promise.all([
       db.saleOrders.toArray(),
       db.purchaseOrders.toArray(),
+      db.saleOrderItems.toArray(),
+      db.payments.toArray(),
+      productStore.getLowStockProducts()
     ])
 
     // 本月销售额
@@ -102,7 +126,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const monthOrderIds = new Set(
       saleOrders.filter(so => new Date(so.orderDate) >= monthStart).map(so => so.id!)
     )
-    const saleItems = await db.saleOrderItems.toArray()
     const monthItems = monthOrderIds.size
       ? saleItems.filter(it => monthOrderIds.has(it.saleOrderId))
       : []
@@ -117,14 +140,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
       }
     }
 
-    // 应收 / 应付
-    const receivables = await financeStore.listReceivables()
-    const payables = await financeStore.listPayables()
+    // —— 第二轮：纯内存聚合，零额外请求 ——
+    // 订单表与流水表都在第一轮拉齐了，直接喂进去，避免同一张大表被拉第二遍。
+    const [receivables, payables] = await Promise.all([
+      financeStore.listReceivables(false, pays, saleOrders),
+      financeStore.listPayables(false, pays, purchaseOrders)
+    ])
     const receivableTotal = receivables.reduce((s, r) => s + r.balance, 0)
     const payableTotal = payables.reduce((s, p) => s + p.balance, 0)
-
-    // 库存预警
-    const lowStock = await productStore.getLowStockProducts()
 
     // 今日待办
     const pendingInbound = purchaseOrders.filter(o => o.status === 'pending' || o.status === 'partial').length

@@ -192,11 +192,16 @@ const pickerRows = computed<PickerRow[]>(() =>
 )
 
 async function reloadMaps(): Promise<void> {
-  fromMap.value = await inv.locationStockMap(fromLoc.value)
-  toMap.value = await inv.locationStockMap(toLoc.value)
+  // 两个库位的库存互不依赖，一次并发（C 档 V2.1-2.34-C）
+  const [from, to] = await Promise.all([
+    inv.locationStockMap(fromLoc.value),
+    inv.locationStockMap(toLoc.value)
+  ])
+  fromMap.value = from
+  toMap.value = to
   for (const l of lines.value) {
-    l.fromStock = fromMap.value[l.productId] ?? 0
-    l.toStock = toMap.value[l.productId] ?? 0
+    l.fromStock = from[l.productId] ?? 0
+    l.toStock = to[l.productId] ?? 0
   }
 }
 
@@ -225,8 +230,8 @@ async function submit(): Promise<void> {
   if (!res.ok) { showToast(res.message); return }
   showToast(`已生成调拨单 ${res.orderNo}`)
   lines.value = []
-  await reloadMaps()
-  await loadHistory()
+  // 两库位库存与历史列表互不依赖，一起并发（C 档 V2.1-2.34-C）
+  await Promise.all([reloadMaps(), loadHistory()])
   tab.value = 'history'
 }
 
@@ -235,18 +240,25 @@ async function loadHistory(): Promise<void> {
 }
 function showDetail(d: TransferRow): void { activeDetail.value = d }
 
+// C 档（V2.1-2.34-C）：原来 5 步串行 await。同步、库位、商品、调拨历史互不依赖，
+// 改为一次并发；reloadMaps 必须在默认库房确定之后跑，顺序保持原样。
 async function init(): Promise<void> {
-  await inv.syncLocationStock()
-  locations.value = await inv.listLocations()
+  const [, locs, prods, hist] = await Promise.all([
+    inv.syncLocationStock(),
+    inv.listLocations(),
+    productStore.listAll(),
+    inv.listTransfers()
+  ])
+  locations.value = locs
+  history.value = hist
   // 库房由用户自行设定，数量与 id 都不固定：默认「第一个 → 第二个」
   const ids = locations.value.map(l => l.id!).filter(id => id != null)
   if (!ids.includes(fromLoc.value)) fromLoc.value = ids[0] ?? 0
   if (!ids.includes(toLoc.value) || toLoc.value === fromLoc.value) {
     toLoc.value = ids.find(id => id !== fromLoc.value) ?? fromLoc.value
   }
-  products.value = await productStore.listAll()
+  products.value = prods
   await reloadMaps()
-  await loadHistory()
 }
 
 onMounted(init)

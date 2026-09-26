@@ -129,13 +129,21 @@ async function loadDemo(): Promise<void> {
   }
 }
 
+async function refreshAll(): Promise<void> {
+  // 统计、空态判定、初始密码提醒三者互不依赖，并发执行（C 档 V2.1-2.34-C）
+  await Promise.all([refreshDashboard(), refreshEmpty(), loadPwdTip()])
+}
+
+async function loadPwdTip(): Promise<void> {
+  showPwdTip.value = await userStore.usesDefaultPassword()
+}
+
 onMounted(async () => {
   // 首屏统计只做展示，加载失败不应把异常抛到挂载流程之外
   // （数据库被关闭/重置、账号切换等场景都可能让它失败），保持空态即可。
+  // Promise.all 任一项失败都会整体 reject，这里统一兜住，行为与旧版一致。
   try {
-    await refreshDashboard()
-    await refreshEmpty()
-    showPwdTip.value = await userStore.usesDefaultPassword()
+    await refreshAll()
   } catch (e) {
     console.debug('[工作台] 统计加载失败，页面保持空态：', e)
   }
@@ -143,11 +151,11 @@ onMounted(async () => {
 
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(async () => { try { await refreshDashboard(); await refreshEmpty() } catch { /* 保持空态 */ } })
+useReloadOnActivate(async () => { try { await refreshAll() } catch { /* 保持空态 */ } })
 
 /** 改完密码后重新判定，提醒条应立刻消失 */
 async function onPwdChanged(): Promise<void> {
-  showPwdTip.value = await userStore.usesDefaultPassword()
+  await loadPwdTip()
 }
 
 function yuan(n: number): string {

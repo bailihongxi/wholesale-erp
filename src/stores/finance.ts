@@ -10,8 +10,14 @@ export const useFinanceStore = defineStore('finance', () => {
   // 传 true 则返回全部销售单（含已结清），供财务查看完整历史。
   // paysAll：调用方若已拉过 payments 全表（如对账页 loadAll），传进来复用，
   // 避免同一页面对 payments 表重复全量拉取（V2.1-2.32 提速）。
-  async function listReceivables(includeSettled = false, paysAll?: Array<{ type: string; refOrderId: number; amount: number }>) {
-    const orders = await db.saleOrders.toArray()
+  // ordersAll：同理，调用方若已拉过销售单全表（如老板看板），传进来复用，
+  // 避免同一屏对同一张大表拉两遍（V2.1-2.34-C）。两个参数都不传时行为与旧版完全一致。
+  async function listReceivables(
+    includeSettled = false,
+    paysAll?: Array<{ type: string; refOrderId: number; amount: number }>,
+    ordersAll?: Array<{ id?: number; orderNo: string; customerId: number; totalAmount: number; orderDate: string }>
+  ) {
+    const orders = ordersAll ?? await db.saleOrders.toArray()
     // 收付款流水一次性取回后按单据聚合。
     // 原来写法是「每个订单一次 payments 请求」，500 单 = 500 次往返（N+1），
     // 订单一多这页就会卡住；且 payments 表若没数据会直接抛错导致整页空白。
@@ -50,8 +56,13 @@ export const useFinanceStore = defineStore('finance', () => {
 
   // ===== 应付：欠供应商 =====
   // paysAll：同 listReceivables，复用调用方已拉取的 payments 全表
-  async function listPayables(includeSettled = false, paysAll?: Array<{ type: string; refOrderId: number; amount: number }>) {
-    const orders = await db.purchaseOrders.toArray()
+  // ordersAll：同 listReceivables，复用调用方已拉取的采购单全表
+  async function listPayables(
+    includeSettled = false,
+    paysAll?: Array<{ type: string; refOrderId: number; amount: number }>,
+    ordersAll?: Array<{ id?: number; orderNo: string; supplierId: number; totalAmount: number; orderDate: string }>
+  ) {
+    const orders = ordersAll ?? await db.purchaseOrders.toArray()
     // 同 listReceivables：一次性取回流水再聚合，避免每单一请求
     const pays = paysAll ?? await db.payments.toArray()
     const agg = new Map<number, { pay: number; credit: number }>()

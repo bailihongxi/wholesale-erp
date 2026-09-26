@@ -74,17 +74,23 @@ function statusText(s: string): string {
 function go(p: string): void { router.push(p) }
 
 async function reload(): Promise<void> {
-  customers.value = await salesStore.listCustomers()
-  customerCount.value = customers.value.length
-  pendingOutbound.value = await salesStore.listPendingOutbound()
+  // 四份数据互不依赖：原来逐个 await 是 4 段串行往返，现在一次并发（C 档 V2.1-2.34-C）
+  const [custs, pending, all, receivables] = await Promise.all([
+    salesStore.listCustomers(),
+    salesStore.listPendingOutbound(),
+    salesStore.listOrders(),
+    financeStore.listReceivables()
+  ])
 
-  const all = await salesStore.listOrders()
+  customers.value = custs
+  customerCount.value = custs.length
+  pendingOutbound.value = pending
+
   const prefix = new Date().toISOString().slice(0, 7)
   monthSales.value = all
     .filter(o => (o.orderDate ?? '').slice(0, 7) === prefix)
     .reduce((s, o) => s + o.totalAmount, 0)
 
-  const receivables = await financeStore.listReceivables()
   unreceivedAmount.value = receivables.reduce((s, r) => s + r.balance, 0)
 }
 

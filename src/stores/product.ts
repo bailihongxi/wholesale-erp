@@ -48,8 +48,19 @@ export const useProductStore = defineStore('product', () => {
   }
 
   /**
-   * 服务端分页查询（商品档案等大表首屏专用）：只拉当前页 + 总数，
-   * 支持状态/分类等值过滤与品牌/型号/分类/规格模糊搜索。无论数据多大首屏都只拉几十行。
+   * 商品档案的服务端分页查询（V2.1-2.34 C 档）。
+   *
+   * 以前商品档案页是「进页面先 toArray() 拉全表（6281 行 = 14 个请求）再前端过滤」，
+   * 首屏要等好几秒；现在只拉当前页 20 行 + 总数，**无论数据多少首屏都是 1 个请求**。
+   *
+   * 搜索口径与「选商品」弹窗完全一致（见 keywordCond）：按空格切词、词内 AND、字段间 OR，
+   * 字段为 brand / model / category / spec。所以「海尔 H9」能命中，而不是只按整串匹配。
+   *
+   * ⚠️ 固定按 `id` 倒序：翻页必须有**稳定**顺序，否则同一 createdAt 的批量导入商品
+   * 会在页与页之间重复或漏掉（排序相同 => 服务端每次返回顺序可能不同）。
+   * id 是自增的，倒序也就是「新加的在前」，与原「createdAt 倒序」观感一致。
+   *
+   * @param status '' = 全部状态（档案页要同时看得到在售与停售）
    */
   async function listPage(opts: {
     page?: number
@@ -58,34 +69,20 @@ export const useProductStore = defineStore('product', () => {
     category?: string
     keyword?: string
   }): Promise<{ rows: Product[]; total: number }> {
-    const page = opts.page ?? 1
-    const pageSize = opts.pageSize ?? PAGE_SIZE_PRODUCT
-    if (USE_CLOUD) {
-      return (db.products as any).queryPage({
-        page, pageSize,
-        eq: {
-          ...(opts.status ? { status: opts.status } : {}),
-          ...(opts.category ? { category: opts.category } : {}),
-        },
-        search: opts.keyword ? { fields: ['brand', 'model', 'category', 'spec'], keyword: opts.keyword } : undefined,
-      })
+    const cond = keywordCond(opts.keyword ?? '')
+    const pageOpts = {
+      page: Math.max(1, opts.page ?? 1),
+      pageSize: opts.pageSize ?? PAGE_SIZE_PRODUCT,
+      eq: {
+        ...(opts.status ? { status: opts.status } : {}),
+        ...(opts.category ? { category: opts.category } : {}),
+      },
+      orderBy: 'id',
+      ascending: false,
+      orExpr: cond.orExpr,
+      extraFilter: cond.extraFilter,
     }
-    // 本地（测试 / 离线）模式：整表读进内存后过滤 + 切片，行为与服务端分页一致
-    let all = await db.products.toArray()
-    if (opts.status) all = all.filter(p => p.status === opts.status)
-    if (opts.category) all = all.filter(p => p.category === opts.category)
-    if (opts.keyword) {
-      const kw = opts.keyword.trim().toLowerCase()
-      all = all.filter(p =>
-        p.brand.toLowerCase().includes(kw) ||
-        p.model.toLowerCase().includes(kw) ||
-        (p.category ?? '').toLowerCase().includes(kw) ||
-        (p.spec ?? '').toLowerCase().includes(kw) ||
-        `${p.brand} ${p.model}`.toLowerCase().includes(kw)
-      )
-    }
-    const start = (page - 1) * pageSize
-    return { rows: all.slice(start, start + pageSize), total: all.length }
+    return serverPage<Product>(db.products, pageOpts)
   }
 
   /**

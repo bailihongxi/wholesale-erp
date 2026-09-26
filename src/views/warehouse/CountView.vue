@@ -225,23 +225,31 @@ async function submit(): Promise<void> {
   if (!res.ok) { showToast(res.message); return }
   showToast(`已生成盘点单 ${res.orderNo}（盈 ${res.profit} / 亏 ${res.loss}）`)
   lines.value = []
-  await reloadSys()
-  await loadHistory()
+  // 系统库存与历史列表互不依赖，一起并发（C 档 V2.1-2.34-C）
+  await Promise.all([reloadSys(), loadHistory()])
   tab.value = 'history'
 }
 
 async function loadHistory(): Promise<void> { history.value = await inv.listStocktakes() }
 function showDetail(d: StocktakeRow): void { activeDetail.value = d }
 
+// C 档（V2.1-2.34-C）：原来这四步一个接一个串行 await（4~5 段往返）。
+// syncLocationStock / 库位列表 / 商品档案 / 盘点历史彼此没有依赖，改为一次并发；
+// 只有 reloadSys 必须等 locations 拿到、默认库房定下来之后才能跑，保持原来的先后。
 async function init(): Promise<void> {
-  await inv.syncLocationStock()
-  locations.value = await inv.listLocations()
+  const [, locs, prods, hist] = await Promise.all([
+    inv.syncLocationStock(),
+    inv.listLocations(),
+    productStore.listAll(),
+    inv.listStocktakes()
+  ])
+  locations.value = locs
+  history.value = hist
   // 库房由用户自行设定，数量与 id 都不固定：默认盘第一个库房
   const ids = locations.value.map(l => l.id!).filter(id => id != null)
   if (!ids.includes(locId.value)) locId.value = ids[0] ?? 0
-  products.value = await productStore.listAll()
+  products.value = prods
   await reloadSys()
-  await loadHistory()
 }
 
 onMounted(init)

@@ -265,7 +265,6 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
-import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import SearchInput from '../../components/SearchInput.vue'
@@ -276,6 +275,7 @@ import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
 import { PAGE_SIZE_PRODUCT } from '../../composables/usePagination'
+import { useServerPager } from '../../composables/useServerPager'
 import { getPriceRule, calcWholesale, calcRetail, type PriceRule } from '../../utils/priceRule'
 import {
   buildProductCSV, buildProductTemplate, downloadTextFile, csvToProducts,
@@ -317,51 +317,41 @@ const rule = ref<PriceRule>(getPriceRule())
 
 // ---------------------------------------------------------------- 列表数据
 
-const loading = ref(true)
-const page = ref(1)
-const total = ref(0)
-const pageRows = ref<Product[]>([])
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE_PRODUCT)))
-const startIndex = computed(() => (page.value - 1) * PAGE_SIZE_PRODUCT + 1)
-
-// 全量商品加载到内存，搜索直接本地过滤，秒出结果
-const allProducts = ref<Product[]>([])
-
-/** 前端过滤：关键词 + 分类 + 状态 */
-const filteredProducts = computed(() => {
-  let list = allProducts.value
-  // 状态过滤
-  if (status.value) list = list.filter(p => p.status === status.value)
-  // 分类过滤
-  if (category.value) list = list.filter(p => p.category === category.value)
-  // 关键词搜索：匹配商品名称（品牌+型号）、编号、分类
-  const kw = kwDebounced.value.trim().toLowerCase()
-  if (kw) {
-    list = list.filter(p => 
-      (p.brand + p.model).toLowerCase().includes(kw) ||
-      (p.category || '').toLowerCase().includes(kw) ||
-      (p.brand || '').toLowerCase().includes(kw) ||
-      (p.model || '').toLowerCase().includes(kw)
-    )
-  }
-  return list
+/**
+ * V2.1-2.34 C 档：商品档案改成**服务端分页**。
+ *
+ * 以前是「进页面就把 6281 行商品全拉进内存（14 个请求）→ 前端过滤 → 切片」，
+ * 首屏要等好几秒、手机端更明显；现在只拉当前页 20 行 + 总数，
+ * **无论商品有多少，首屏都是 1 个请求**。
+ * 搜索/分类/状态全部下推到服务端，口径与「选商品」弹窗完全一致（词内 AND、字段间 OR）。
+ * 分页粒度仍是定值 PAGE_SIZE_PRODUCT。
+ */
+const pager = useServerPager<Product>({
+  watch: [category, status, kwDebounced],
+  loader: (page, size) => productStore.listPage({
+    page,
+    pageSize: size,
+    status: status.value,
+    category: category.value,
+    keyword: kwDebounced.value.trim(),
+  }),
 })
+const page = pager.page
+const total = pager.total
+const pageRows = pager.paged
+const pageCount = pager.pageCount
+const startIndex = pager.startIndex
+const loading = pager.loading
 
-/** 翻页：从过滤后的结果里取当前页 */
-watch(filteredProducts, () => {
-  total.value = filteredProducts.value.length
-  updatePageRows()
-}, { immediate: true })
+/** 翻页 */
+function onPage(p: number): void { pager.go(p) }
 
-/** 更新当前页显示的数据 + 加载对应库存 */
-async function updatePageRows() {
-  const start = (page.value - 1) * PAGE_SIZE_PRODUCT
-  const end = start + PAGE_SIZE_PRODUCT
-  pageRows.value = filteredProducts.value.slice(start, end)
-  // 加载当前页商品的库存
-  stockMap.value = USE_CLOUD
-    ? await loadStockMap(pageRows.value.map(r => r.id!))
-    : await productStore.stockMap()
+/** 筛选/搜索变化：回到第一页重新拉（搜索框回车与防抖都会走到这里） */
+function onFilterChange(): void { pager.reload() }
+
+/** 写操作（增删改/导入/批量编辑）之后刷新当前页；页码越界时由 go 夹紧 */
+async function reload(): Promise<void> {
+  pager.go(page.value)
 }
 
 /** 当前页商品的库存汇总：按 id 批量查 stock，而非全表 */
@@ -373,26 +363,20 @@ async function loadStockMap(ids: number[]): Promise<Record<number, number>> {
   return m
 }
 
-/** 首次加载：一次性拉全量商品到内存（Dexie本地查询，毫秒级） */
-async function reload(): Promise<void> {
-  loading.value = true
+/**
+ * 每一页数据到位后拉这一页的库存（0~1 个请求，B 档后基本命中缓存）。
+ * 库存拉失败不影响商品列表展示，所以单独 try。
+ */
+async function loadStockForPage(rows: Product[]): Promise<void> {
+  const ids = rows.map(r => r.id!).filter(v => v != null)
+  if (!ids.length) { stockMap.value = {}; return }
   try {
-    allProducts.value = await db.products.toArray()
-    // 按创建时间倒序
-    allProducts.value.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
-  } catch (e: any) {
-    showToast('加载失败：' + (e?.message || '未知错误'))
-  } finally {
-    loading.value = false
+    stockMap.value = USE_CLOUD ? await loadStockMap(ids) : await productStore.stockMap()
+  } catch {
+    stockMap.value = {}
   }
 }
-
-// 筛选 / 搜索变化：回到第一页
-function onFilterChange(): void { page.value = 1; updatePageRows() }
-watch([category, status], onFilterChange)
-watch(kwDebounced, onFilterChange)
-// 翻页
-function onPage(p: number): void { page.value = p; updatePageRows() }
+watch(pageRows, rows => { void loadStockForPage(rows) })
 
 const categoriesList = ref<string[]>([])
 async function loadCategories(): Promise<void> {
@@ -549,20 +533,17 @@ async function doImport(): Promise<void> {
 
 async function exportAll(): Promise<void> {
   const stamp = new Date().toISOString().slice(0, 10)
-  // 导出是显式操作，不在首屏：一次性拉全量再按当前筛选条件过滤
+  // 导出是显式操作，不在首屏：一次性拉全量再按当前筛选条件过滤。
+  // C 档：筛选口径与 listPage 保持一致（词内 AND、字段间 OR），否则「筛出来的」与
+  // 「导出去的」会不一样。
   const all = await productStore.listAll(true)
-  const kw = kwDebounced.value.trim().toLowerCase()
+  const tokens = kwDebounced.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const list = all.filter(p => {
     if (status.value && p.status !== status.value) return false
     if (category.value && p.category !== category.value) return false
-    if (!kw) return true
-    return (
-      p.brand.toLowerCase().includes(kw) ||
-      p.model.toLowerCase().includes(kw) ||
-      (p.category ?? '').toLowerCase().includes(kw) ||
-      (p.spec ?? '').toLowerCase().includes(kw) ||
-      `${p.brand} ${p.model}`.toLowerCase().includes(kw)
-    )
+    if (!tokens.length) return true
+    const fields = [p.brand, p.model, p.category ?? '', p.spec ?? ''].map(v => String(v ?? '').toLowerCase())
+    return tokens.every(t => fields.some(f => f.includes(t)))
   })
   const csv = buildProductCSV(list.map(p => ({
     brand: p.brand, model: p.model, category: p.category, spec: p.spec, unit: p.unit,
@@ -659,9 +640,11 @@ async function doBulkEdit(): Promise<void> {
 
     // 按加价率重算：先批量算出所有要改的，再一次性批量更新
     if (bulk.reprice.on) {
-      const targets = await productStore.listAll(true)
+      // C 档：只按 id 精确取选中的这几个商品（原先 listAll(true) 把整张商品表拉下来再筛）
+      const got = await db.products.bulkGet(selectedIds.value)
       const updates: { id: number; wholesalePrice: number; retailPrice: number }[] = []
-      for (const p of targets.filter(x => selectedIds.value.includes(x.id!))) {
+      for (const p of got) {
+        if (!p) continue
         updates.push({
           id: p.id!,
           wholesalePrice: calcWholesale(p.purchasePrice, rule.value),
@@ -674,10 +657,10 @@ async function doBulkEdit(): Promise<void> {
           wholesalePrice: u.wholesalePrice,
           retailPrice: u.retailPrice
         })
-        // 直接更新内存里的商品，不用全量重新加载
-        const idx = allProducts.value.findIndex(p => p.id === u.id)
+        // 直接更新内存里的当前页商品，不用整表重新加载
+        const idx = pageRows.value.findIndex(p => p.id === u.id)
         if (idx >= 0) {
-          allProducts.value[idx] = { ...allProducts.value[idx], wholesalePrice: u.wholesalePrice, retailPrice: u.retailPrice }
+          pageRows.value[idx] = { ...pageRows.value[idx], wholesalePrice: u.wholesalePrice, retailPrice: u.retailPrice }
         }
       }
     }
@@ -699,11 +682,10 @@ async function doBulkEdit(): Promise<void> {
   }
 }
 
-onMounted(async () => { await Promise.all([reload(), loadCategories()]) })
+onMounted(async () => { await loadCategories() })
 
-// 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
-// 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
-useReloadOnActivate(() => reload())
+// 「回到本页自动刷新」已由 useServerPager 内置（静默后台刷新，不闪白屏），
+// 这里不再单挂 useReloadOnActivate，避免同一页重复拉两次。
 
 // 阻塞弹窗统一规则：点遮罩不关闭；按 ESC 关闭（导入中不响应，避免关掉正在进行的导入）
 function onKeydown(e: KeyboardEvent): void {

@@ -3,6 +3,7 @@ import { db } from '../db'
 import { genQuoteNo } from '../utils/orderNo'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import type { Product, QuoteOrder, QuoteOrderItem, Customer } from '../types'
+import { safeBulkAdd } from '../utils/bulkWrite'
 
 /**
  * 报价单（第二十轮）：客户询价 → 临时报价 → 订单确定后一键转销售单。
@@ -43,18 +44,14 @@ export const useQuotesStore = defineStore('quotes', () => {
       createdAt: now
     }) as number
 
-    for (const item of data.items) {
+    // A2 档：明细一次批量写（原实现逐行 insert，N 行就是 N 次请求）
+    const rows = data.items.map(item => {
       const price = item.price ?? item.product.wholesalePrice
       const subtotal = price * item.quantity
       totalAmount += subtotal
-      await db.quoteOrderItems.add({
-        quoteOrderId: orderId,
-        productId: item.product.id!,
-        quantity: item.quantity,
-        price,
-        subtotal
-      })
-    }
+      return { quoteOrderId: orderId, productId: item.product.id!, quantity: item.quantity, price, subtotal }
+    })
+    await safeBulkAdd(db.quoteOrderItems as any, rows)
     await db.quoteOrders.update(orderId, { totalAmount })
     await writeLog(
       data.salesId,
@@ -100,19 +97,14 @@ export const useQuotesStore = defineStore('quotes', () => {
 
     await db.quoteOrderItems.where('quoteOrderId').equals(quoteId).delete()
     let totalAmount = 0
-    for (const it of items) {
+    const rows = items.map(it => {
       const quantity = Number(it.quantity) || 0
       const price = Number(it.price) || 0
       const subtotal = quantity * price
       totalAmount += subtotal
-      await db.quoteOrderItems.add({
-        quoteOrderId: quoteId,
-        productId: it.productId,
-        quantity,
-        price,
-        subtotal
-      })
-    }
+      return { quoteOrderId: quoteId, productId: it.productId, quantity, price, subtotal }
+    })
+    await safeBulkAdd(db.quoteOrderItems as any, rows)
 
     await db.quoteOrders.update(quoteId, { totalAmount, remark: remark ?? '' })
     await writeLog(

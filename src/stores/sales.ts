@@ -5,6 +5,7 @@ import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { revertQuoteOnOrderDelete } from '../utils/quoteLink'
 import { useInventoryStore } from './inventory'
 import type { Customer, SaleOrder, SaleOrderItem, Product, StockHistoryRow } from '../types'
+import { safeBulkAdd, safeBulkPut } from '../utils/bulkWrite'
 
 export const useSalesStore = defineStore('sales', () => {
   // ===== 客户（全局缓存，所有页面共用） =====
@@ -98,7 +99,7 @@ export const useSalesStore = defineStore('sales', () => {
         isGift
       }
     })
-    await db.saleOrderItems.bulkAdd(itemRows)
+    await safeBulkAdd(db.saleOrderItems as any, itemRows)
     await db.saleOrders.update(orderId, { totalAmount })
     await writeLog(
       data.salesId,
@@ -178,9 +179,11 @@ export const useSalesStore = defineStore('sales', () => {
       if (shippedBefore + actual < item.quantity) allShipped = false
       if (actual > 0) {
         const s = stockMap.get(item.productId)
-        if (s) stockToUpdate.push({ id: s.id!, quantity: s.quantity - actual, updatedAt: now })
+        // A2 档：保留整行字段走 bulkPut（upsert），N 条 update → 1 次；
+        // 与原来只 patch quantity/updatedAt 的最终结果一致
+        if (s) stockToUpdate.push({ ...s, quantity: s.quantity - actual, updatedAt: now })
         const ls = locStockMap.get(item.productId)
-        if (ls) locStockToUpdate.push({ id: ls.id!, quantity: ls.quantity - actual })
+        if (ls) locStockToUpdate.push({ ...ls, quantity: ls.quantity - actual })
         recordsToAdd.push({
           type: 'sale_out', refOrderId: orderId, productId: item.productId,
           quantity: -actual, operatorId, createdAt: now, batchNo, locationId: locId,
@@ -190,9 +193,9 @@ export const useSalesStore = defineStore('sales', () => {
     }
 
     await Promise.all([
-      ...stockToUpdate.map(u => db.stock.update(u.id, { quantity: u.quantity, updatedAt: u.updatedAt })),
-      ...locStockToUpdate.map(u => db.locationStock.update(u.id, { quantity: u.quantity })),
-      recordsToAdd.length ? db.stockRecords.bulkAdd(recordsToAdd) : Promise.resolve(),
+      safeBulkPut(db.stock as any, stockToUpdate),
+      safeBulkPut(db.locationStock as any, locStockToUpdate),
+      safeBulkAdd(db.stockRecords as any, recordsToAdd),
       db.saleOrders.update(orderId, { status: allShipped ? 'completed' : 'partial' }),
     ])
 
@@ -260,7 +263,7 @@ export const useSalesStore = defineStore('sales', () => {
 
     // 删除旧明细，插入新明细
     await db.saleOrderItems.where('saleOrderId').equals(orderId).delete()
-    await db.saleOrderItems.bulkAdd(items.map(it => ({
+    await safeBulkAdd(db.saleOrderItems as any, items.map(it => ({
       saleOrderId: orderId,
       productId: it.productId,
       quantity: it.quantity,

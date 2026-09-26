@@ -76,20 +76,26 @@ function statusText(s: string): string {
 function go(p: string): void { router.push(p) }
 
 async function reload(): Promise<void> {
-  suppliers.value = await purchaseStore.listSuppliers()
-  supplierCount.value = suppliers.value.length
+  // 四份数据互不依赖：原来逐个 await 是 4 段串行往返（新加坡节点每段 200~400ms），
+  // 现在一次并发，等待时间由「之和」变成「最大值」（C 档 V2.1-2.34-C）。
+  const [sups, pending, all, payables] = await Promise.all([
+    purchaseStore.listSuppliers(),
+    purchaseStore.listPendingInbound(),
+    purchaseStore.listOrders(),
+    financeStore.listPayables()
+  ])
 
-  pendingInbound.value = await purchaseStore.listPendingInbound()
+  suppliers.value = sups
+  supplierCount.value = sups.length
+  pendingInbound.value = pending
 
   // 本月（自然月）采购额
-  const all = await purchaseStore.listOrders()
   const prefix = new Date().toISOString().slice(0, 7)
   monthPurchase.value = all
     .filter(o => (o.orderDate ?? '').slice(0, 7) === prefix)
     .reduce((s, o) => s + o.totalAmount, 0)
 
   // 未付款金额：所有采购单总额 - 已付款
-  const payables = await financeStore.listPayables()
   unpaidAmount.value = payables.reduce((s, p) => s + p.balance, 0)
 }
 

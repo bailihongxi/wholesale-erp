@@ -14,6 +14,7 @@ import { defineStore } from 'pinia'
 import { db } from '../db'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { useInventoryStore } from './inventory'
+import { safeBulkAdd, safeBulkUpdate } from '../utils/bulkWrite'
 
 export type StockDocType = 'in' | 'out'
 
@@ -313,8 +314,8 @@ export const useStockDocStore = defineStore('stockDoc', () => {
       }
     }
 
-    // ② 先把原批次库存退回（连库房分布一起退回）
-    for (const r of records) await applyStockDelta(r.productId, -r.quantity, r.locationId)
+    // ② 先把原批次库存退回（连库房分布一起退回）——A2 档：整批一次，不再是逐条串行
+    await applyStockDeltas(records.map(r => ({ productId: r.productId, delta: -r.quantity, locationId: r.locationId })))
 
     // ③ 出库类要确认库存在退回后仍够新数量（避免改大导致负数库存）
     if (type === 'out') {
@@ -327,7 +328,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
         const avail = locMap[it.productId] ?? 0
         if (next > avail) {
           // 回滚作废，恢复原样
-          for (const r of records) await applyStockDelta(r.productId, r.quantity, r.locationId)
+          await applyStockDeltas(records.map(r => ({ productId: r.productId, delta: r.quantity, locationId: r.locationId })))
           return { ok: false, message: `${it.productName} 在「${loc?.name ?? '该库房'}」库存只有 ${avail}，无法出 ${next}` }
         }
       }
@@ -337,21 +338,22 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     await db.stockRecords.bulkDelete(records.map(r => r.id!))
     const now = new Date().toISOString()
     const locId = records[0]?.locationId
-    for (const it of items) {
+    // A2 档：库存改动与流水写入各自批量一次（原实现逐条 N 次请求）
+    const writes = items.map(it => {
       const next = Number(quantities[it.productId] ?? it.quantity)
-      if (next <= 0) continue
-      await applyStockDelta(it.productId, type === 'in' ? next : -next, locId)
-      await db.stockRecords.add({
-        type: recordType,
-        refOrderId: doc.refOrderId,
-        productId: it.productId,
-        quantity: type === 'in' ? next : -next,
-        operatorId,
-        createdAt: doc.createdAt,
-        batchNo,
-        locationId: locId
-      })
-    }
+      return { it, next, signed: type === 'in' ? next : -next }
+    }).filter(w => w.next > 0)
+    await applyStockDeltas(writes.map(w => ({ productId: w.it.productId, delta: w.signed, locationId: locId })))
+    await safeBulkAdd(db.stockRecords as any, writes.map(w => ({
+      type: recordType,
+      refOrderId: doc.refOrderId,
+      productId: w.it.productId,
+      quantity: w.signed,
+      operatorId,
+      createdAt: doc.createdAt,
+      batchNo,
+      locationId: locId
+    })))
 
     await recalcOrderStatus(type, doc.refOrderId)
     await writeLog(operatorId, AUDIT_ACTIONS.STOCK_ADJUST, `修改${type === 'in' ? '入库' : '出库'}单 ${batchNo}（${now.slice(0, 10)}）`)
@@ -368,7 +370,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
     const all = await db.stockRecords.where('type').equals(recordType).toArray()
     const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
-    for (const r of records) await db.stockRecords.update(r.id!, { remark })
+    await safeBulkUpdate(db.stockRecords as any, records.map(r => r.id!), { remark })
     await writeLog(operatorId, AUDIT_ACTIONS.STOCK_ADJUST, `修改${type === 'in' ? '入库' : '出库'}单 ${batchNo} 备注`)
     return { ok: true, message: '备注已保存' }
   }
@@ -382,7 +384,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     const all = await db.stockRecords.where('type').equals(recordType).toArray()
     const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
 
-    for (const r of records) await applyStockDelta(r.productId, -r.quantity, r.locationId)
+    await applyStockDeltas(records.map(r => ({ productId: r.productId, delta: -r.quantity, locationId: r.locationId })))
     await db.stockRecords.bulkDelete(records.map(r => r.id!))
 
     await recalcOrderStatus(type, doc.refOrderId)
@@ -392,21 +394,39 @@ export const useStockDocStore = defineStore('stockDoc', () => {
 
   // ---------------------------------------------------------------- 内部
 
-  /** 增减库存：入库传正数，出库传负数 */
-  async function applyStockDelta(productId: number, delta: number, locationId?: number): Promise<void> {
-    const stock = await db.stock.where('productId').equals(productId).first()
-    if (stock) {
-      await db.stock.update(stock.id!, {
-        quantity: stock.quantity + delta,
-        updatedAt: new Date().toISOString()
-      })
-    } else {
-      await db.stock.add({ productId, quantity: delta, updatedAt: new Date().toISOString() })
-    }
-    // 同步维护库房分布，否则「总库存 = Σ各库位」的等式会被改单/撤回破坏
+  /**
+   * 批量版库存增减（V2.1-2.34 A2 档）。
+   *
+   * 原 `applyStockDelta` 是「读一行 → 改 → 写 → 再改库位」，每个商品 3~4 次请求；
+   * 这里把整张单据的库存改动压成 **1 次批量读 + 2 次批量写**（总库存 + 库位分布）。
+   *
+   * ⚠️ 语义等价：默认库房只解析一次并复用到所有条目（原本每个商品各调一次
+   * `defaultLocationId()`，返回值完全一致，只是白花 N 次请求）。
+   * 总库存不截断（入库为负 / 出库为正的异常数据保持原样露出，便于排查），
+   * 库位分布按既有约定截断到 ≥ 0。
+   */
+  async function applyStockDeltas(
+    deltas: Array<{ productId: number; delta: number; locationId?: number }>
+  ): Promise<void> {
+    const list = (deltas ?? []).filter(d => d && d.delta !== 0)
+    if (!list.length) return
     const inv = useInventoryStore()
-    const locId = locationId ?? (await inv.defaultLocationId())
-    await inv.applyLocationDelta(productId, locId, delta)
+    const fallbackLoc = list.some(d => d.locationId == null)
+      ? await inv.defaultLocationId()
+      : undefined
+    const now = new Date().toISOString()
+    await Promise.all([
+      inv.applyStockDeltas(
+        list.map(d => ({ productId: d.productId, delta: d.delta })),
+        { now, clampZero: false, createIfMissing: true }
+      ),
+      // 同步维护库房分布，否则「总库存 = Σ各库位」的等式会被改单/撤回破坏
+      inv.applyLocationDeltas(list.map(d => ({
+        productId: d.productId,
+        locationId: d.locationId ?? fallbackLoc!,
+        delta: d.delta
+      })))
+    ])
   }
 
   /**

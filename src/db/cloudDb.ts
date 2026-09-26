@@ -49,6 +49,11 @@ const ROW_PAGE = 1000
 
 /**
  * 按字段等值 / in 过滤的查询链（Dexie `where().equals()` 的云端对应物）。
+ *
+ * V2.1-2.34 B 档起：如果所属表**有热缓存**，等值 / in 过滤直接在内存里做，
+ * 不再发网络请求（`stock`、`locationStock`、单据主表这些高频读尤其明显）。
+ * 返回的是**行副本**——调用方（库存过账）会就地改 quantity 再写回，
+ * 直接给缓存行的引用会把「还没落库的值」污染进缓存。
  */
 class CloudQuery {
   private eqVal: any = undefined
@@ -58,11 +63,26 @@ class CloudQuery {
     private client: typeof supabase,
     private table: string,
     private field: string,
+    /** 宿主表：用于读它的热缓存、以及删除后同步缓存 */
+    private host?: { readCache(): any[] | null; evict(ids: any[]): void; invalidate(): void },
   ) {}
 
   equals(v: any): this { this.eqVal = v; return this }
   anyOf(arr: any[]): this { this.inVals = arr; return this }
   startsWithAnyOf(arr: string[]): this { this.inVals = arr; return this }
+
+  /** 命中热缓存则返回过滤后的副本；没有缓存返回 null（继续走网络） */
+  private readCache(): any[] | null {
+    const rows = this.host?.readCache()
+    if (!rows) return null
+    let out = rows
+    if (this.eqVal !== undefined) out = out.filter(r => (r as any)[this.field] === this.eqVal)
+    if (this.inVals) {
+      const set = new Set(this.inVals.map(v => String(v)))
+      out = out.filter(r => set.has(String((r as any)[this.field])))
+    }
+    return out.map(r => ({ ...r }))
+  }
 
   /**
    * ⚠️ 铁律：`{ count }` / `{ head }` 必须在 `client.from().select()` 这一次调用里传。
@@ -87,6 +107,9 @@ class CloudQuery {
   }
 
   async toArray<T = any>(): Promise<T[]> {
+    // B 档：命中热缓存就不发请求（返回的是副本，调用方可安全就地修改）
+    const cached = this.readCache()
+    if (cached) return this.applyFilter(cached) as T[]
     const { data: firstPage, error, count } = await this.build({ count: true }).range(0, ROW_PAGE - 1)
     if (error) throw new Error(`CloudQuery.toArray: ${error.message}`)
     const rows = (firstPage as T[]) || []
@@ -137,6 +160,9 @@ class CloudQuery {
     // 「先 count 再过滤」做不到的，只能走 toArray 拿过滤结果 —— 这也是
     // 2026-09-25 那个 filter 被吞的 bug 的同一类陷阱：不要以为 count() 会自动带上条件。
     if (this._filterFn) return (await this.toArray()).length
+    // B 档：热缓存里数一下就够了，不用再发一次 head 请求
+    const cached = this.readCache()
+    if (cached) return cached.length
     const { count, error } = await this.build({ count: true, head: true })
     if (error) throw new Error(`CloudQuery.count: ${error.message}`)
     return count || 0
@@ -149,6 +175,9 @@ class CloudQuery {
     if (this.inVals) q = q.in(this.field, this.inVals)
     const { error } = await q
     if (error) throw new Error(`CloudQuery.delete: ${error.message}`)
+    // B 档：删掉的行要同步从缓存里摘掉，否则读缓存还会读到已删的行
+    const hit = this.readCache()
+    if (hit && this.host) this.host.evict(hit.map(r => (r as any).id))
     return 1
   }
 }
@@ -156,15 +185,35 @@ class CloudQuery {
 /** 基础档案表：变化少，启用内存缓存，切页面秒开 */
 const CACHED_TABLES = new Set([
   'products', 'customers', 'suppliers', 'locations', 'users', 'rolePerms', 'stock',
+  // B 档加入：库位库存以前不缓存，于是每次出库/改单都要把整张表重拉一遍（6000 行 = 7 个请求）
+  'locationStock',
   // 业务主表也缓存：用户在页面间切换时不用重复拉全表
-  // 写操作（增删改）会自动 invalidate，所以数据不会脏
+  // 写操作（增删改）会自动同步缓存，所以数据不会脏
   'saleOrders', 'purchaseOrders', 'quoteOrders',
 ])
+
+/**
+ * 缓存的保鲜期（V2.1-2.34 B 档）。
+ *
+ * 写操作不再「整表作废」而是「就地更新缓存行」——这样出一张单之后，
+ * 库存/库位两张 6000 行的表不用重搬。代价是本机看不到**别的设备**的改动，
+ * 所以给最易变的库存两张表加一个短保鲜期：超过 1 分钟没动过就自动重拉一次，
+ * 跨设备的差异最多残留 1 分钟，之后自愈。
+ * 档案类表（商品/客户/供应商…）变化更慢，给 5 分钟。
+ * 设为 0 表示永不过期。
+ */
+const CACHE_TTL_MS: Record<string, number> = {
+  stock: 60_000,
+  locationStock: 60_000,
+}
+const DEFAULT_CACHE_TTL_MS = 5 * 60_000
 
 export class CloudTable<T = any> {
   private _cache: T[] | null = null
   private _cachePromise: Promise<T[]> | null = null
   private _countCache: number | null = null
+  /** 缓存建立时间，用于保鲜期判断 */
+  private _cacheAt = 0
 
   constructor(
     private client: typeof supabase,
@@ -174,18 +223,79 @@ export class CloudTable<T = any> {
   }
   private useCache: boolean
 
-  /** 手动清缓存（新增/删除/改数据后自动清；外部刷新也可调） */
+  /** 手动清缓存（新增/删除/改数据后自动同步；外部刷新也可调） */
   invalidate() {
     this._cache = null
     this._cachePromise = null
     this._countCache = null
+    this._cacheAt = 0
+  }
+
+  /**
+   * 读热缓存（B 档）：只有缓存存在**且未过保鲜期**才返回，否则作废重拉。
+   * 供 CloudQuery 复用，避免同一个 where 条件还去发一次网络。
+   */
+  readCache(): T[] | null {
+    if (!this.useCache || !this._cache) return null
+    const ttl = CACHE_TTL_MS[this.name] ?? DEFAULT_CACHE_TTL_MS
+    if (ttl > 0 && Date.now() - this._cacheAt > ttl) {
+      this.invalidate()
+      return null
+    }
+    return this._cache
+  }
+
+  /** 把删掉的行从缓存里摘掉（B 档：避免读缓存还能读到已删行） */
+  evict(ids: any[]): void {
+    const cache = this._cache as any[] | null
+    if (!cache || !ids.length) return
+    const kill = new Set(ids.filter(v => v != null).map(v => String(v)))
+    const kept = cache.filter(r => !kill.has(String((r as any).id)))
+    if (kept.length === cache.length) return
+    this._cache = kept as T[]
+    if (this._countCache !== null) this._countCache = kept.length
+  }
+
+  /**
+   * 就地更新缓存（B 档核心）：把写下去的行同步进缓存，**不再整表作废**。
+   *
+   * @param allowInsert true = 这批行是 upsert 的整行，找不到就往缓存里加；
+   *                    false = 只是局部 patch（update），缓存里没有该行时
+   *                    拿不到完整行，必须返回 false 让调用方走 invalidate。
+   * @returns true = 缓存已同步；false = 不适合增量，调用方应 invalidate
+   */
+  private patchCache(rows: any[], allowInsert: boolean): boolean {
+    const cache = this._cache as any[] | null
+    if (!cache) return true // 本来就没缓存，什么都不用做
+    if (rows.some(r => r == null || r.id == null)) return false
+    const idx = new Map<string, number>()
+    cache.forEach((r, i) => idx.set(String((r as any).id), i))
+    if (!allowInsert && rows.some(r => !idx.has(String(r.id)))) return false
+    for (const r of rows) {
+      const k = String(r.id)
+      const i = idx.get(k)
+      if (i === undefined) {
+        cache.push(r)
+        idx.set(k, cache.length - 1)
+      } else {
+        cache[i] = { ...(cache[i] as any), ...r }
+      }
+    }
+    if (this._countCache !== null) this._countCache = cache.length
+    return true
   }
 
   async toArray(): Promise<T[]> {
     if (this.useCache) {
-      if (this._cache) return this._cache
+      const fresh = this.readCache()
+      if (fresh) return fresh
       if (this._cachePromise) return this._cachePromise
-      this._cachePromise = this._fetchAll().then(d => { this._cache = d; this._cachePromise = null; return d })
+      this._cachePromise = this._fetchAll().then(d => {
+        this._cache = d
+        this._cacheAt = Date.now()
+        this._cachePromise = null
+        return d
+      })
       return this._cachePromise
     }
     return this._fetchAll()
@@ -262,7 +372,8 @@ export class CloudTable<T = any> {
   async put(obj: any): Promise<number> {
     const { data, error } = await this.client.from(this.name).upsert(obj).select('id')
     if (error) throw new Error(`${this.name}.put: ${error.message}`)
-    this.invalidate()
+    // B 档：写整行 → 直接同步进缓存；同步不了才整表作废
+    if (!this.patchCache([{ ...obj, id: (data as any[])[0].id }], true)) this.invalidate()
     return (data as any[])[0].id
   }
 
@@ -277,13 +388,15 @@ export class CloudTable<T = any> {
     if (!objs.length) return
     const { error } = await this.client.from(this.name).upsert(objs)
     if (error) throw new Error(`${this.name}.bulkPut: ${error.message}`)
-    this.invalidate()
+    // B 档：整行 upsert → 逐行同步缓存（库存/库位表因此不必再整表重搬）
+    if (!this.patchCache(objs, true)) this.invalidate()
   }
 
   async bulkAdd(objs: any[]): Promise<void> {
     if (!objs.length) return
     const { error } = await this.client.from(this.name).insert(objs)
     if (error) throw new Error(`${this.name}.bulkAdd: ${error.message}`)
+    // 新增行拿不到服务端自增 id，缓存只能作废
     this.invalidate()
   }
 
@@ -299,14 +412,14 @@ export class CloudTable<T = any> {
   async delete(id: number | string): Promise<void> {
     const { error } = await this.client.from(this.name).delete().eq('id', id)
     if (error) throw new Error(`${this.name}.delete: ${error.message}`)
-    this.invalidate()
+    this.evict([id])
   }
 
   async bulkDelete(ids: (number | string)[]): Promise<void> {
     if (!ids.length) return
     const { error } = await this.client.from(this.name).delete().in('id', ids as any)
     if (error) throw new Error(`${this.name}.bulkDelete: ${error.message}`)
-    this.invalidate()
+    this.evict(ids)
   }
 
   async clear(): Promise<void> {
@@ -318,7 +431,8 @@ export class CloudTable<T = any> {
   async update(id: number | string, changes: Partial<T>): Promise<number> {
     const { error } = await this.client.from(this.name).update(changes as any).eq('id', id)
     if (error) throw new Error(`${this.name}.update: ${error.message}`)
-    this.invalidate()
+    // 局部 patch：缓存里必须有该行才能安全合并，否则退回整表作废
+    if (!this.patchCache([{ id, ...(changes as any) }], false)) this.invalidate()
     return 1
   }
 
@@ -337,15 +451,17 @@ export class CloudTable<T = any> {
       if (error) throw new Error(`${this.name}.bulkUpdate: ${error.message}`)
       updated += chunk.length
     }
-    this.invalidate()
+    // 同一个 patch 应用到多行：缓存齐了就地合并，缺行则整表作废
+    if (!this.patchCache(list.map(id => ({ id, ...(changes as any) })), false)) this.invalidate()
     return updated
   }
 
   async count(): Promise<number> {
     // 缓存表：count 跟随 toArray 同一生命周期，避免首页/设置页每次重发请求
     if (this.useCache && this._countCache !== null) return this._countCache
-    if (this.useCache && this._cache) {
-      this._countCache = (this._cache as T[]).length
+    const fresh = this.readCache()
+    if (fresh) {
+      this._countCache = fresh.length
       return this._countCache
     }
     const { count, error } = await this.client.from(this.name).select('*', { count: 'exact', head: true })
@@ -356,7 +472,7 @@ export class CloudTable<T = any> {
   }
 
   where(field: string): CloudQuery {
-    return new CloudQuery(this.client, this.name, field)
+    return new CloudQuery(this.client, this.name, field, this)
   }
 
   /**

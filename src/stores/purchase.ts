@@ -5,6 +5,7 @@ import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { revertQuoteOnOrderDelete } from '../utils/quoteLink'
 import { useInventoryStore } from './inventory'
 import type { Supplier, PurchaseOrder, PurchaseOrderItem, Product, StockHistoryRow } from '../types'
+import { safeBulkAdd, safeBulkPut } from '../utils/bulkWrite'
 
 export const usePurchaseStore = defineStore('purchase', () => {
   // ===== 供应商（全局缓存，所有页面共用） =====
@@ -79,7 +80,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
         isGift
       }
     })
-    await db.purchaseOrderItems.bulkAdd(itemRows)
+    await safeBulkAdd(db.purchaseOrderItems as any, itemRows)
     await db.purchaseOrders.update(orderId, { totalAmount })
     await writeLog(
       data.purchaserId,
@@ -154,10 +155,11 @@ export const usePurchaseStore = defineStore('purchase', () => {
       if (receivedBefore + actual < item.quantity) allReceived = false
       if (actual > 0) {
         const s = stockMap.get(item.productId)
-        if (s) stockToUpdate.push({ id: s.id!, quantity: s.quantity + actual, updatedAt: now })
+        // A2 档：N 条 update / add → 各 1 次批量写（保留整行字段走 upsert，结果一致）
+        if (s) stockToUpdate.push({ ...s, quantity: s.quantity + actual, updatedAt: now })
         else stockToAdd.push({ productId: item.productId, quantity: actual, updatedAt: now })
         const ls = locStockMap.get(item.productId)
-        if (ls) locStockToUpdate.push({ id: ls.id!, quantity: Math.max(0, ls.quantity + actual) })
+        if (ls) locStockToUpdate.push({ ...ls, quantity: Math.max(0, ls.quantity + actual) })
         else locStockToAdd.push({ productId: item.productId, locationId: locId, quantity: Math.max(0, actual) })
         recordsToAdd.push({
           type: 'purchase_in', refOrderId: orderId, productId: item.productId,
@@ -168,11 +170,11 @@ export const usePurchaseStore = defineStore('purchase', () => {
     }
 
     await Promise.all([
-      ...stockToUpdate.map(u => db.stock.update(u.id, { quantity: u.quantity, updatedAt: u.updatedAt })),
-      ...stockToAdd.map(r => db.stock.add(r)),
-      ...locStockToUpdate.map(u => db.locationStock.update(u.id, { quantity: u.quantity })),
-      ...locStockToAdd.map(r => db.locationStock.add(r)),
-      recordsToAdd.length ? db.stockRecords.bulkAdd(recordsToAdd) : Promise.resolve(),
+      safeBulkPut(db.stock as any, stockToUpdate),
+      safeBulkAdd(db.stock as any, stockToAdd),
+      safeBulkPut(db.locationStock as any, locStockToUpdate),
+      safeBulkAdd(db.locationStock as any, locStockToAdd),
+      safeBulkAdd(db.stockRecords as any, recordsToAdd),
       db.purchaseOrders.update(orderId, { status: allReceived ? 'completed' : 'partial' }),
     ])
 
@@ -239,7 +241,7 @@ export const usePurchaseStore = defineStore('purchase', () => {
     if (!items.length) return { ok: false, message: '明细不能为空' }
 
     await db.purchaseOrderItems.where('purchaseOrderId').equals(orderId).delete()
-    await db.purchaseOrderItems.bulkAdd(items.map(it => ({
+    await safeBulkAdd(db.purchaseOrderItems as any, items.map(it => ({
       purchaseOrderId: orderId,
       productId: it.productId,
       quantity: it.quantity,

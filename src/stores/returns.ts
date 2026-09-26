@@ -15,6 +15,7 @@ import { db } from '../db'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { genStockDocNo } from '../utils/orderNo'
 import { useInventoryStore } from './inventory'
+import { anyOfBatch, safeBulkAdd } from '../utils/bulkWrite'
 
 /** 取商品名（品牌+型号），用于校验提示文案 */
 async function productNameOf(productId: number): Promise<string> {
@@ -22,6 +23,14 @@ async function productNameOf(productId: number): Promise<string> {
   if (!p) return `商品#${productId}`
   return `${p.brand ?? ''} ${p.model ?? ''}`.trim() || `商品#${productId}`
 }
+
+/**
+ * 批量调整「总库存」stock 表。
+ *
+ * ⚠️ 实现统一放在 `inventory.applyStockDeltas`（V2.1-2.34 A2 档收敛），
+ * 叠加算法只此一份（bulkWrite.foldQuantityDeltas），这里不另写一套，避免口径漂移。
+ * 语义等价的约定见 inventory.ts 的注释。
+ */
 
 export interface ReturnLine {
   productId: number
@@ -91,25 +100,24 @@ export const useReturnsStore = defineStore('returns', () => {
       totalAmount: total, remark: params.remark
     })
 
-    for (const l of lines) {
-      await db.returnItems.add({
-        returnOrderId: id as number, productId: l.productId,
-        quantity: l.quantity, price: l.price, amount: l.quantity * l.price, reason: l.reason
-      })
-      // 货物回流：总库存 +，所选库房分布 +
-      await inv.applyLocationDelta(l.productId, locId, l.quantity)
-      const stock = await db.stock.where('productId').equals(l.productId).first()
-      if (stock) {
-        await db.stock.update(stock.id!, { quantity: stock.quantity + l.quantity, updatedAt: now })
-      } else {
-        await db.stock.add({ productId: l.productId, quantity: l.quantity, updatedAt: now })
-      }
-      await db.stockRecords.add({
-        type: 'sale_return', refOrderId: params.refOrderId, productId: l.productId,
-        quantity: l.quantity, operatorId: params.operatorId, createdAt: now,
-        locationId: locId, batchNo: orderNo, remark: l.reason
-      })
-    }
+    // ↓ V2.1-2.34 A 档：原先这里是「每行 6 次串行请求」的循环（5 行 ≈ 30 次 ≈ 6~12 秒），
+    // 现在四类写入各自批量一次：**4~6 次请求**完成同样的事，落库结果与逐行完全一致。
+    await safeBulkAdd(db.returnItems as any, lines.map(l => ({
+      returnOrderId: id as number, productId: l.productId,
+      quantity: l.quantity, price: l.price, amount: l.quantity * l.price, reason: l.reason
+    })))
+    // 货物回流：总库存 +，所选库房分布 +
+    await inv.applyLocationDeltas(lines.map(l => ({
+      productId: l.productId, locationId: locId, delta: l.quantity
+    })))
+    await inv.applyStockDeltas(lines.map(l => ({ productId: l.productId, delta: l.quantity })), {
+      now, clampZero: false, createIfMissing: true
+    })
+    await safeBulkAdd(db.stockRecords as any, lines.map(l => ({
+      type: 'sale_return', refOrderId: params.refOrderId, productId: l.productId,
+      quantity: l.quantity, operatorId: params.operatorId, createdAt: now,
+      locationId: locId, batchNo: orderNo, remark: l.reason
+    })))
     // 财务红冲：退货金额作为客户 Credit，冲减应收余额（listReceivables 计入贷方）
     await db.payments.add({
       type: 'refund', refOrderId: params.refOrderId, counterpartyId: order.customerId,
@@ -165,23 +173,24 @@ export const useReturnsStore = defineStore('returns', () => {
       totalAmount: total, remark: params.remark
     })
 
-    for (const l of lines) {
-      await db.returnItems.add({
-        returnOrderId: id as number, productId: l.productId,
-        quantity: l.quantity, price: l.price, amount: l.quantity * l.price, reason: l.reason
-      })
-      // 货物退回供应商：总库存 −，所选库房分布 −
-      await inv.applyLocationDelta(l.productId, locId, -l.quantity)
-      const stock = await db.stock.where('productId').equals(l.productId).first()
-      if (stock) {
-        await db.stock.update(stock.id!, { quantity: Math.max(0, stock.quantity - l.quantity), updatedAt: now })
-      }
-      await db.stockRecords.add({
-        type: 'purchase_return', refOrderId: params.refOrderId, productId: l.productId,
-        quantity: -l.quantity, operatorId: params.operatorId, createdAt: now,
-        locationId: locId, batchNo: orderNo, remark: l.reason
-      })
-    }
+    // ↓ 同 salesReturn：30 次串行 → 批量 4~6 次（见上方注释）
+    await safeBulkAdd(db.returnItems as any, lines.map(l => ({
+      returnOrderId: id as number, productId: l.productId,
+      quantity: l.quantity, price: l.price, amount: l.quantity * l.price, reason: l.reason
+    })))
+    // 货物退回供应商：总库存 −，所选库房分布 −
+    await inv.applyLocationDeltas(lines.map(l => ({
+      productId: l.productId, locationId: locId, delta: -l.quantity
+    })))
+    // ⚠️ 采购退货原逻辑是「缺行的商品不创建库存行」，这里用 createIfMissing:false 保持一致
+    await inv.applyStockDeltas(lines.map(l => ({ productId: l.productId, delta: -l.quantity })), {
+      now, clampZero: true, createIfMissing: false
+    })
+    await safeBulkAdd(db.stockRecords as any, lines.map(l => ({
+      type: 'purchase_return', refOrderId: params.refOrderId, productId: l.productId,
+      quantity: -l.quantity, operatorId: params.operatorId, createdAt: now,
+      locationId: locId, batchNo: orderNo, remark: l.reason
+    })))
     // 财务红冲：退货金额作为供应商 Credit，冲减应付余额（listPayables 计入贷方）
     await db.payments.add({
       type: 'supplier_credit', refOrderId: params.refOrderId, counterpartyId: order.supplierId,
@@ -207,9 +216,23 @@ export const useReturnsStore = defineStore('returns', () => {
     const products = await db.products.toArray()
     const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
 
+    // ↓ V2.1-2.34 A 档：原先 M 张退货单要发 M 次明细查询（列表 N+1），
+    // 改成一次 anyOf 批量拉完再内存分组，结果完全一样。
+    const orderIds = filtered.map(o => o.id!).filter(v => v !== null && v !== undefined)
+    const allItems = await anyOfBatch<{
+      returnOrderId: number; productId: number; quantity: number
+      price: number; amount: number; reason?: string
+    }>(db.returnItems as any, 'returnOrderId', orderIds)
+    const itemsByOrder = new Map<number, typeof allItems>()
+    for (const it of allItems) {
+      const arr = itemsByOrder.get(it.returnOrderId) ?? []
+      arr.push(it)
+      itemsByOrder.set(it.returnOrderId, arr)
+    }
+
     const rows: ReturnRow[] = []
     for (const o of filtered) {
-      const items = await db.returnItems.where('returnOrderId').equals(o.id!).toArray()
+      const items = itemsByOrder.get(o.id!) ?? []
       const detail = items.map(it => ({
         productName: pmap.get(it.productId) ?? `商品#${it.productId}`,
         quantity: it.quantity,

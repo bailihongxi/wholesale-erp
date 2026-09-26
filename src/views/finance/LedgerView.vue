@@ -260,6 +260,7 @@ import { showConfirmDialog, showToast } from 'vant'
 import { useFinanceStore } from '../../stores/finance'
 import { useUserStore } from '../../stores/user'
 import { db } from '../../db'
+import { USE_CLOUD } from '../../db/supabaseClient'
 import {
   LEDGER_CATEGORIES, LEDGER_LINK_TYPES, linkTypeLabel, categoriesOf, categoryLabel, categoryIcon, todayStr
 } from '../../utils/ledger'
@@ -298,27 +299,51 @@ const form = reactive({
 /** 当前所选单据类型的全部单号（datalist 候选） */
 const linkDocNos = ref<string[]>([])
 
+/**
+ * 窄字段取行：云端只 SELECT 指定列，本地（IndexedDB 保底模式）没有列裁剪，退化为原样读。
+ *
+ * C 档（V2.1-2.34-C）：「关联单据号」下拉只是为了拿一列单号，原来把整张主表
+ * （含金额、备注、时间戳等几十个字段）全搬回浏览器，几百上千单时纯属浪费。
+ * 现在每行只传 orderNo / batchNo 一列。两种模式的返回行都能被同一段 map 处理。
+ */
+async function narrowRows(
+  table: string,
+  fields: string,
+  cloudApply?: (q: any) => any,
+  localRows?: () => Promise<Array<Record<string, any>>>
+): Promise<Array<Record<string, any>>> {
+  const t = (db as any)[table]
+  if (!USE_CLOUD) return (localRows ? localRows() : t.toArray()) as Promise<Array<Record<string, any>>>
+  return t.scanNarrow(fields, cloudApply) as Promise<Array<Record<string, any>>>
+}
+
 async function loadLinkDocs(type: string): Promise<void> {
   if (!type) {
     linkDocNos.value = []
     return
   }
-  let nos: string[] = []
+  let rows: Array<Record<string, any>> = []
+  let pick = 'orderNo'
   if (type === 'inbound' || type === 'outbound') {
     const recType = type === 'inbound' ? 'purchase_in' : 'sale_out'
-    const records = await db.stockRecords.where('type').equals(recType).toArray()
-    nos = Array.from(new Set(records.map(r => r.batchNo).filter(Boolean) as string[]))
+    pick = 'batchNo'
+    rows = await narrowRows(
+      'stockRecords', 'batchNo',
+      q => q.eq('type', recType),
+      () => db.stockRecords.where('type').equals(recType).toArray()
+    )
   } else if (type === 'return') {
-    nos = (await db.returnOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+    rows = await narrowRows('returnOrders', 'orderNo')
   } else if (type === 'purchase') {
-    nos = (await db.purchaseOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+    rows = await narrowRows('purchaseOrders', 'orderNo')
   } else if (type === 'sale') {
-    nos = (await db.saleOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+    rows = await narrowRows('saleOrders', 'orderNo')
   } else if (type === 'transfer') {
-    nos = (await db.transferOrders.toArray()).map(r => r.orderNo).filter(Boolean)
+    rows = await narrowRows('transferOrders', 'orderNo')
   } else if (type === 'stocktake') {
-    nos = (await db.stocktakes.toArray()).map(r => r.orderNo).filter(Boolean)
+    rows = await narrowRows('stocktakes', 'orderNo')
   }
+  const nos = rows.map(r => r[pick]).filter(Boolean) as string[]
   // 新单号在前，方便选择最近的单据
   linkDocNos.value = [...new Set(nos)].sort().reverse()
 }

@@ -15,6 +15,7 @@ import { defineStore } from 'pinia'
 import { db } from '../db'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { genStockDocNo } from '../utils/orderNo'
+import { applyQuantityDeltas, anyOfBatch, foldQuantityDeltas, safeBulkAdd, safeBulkPut } from '../utils/bulkWrite'
 import type { Location } from '../types'
 
 /** 默认库位：总仓(1) 与 门店(2)。调拨在这二者之间移动货物。 */
@@ -128,14 +129,20 @@ export const useInventoryStore = defineStore('inventory', () => {
     for (const s of stockRows) {
       if (wanted.has(s.productId)) totalMap.set(s.productId, s.quantity)
     }
-    const distMap = new Map<number, Array<{ id?: number; locationId: number; quantity: number }>>()
+    // V2.1-2.34 A2 档：原先这里逐商品 await 写库（N 个不一致商品 = N 次请求），
+    // 现在全部收集后批量落盘一次。
+    // ⚠️ distMap 里保留的是**整行**：下面要拿它做 bulkPut（upsert 会覆盖整行），
+    // 只存 {id, locationId, quantity} 会把 productId 等列抹掉。
+    const distMap = new Map<number, Array<{ row: any; locationId: number; quantity: number }>>()
     for (const r of locRows) {
       if (!wanted.has(r.productId)) continue
       const arr = distMap.get(r.productId) ?? []
-      arr.push({ id: r.id, locationId: r.locationId, quantity: r.quantity })
+      arr.push({ row: r, locationId: r.locationId, quantity: r.quantity })
       distMap.set(r.productId, arr)
     }
 
+    const locDeltas: Array<{ productId: number; locationId: number; delta: number }> = []
+    const locPuts: any[] = []
     let defId = 0
     for (const id of productIds) {
       const total = totalMap.get(id) ?? 0
@@ -146,7 +153,7 @@ export const useInventoryStore = defineStore('inventory', () => {
       if (diff > 0) {
         // 缺少分布（老数据 / 直接写 stock 的导入场景）→ 差额补到默认库房
         if (!defId) defId = await defaultLocationId()
-        await applyLocationDelta(id, defId, diff)
+        locDeltas.push({ productId: id, locationId: defId, delta: diff })
         continue
       }
       let need = -diff
@@ -154,11 +161,15 @@ export const useInventoryStore = defineStore('inventory', () => {
         if (need <= 0) break
         const take = Math.min(need, r.quantity)
         if (take > 0) {
-          await db.locationStock.update(r.id!, { quantity: r.quantity - take })
+          locPuts.push({ ...r.row, quantity: r.quantity - take })
           need -= take
         }
       }
     }
+    await Promise.all([
+      applyLocationDeltas(locDeltas),
+      safeBulkPut(db.locationStock as any, locPuts)
+    ])
   }
 
   /**
@@ -331,6 +342,79 @@ export const useInventoryStore = defineStore('inventory', () => {
     }
   }
 
+  /**
+   * 批量版 `applyLocationDelta`（V2.1-2.34 A 档）。
+   *
+   * 一张 5 行退货单原先要发 10 次请求（每行 1 查 + 1 写），改成这里后是 **2 次**
+   * （一次批量读 + 一次批量写）。
+   *
+   * ⚠️ 语义等价的保证——必须与「按顺序逐次调用 applyLocationDelta」得到完全相同的结果：
+   *  1. **按传入顺序逐条累加**，每条都各自 `Math.max(0, 当前值 + delta)` 截断。
+   *     不能先把 delta 求和再算一次：例如当前 5、连续 -10 再 +3，
+   *     逐次算是 max(0, -5)=0 → max(0, 3)=3，先求和算是 max(0, -2)=0，两者不同。
+   *  2. 不存在的行先 `add`，之后同一主键再命中就走 `update`（与旧逻辑一致）——
+   *     这里统一用内存 map 维护新老状态，最后分别批量落盘。
+   *  3. delta === 0 的条目直接跳过，与 `applyLocationDelta` 开头的短路一致。
+   */
+  async function applyLocationDeltas(
+    deltas: Array<{ productId: number; locationId: number; delta: number }>
+  ): Promise<void> {
+    const list = (deltas ?? []).filter(d => d && d.delta !== 0)
+    if (!list.length) return
+
+    const productIds = [...new Set(list.map(d => d.productId))]
+    const existing = await anyOfBatch<{ id?: number; productId: number; locationId: number; quantity: number }>(
+      db.locationStock as any, 'productId', productIds
+    )
+    const { adds, puts } = foldQuantityDeltas({
+      existing,
+      getKey: r => `${r.productId}|${r.locationId}`,
+      deltas: list.map(d => ({ key: `${d.productId}|${d.locationId}`, delta: d.delta })),
+      clampZero: true,
+      buildNew: (key, delta) => {
+        const [pid, lid] = key.split('|')
+        return { productId: Number(pid), locationId: Number(lid), quantity: Math.max(0, delta) }
+      }
+    })
+    await safeBulkAdd(db.locationStock as any, adds)
+    await safeBulkPut(db.locationStock as any, puts)
+  }
+
+  /**
+   * 批量版总库存增减（V2.1-2.34 A2 档，与 `applyLocationDeltas` 成对存在）。
+   *
+   * 原先调用方是「循环里 逐条读 stock → 改数量 → 写回」，一张 N 行单据就是 N 次读 + N 次写；
+   * 这里压成 **1 次批量读 + 1 次批量写**。语义等价的保证同 `applyLocationDeltas`：
+   * 按传入顺序逐条累加、每条各自决定是否截断到 0。
+   *
+   * @param deltas   按业务顺序传入的增量（入库正数 / 出库负数）
+   * @param opts.clampZero       为 true 时每条都截断到 ≥ 0（出库的语义）
+   * @param opts.createIfMissing 为 false 时「没有该商品库存行就跳过」（采购退货的语义）
+   */
+  async function applyStockDeltas(
+    deltas: Array<{ productId: number; delta: number }>,
+    opts: { now: string; clampZero: boolean; createIfMissing: boolean }
+  ): Promise<void> {
+    const list = (deltas ?? []).filter(d => d && d.delta !== 0)
+    if (!list.length) return
+    await applyQuantityDeltas({
+      table: db.stock as any,
+      keyField: 'productId',
+      keys: [...new Set(list.map(d => d.productId))],
+      deltas: list.map(d => ({ key: String(d.productId), delta: d.delta })),
+      getKey: r => String(r.productId),
+      clampZero: opts.clampZero,
+      buildNew: (key, delta) => opts.createIfMissing
+        ? {
+          productId: Number(key),
+          quantity: opts.clampZero ? Math.max(0, delta) : delta,
+          updatedAt: opts.now
+        }
+        : null,
+      touch: r => { r.updatedAt = opts.now }
+    })
+  }
+
   // ---------------------------------------------------------- 调拨
 
   /**
@@ -362,33 +446,63 @@ export const useInventoryStore = defineStore('inventory', () => {
       orderNo, fromLoc, toLoc, date: now, operatorId, status: 'done'
     })
 
-    for (const e of entries) {
-      await db.transferItems.add({ transferOrderId: orderId as number, productId: e.productId, quantity: e.qty })
-      await applyLocationDelta(e.productId, fromLoc, -e.qty)
-      await applyLocationDelta(e.productId, toLoc, e.qty)
+    // V2.1-2.34 A2 档：原先是「每行 4 次串行请求」（明细 + 两个库位 + 两条流水），
+    // 5 行单据就是 20 次；现在四类写入各自批量一次，与逐行执行的结果完全一致。
+    await Promise.all([
+      safeBulkAdd(db.transferItems as any, entries.map(e => ({
+        transferOrderId: orderId as number, productId: e.productId, quantity: e.qty
+      }))),
+      applyLocationDeltas(entries.flatMap(e => [
+        { productId: e.productId, locationId: fromLoc, delta: -e.qty },
+        { productId: e.productId, locationId: toLoc, delta: e.qty }
+      ])),
       // 流水留痕：来源库位出、目标库位入（总库存净变化为 0）
-      await db.stockRecords.add({ type: 'transfer', refOrderId: orderId as number, productId: e.productId, quantity: -e.qty, operatorId, createdAt: now, locationId: fromLoc, batchNo: orderNo })
-      await db.stockRecords.add({ type: 'transfer', refOrderId: orderId as number, productId: e.productId, quantity: e.qty, operatorId, createdAt: now, locationId: toLoc, batchNo: orderNo })
-    }
+      safeBulkAdd(db.stockRecords as any, entries.flatMap(e => [
+        { type: 'transfer', refOrderId: orderId as number, productId: e.productId, quantity: -e.qty, operatorId, createdAt: now, locationId: fromLoc, batchNo: orderNo },
+        { type: 'transfer', refOrderId: orderId as number, productId: e.productId, quantity: e.qty, operatorId, createdAt: now, locationId: toLoc, batchNo: orderNo }
+      ]))
+    ])
 
     await writeLog(operatorId, AUDIT_ACTIONS.STOCK_ADJUST, `调拨单 ${orderNo}（${fromLoc}→${toLoc}）`)
     return { ok: true, message: `已生成调拨单 ${orderNo}`, orderNo }
   }
 
+  // C 档（V2.1-2.34-C）提速：
+  //   ① users / locations / products 三张字典表原来逐个 await（3 段串行），现在并发；
+  //   ② 明细原来是「每个单据一次 where(...).toArray()」的 N+1 —— 单据越多越慢，
+  //      100 张单就是 100 次新加坡往返。现在用 anyOfBatch 一次批量取回后按单据分组，
+  //      每行的 productName / 数量 与旧实现逐一等价。
+  // 两处改动都不碰任何计算口径，只把「等待」从串行改成并行、把 N 次请求压成 1 次。
   async function listTransfers(): Promise<TransferRow[]> {
     const orders = await db.transferOrders.toArray()
     if (!orders.length) return []
-    const users = await db.users.toArray()
+    const [users, locs, products] = await Promise.all([
+      db.users.toArray(),
+      db.locations.toArray(),
+      db.products.toArray()
+    ])
     const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const locs = await db.locations.toArray()
     const locMap = new Map(locs.map(l => [l.id!, l.name]))
-    const products = await db.products.toArray()
     const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+
+    const items = await anyOfBatch(
+      db.transferItems as any,
+      'transferOrderId',
+      orders.map(o => o.id!)
+    )
+    const byOrder = new Map<number, Array<{ id: number; productId: number; quantity: number }>>()
+    for (const it of items as any[]) {
+      const list = byOrder.get(it.transferOrderId) ?? []
+      list.push({ id: it.id as number, productId: it.productId, quantity: it.quantity })
+      byOrder.set(it.transferOrderId, list)
+    }
+    // 一次 anyOf 返回的行顺序不受控，按主键排一遍：明细行的排列与旧版「逐单查询」保持一致
+    for (const list of byOrder.values()) list.sort((a, b) => a.id - b.id)
 
     const rows: TransferRow[] = []
     for (const o of orders) {
-      const items = await db.transferItems.where('transferOrderId').equals(o.id!).toArray()
-      const detail = items.map(it => ({
+      const its = byOrder.get(o.id!) ?? []
+      const detail = its.map(it => ({
         productName: pmap.get(it.productId) ?? `商品#${it.productId}`,
         quantity: it.quantity
       }))
@@ -400,8 +514,8 @@ export const useInventoryStore = defineStore('inventory', () => {
         toName: locMap.get(o.toLoc) ?? `库位${o.toLoc}`,
         date: (o.date ?? '').slice(0, 16).replace('T', ' '),
         operatorName: userMap.get(o.operatorId) ?? `#${o.operatorId}`,
-        itemCount: items.length,
-        totalQty: items.reduce((s, it) => s + it.quantity, 0),
+        itemCount: its.length,
+        totalQty: its.reduce((s, it) => s + it.quantity, 0),
         items: detail
       })
     }
@@ -432,50 +546,67 @@ export const useInventoryStore = defineStore('inventory', () => {
 
     let profit = 0
     let loss = 0
-    for (const e of entries) {
+
+    // V2.1-2.34 A2 档：原先每个盘点是 4 次串行请求（库位 + 读总库存 + 写总库存 + 2 条明细流水），
+    // 现在是 3 次批量写。delta 与盘盈盘亏仍在内存里按原顺序算，结果不变。
+    // ⚠️ 这里**不能**过滤 delta === 0：原实现对「数量一致的盘点行」同样会写
+    // stocktakeItems 与 adjust 流水（实盘记录本身就该留痕）。只有库存表会跳过 0 增量，
+    // 而 applyLocationDeltas / applyStockDeltas 内部已经做了这个短路。
+    const deltas = entries.map(e => {
       const systemQty = sysMap[e.productId] ?? 0
       const delta = e.actual - systemQty
       if (delta > 0) profit += delta
       if (delta < 0) loss += -delta
-      // 校正库位分布
-      await applyLocationDelta(e.productId, locationId, delta)
-      // 校正总库存（与库位同幅，等式不变）
-      const stock = await db.stock.where('productId').equals(e.productId).first()
-      if (stock) {
-        await db.stock.update(stock.id!, { quantity: stock.quantity + delta, updatedAt: now })
-      } else {
-        await db.stock.add({ productId: e.productId, quantity: delta, updatedAt: now })
-      }
+      return { productId: e.productId, delta, systemQty, actual: e.actual }
+    })
+
+    await Promise.all([
+      applyLocationDeltas(deltas.map(d => ({ productId: d.productId, locationId, delta: d.delta }))),
+      // 校正总库存（与库位同幅，保证「总库存 = 各库位之和」的等式不变）
+      applyStockDeltas(deltas.map(d => ({ productId: d.productId, delta: d.delta })), { now, clampZero: false, createIfMissing: true }),
       // 调整流水留痕
-      await db.stockRecords.add({
-        type: 'adjust', refOrderId: orderId as number, productId: e.productId,
-        quantity: delta, operatorId, createdAt: now, locationId, batchNo: orderNo,
+      safeBulkAdd(db.stockRecords as any, deltas.map(d => ({
+        type: 'adjust', refOrderId: orderId as number, productId: d.productId,
+        quantity: d.delta, operatorId, createdAt: now, locationId, batchNo: orderNo,
         remark: `盘点 ${orderNo}`
-      })
-      await db.stocktakeItems.add({
-        stocktakeId: orderId as number, productId: e.productId,
-        systemQty, actualQty: e.actual
-      })
-    }
+      }))),
+      safeBulkAdd(db.stocktakeItems as any, deltas.map(d => ({
+        stocktakeId: orderId as number, productId: d.productId,
+        systemQty: d.systemQty, actualQty: d.actual
+      })))
+    ])
 
     await writeLog(operatorId, AUDIT_ACTIONS.STOCK_ADJUST, `盘点单 ${orderNo}（盘盈 ${profit} / 盘亏 ${loss}）`)
     return { ok: true, message: `已生成盘点单 ${orderNo}`, orderNo, profit, loss }
   }
 
+  // 同 listTransfers：三张字典表并发 + 明细走 anyOfBatch 批量，消灭 N+1（C 档 V2.1-2.34-C）
   async function listStocktakes(): Promise<StocktakeRow[]> {
     const orders = await db.stocktakes.toArray()
     if (!orders.length) return []
-    const users = await db.users.toArray()
+    const [users, locs, products] = await Promise.all([
+      db.users.toArray(),
+      db.locations.toArray(),
+      db.products.toArray()
+    ])
     const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const locs = await db.locations.toArray()
     const locMap = new Map(locs.map(l => [l.id!, l.name]))
-    const products = await db.products.toArray()
     const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+
+    const items = await anyOfBatch(db.stocktakeItems as any, 'stocktakeId', orders.map(o => o.id!))
+    const byOrder = new Map<number, Array<{ id: number; productId: number; systemQty: number; actualQty: number }>>()
+    for (const it of items as any[]) {
+      const list = byOrder.get(it.stocktakeId) ?? []
+      list.push({ id: it.id as number, productId: it.productId, systemQty: it.systemQty, actualQty: it.actualQty })
+      byOrder.set(it.stocktakeId, list)
+    }
+    // 同上：按主键排一遍，与旧版逐单查询的明细顺序一致
+    for (const list of byOrder.values()) list.sort((a, b) => a.id - b.id)
 
     const rows: StocktakeRow[] = []
     for (const o of orders) {
-      const items = await db.stocktakeItems.where('stocktakeId').equals(o.id!).toArray()
-      const detail = items.map(it => ({
+      const its = byOrder.get(o.id!) ?? []
+      const detail = its.map(it => ({
         productName: pmap.get(it.productId) ?? `商品#${it.productId}`,
         systemQty: it.systemQty,
         actualQty: it.actualQty,
@@ -487,7 +618,7 @@ export const useInventoryStore = defineStore('inventory', () => {
         locationName: locMap.get(o.locationId) ?? `库位${o.locationId}`,
         date: (o.date ?? '').slice(0, 16).replace('T', ' '),
         operatorName: userMap.get(o.operatorId) ?? `#${o.operatorId}`,
-        itemCount: items.length,
+        itemCount: its.length,
         profit: detail.filter(d => d.diff > 0).reduce((s, d) => s + d.diff, 0),
         loss: detail.filter(d => d.diff < 0).reduce((s, d) => s + -d.diff, 0),
         items: detail
@@ -501,7 +632,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     reconcileProduct, reconcileProducts,
     addLocation, renameLocation, deleteLocation, locationTotals,
     productDistribution, distributionAll,
-    locationStockMap, applyLocationDelta,
+    locationStockMap, applyLocationDelta, applyLocationDeltas, applyStockDeltas,
     transfer, listTransfers, stocktake, listStocktakes
   }
 })

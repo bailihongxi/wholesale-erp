@@ -268,29 +268,44 @@ async function revertBatch(b: StockDocRow): Promise<void> {
 }
 
 async function loadOrder(): Promise<void> {
-  // 库房列表（可自行设定）与默认库房：与单据无关，先加载
-  await inventoryStore.ensureLocations()
-  locations.value = await inventoryStore.listLocations()
-  if (!locationId.value || !locations.value.some(l => l.id === locationId.value)) {
-    locationId.value = await inventoryStore.defaultLocationId()
-  }
-
   const oid = Number(route.params.id)
   orderId.value = oid
   // 路由缺少合法 id（例如从详情跳回列表、或路由切换瞬间）时直接退出，
   // 避免对 IndexedDB 执行 .get(NaN)/.where().equals(NaN) 触发未处理异常。
   if (!Number.isFinite(oid)) return
-  const order = await salesStore.getOrder(oid)
+
+  // C 档：下面这几件事只依赖 oid，彼此无关，原来是「一条 await 接一条」
+  // 首屏要等 4~5 个往返；现在并行成 1 个往返的时间。
+  const [order, orderItems, locList, records, allDocs] = await Promise.all([
+    salesStore.getOrder(oid),
+    salesStore.getOrderItems(oid),
+    (async () => {
+      // 库房列表（可自行设定）：与单据无关
+      await inventoryStore.ensureLocations()
+      return await inventoryStore.listLocations()
+    })(),
+    db.stockRecords.where('refOrderId').equals(oid).toArray(),
+    docStore.listDocs('out'),
+  ])
+
+  locations.value = locList
+  if (!locationId.value || !locList.some(l => l.id === locationId.value)) {
+    locationId.value = await inventoryStore.defaultLocationId()
+  }
+
   orderNo.value = order?.orderNo ?? ''
   orderDate.value = order?.orderDate ?? ''
   orderStatus.value = order?.status ?? ''
   totalAmount.value = order?.totalAmount ?? 0
-  items.value = await salesStore.getOrderItems(oid)
+  items.value = orderItems
 
   // 只查这张单真正用到的商品：旧实现 search('') 会把 6281 条商品全拉进来，
   // 而单据明细通常只有几行，属于白搬 6000+ 行数据。
   const pids = [...new Set(items.value.map(it => it.productId))]
-  const products = await db.products.bulkGet(pids)
+  const [products, customers] = await Promise.all([
+    db.products.bulkGet(pids),
+    order ? salesStore.listCustomers() : Promise.resolve([] as Awaited<ReturnType<typeof salesStore.listCustomers>>),
+  ])
   const nm: Record<number, string> = {}
   const um: Record<number, string> = {}
   for (const p of products) {
@@ -303,19 +318,16 @@ async function loadOrder(): Promise<void> {
   await loadLocationStock()
 
   if (order) {
-    const customers = await salesStore.listCustomers()
     customerName.value = customers.find(c => c.id === order.customerId)?.name ?? ''
   }
 
-  const records = await db.stockRecords.where('refOrderId').equals(oid).toArray()
   const shipped: Record<number, number> = {}
   for (const r of records.filter(x => x.type === 'sale_out')) {
     shipped[r.productId] = (shipped[r.productId] ?? 0) + Math.abs(r.quantity)
   }
   shippedMap.value = shipped
 
-  const all = await docStore.listDocs('out')
-  batches.value = all.filter(b => b.refOrderId === orderId.value)
+  batches.value = allDocs.filter(b => b.refOrderId === orderId.value)
 
   // 本次库房默认沿用上一批的库房（同一单连续发货通常从同一个库出）
   const latestBatchLoc = batches.value[0]?.locationId
