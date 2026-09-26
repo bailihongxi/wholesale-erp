@@ -81,8 +81,9 @@ describe('阶段4：商品中心页面重写', () => {
     await flushPromises()
     expect(wrapper.findAll('.prod-card').length).toBe(2)
     // 搜索框已统一为 SearchInput 组件（自带清除按钮），输入其内部 .search-field
+    // V2.2-1.1：商品档案搜索改「回车触发」（search-on-enter），输入后需按回车才过滤
     await wrapper.find('.search-field').setValue('格力')
-    await sleep(350) // 搜索防抖 250ms
+    await wrapper.find('.search-field').trigger('keyup.enter')
     await flushPromises()
     expect(wrapper.findAll('.prod-card').length).toBe(1)
     expect(wrapper.text()).toContain('格力 KFR-35GW')
@@ -100,7 +101,7 @@ describe('阶段4：商品中心页面重写', () => {
     expect(wrapper.find('.clear-btn').attributes('style')).toContain('display: none')
 
     await wrapper.find('.search-field').setValue('格力')
-    await sleep(350)
+    await wrapper.find('.search-field').trigger('keyup.enter') // V2.2-1.1：回车触发搜索
     await flushPromises()
     expect(wrapper.findAll('.prod-card').length).toBe(1)
     // 有输入内容时清除按钮出现

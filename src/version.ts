@@ -8,7 +8,7 @@
  *
  * 版本命名：V<主版本>.<次版本>-<修订号>，例如 V1.0-1 表示 1.0 的第 1 个修订版。
  */
-export const APP_VERSION = 'V2.2-1.0'
+export const APP_VERSION = 'V2.2-1.1'
 
 /** 版本发布基线日期 */
 export const APP_RELEASE_DATE = '2026-09-27'

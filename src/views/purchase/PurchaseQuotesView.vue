@@ -156,10 +156,13 @@
               </tr>
             </tbody>
             <tfoot v-if="form.items.length">
+              <!-- V2.2-1.1：合计行对齐表头 8 列 —— 数量落在「数量」列（借鉴采购商品明细合计行），
+                   原先 colspan=5 把数量列吞掉，数量合计没地方放 -->
               <tr>
-                <td colspan="5" class="total-label">
+                <td colspan="4" class="total-label">
                   合计<span class="t-note">{{ form.items.length }} 项商品</span>
                 </td>
+                <td class="num t-qty">{{ totalQty }}</td>
                 <td class="num"></td>
                 <td class="num t-amount">¥{{ money(total) }}</td>
                 <td></td>
@@ -454,6 +457,8 @@ const form = reactive({
   items: [] as Line[]
 })
 const total = computed(() => form.items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0))
+/** V2.2-1.1：合计数量（合计行「数量」列，与采购商品明细同口径 = 各行数量直加） */
+const totalQty = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
 const canSubmit = computed(() => {
   const hasCustomer = form.customerId > 0 || form.customerName.trim().length > 0
   return hasCustomer && form.items.length > 0
@@ -748,6 +753,8 @@ onMounted(async () => {
 .mini-input.price { width: 96px; }
 .total-label { text-align: right; }
 .t-note { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--c-muted); }
+/* V2.2-1.1：合计行数量列（样式与采购商品明细一致） */
+.data-table tfoot td.t-qty { font-size: 18px; color: var(--c-text); }
 .data-table tfoot td.t-amount { font-size: 18px; color: var(--c-danger); }
 .rm-btn { border: none; background: none; color: var(--c-danger); cursor: pointer; font-size: 13px; }
 .empty { text-align: center; color: var(--c-muted); padding: 20px; font-size: 13px; }

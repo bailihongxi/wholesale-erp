@@ -41,11 +41,16 @@ const props = withDefaults(
     placeholder?: string
     /** 输入防抖毫秒数，0 表示立即触发。默认 300ms */
     debounce?: number
+    /** 仅回车 / 清除时触发搜索（V2.2-1.1）。默认 false 保持「边输边搜」；
+        大列表（如商品档案 6000+）逐字符搜索会整页跳动，传 true 后输入只更新关键词、
+        按回车（手机键盘确认键）或点 × 清除才真正搜索 */
+    searchOnEnter?: boolean
     round?: boolean
   }>(),
   {
     placeholder: '搜索',
     debounce: 300,
+    searchOnEnter: false,
     round: false
   }
 )
@@ -84,6 +89,8 @@ function emitSearch(): void {
 
 function onInput(): void {
   emit('update:modelValue', model.value)
+  // 仅回车模式：输入阶段不触发搜索（回车走 emitSearch、清除走 clear）
+  if (props.searchOnEnter) return
   clearTimer()
   if (props.debounce <= 0) {
     emit('search', model.value)

@@ -172,6 +172,7 @@ import PageHeader from '../../components/ui/PageHeader.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useRoute, useRouter } from 'vue-router'
+import { goBackOr } from '../../composables/useGoBack'
 import { showToast, showConfirmDialog } from 'vant'
 import PageActions from '../../components/PageActions.vue'
 import PrintPreview from '../../components/PrintPreview.vue'
@@ -298,7 +299,9 @@ function onCancel(): void {
     editQty.value = q
     return
   }
-  router.push(isIn.value ? '/warehouse/inbound' : '/warehouse/outbound')
+  // V2.2-1.1：返回走 goBackOr —— 出库历史/入库历史 Tab 进来的单据，
+  // 返回后要停在进入时的页面（Hub 库存作业 或 独立列表页），不再固定 push 独立路由
+  goBackOr(router, isIn.value ? '/warehouse/inbound' : '/warehouse/outbound')
 }
 
 function onPrimary(): void {

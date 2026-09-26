@@ -7,8 +7,8 @@
         v-model="keyword"
         class="grow"
         placeholder="搜索名称 / 型号 / 分类 / 规格"
-        :debounce="0"
-        @search="onFilterChange()"
+        search-on-enter
+        @search="onKwSearch"
       />
       <select v-model="category" class="sel">
         <option value="">全部分类</option>
@@ -111,15 +111,16 @@
             {{ p.status === 'active' ? '在售' : '停售' }}
           </span>
         </div>
-        <div class="pc-meta">
-          <span>{{ p.category || '未分类' }}</span>
-          <span v-if="canSeePurchasePrice">进 ¥{{ money(p.purchasePrice) }}</span>
-          <span v-if="canSeeAnyPrice">批 ¥{{ money(p.wholesalePrice) }}</span>
-          <span v-if="canSeeAnyPrice">零 ¥{{ money(p.retailPrice) }}</span>
-          <span :class="stockClass(p)">库 {{ stockOf(p.id!) }}</span>
-          <span v-if="isWarn(p)" class="tag tag-danger">警</span>
-        </div>
-        <div class="pc-actions">
+        <!-- V2.2-1.1：两行排列 —— 第二行左侧信息、右侧编辑按钮（正好落在「在售」标签下方） -->
+        <div class="pc-row2">
+          <div class="pc-meta">
+            <span>{{ p.category || '未分类' }}</span>
+            <span v-if="canSeePurchasePrice">进 ¥{{ money(p.purchasePrice) }}</span>
+            <span v-if="canSeeAnyPrice">批 ¥{{ money(p.wholesalePrice) }}</span>
+            <span v-if="canSeeAnyPrice">零 ¥{{ money(p.retailPrice) }}</span>
+            <span :class="stockClass(p)">库 {{ stockOf(p.id!) }}</span>
+            <span v-if="isWarn(p)" class="tag tag-danger">警</span>
+          </div>
           <button class="link-btn" type="button" @click="go(`/boss/products/edit/${p.id}`)">编辑</button>
         </div>
       </li>
@@ -299,15 +300,14 @@ const { canSeeAnyPrice, canSeePurchasePrice } = usePermission()
 const keyword = ref('')
 const category = ref('')
 const status = ref('')
-// 搜索输入防抖：商品上千时每敲一个字全量 filter 在手机上会卡 100~300ms，
-// 这里把实际过滤值延迟 250ms 刷新，边打边出结果但不拖慢输入。
+// V2.2-1.1：搜索改「回车 / 搜索键 / 点 ×」触发（SearchInput search-on-enter 模式）。
+// 商品 6000+ 时逐字符搜索会整页跳动；输入阶段只更新 keyword（草稿），
+// 真正的过滤值 kwDebounced 在 @search 回调里才刷新。
 const kwDebounced = ref('')
-let kwTimer: ReturnType<typeof setTimeout> | undefined
-watch(keyword, v => {
-  clearTimeout(kwTimer)
-  kwTimer = setTimeout(() => { kwDebounced.value = v }, 250)
-})
-onUnmounted(() => clearTimeout(kwTimer))
+function onKwSearch(v: string): void {
+  kwDebounced.value = v.trim()
+  onFilterChange()
+}
 
 const stockMap = ref<Record<number, number>>({})
 interface SelItem { id: number; key: string }
@@ -732,8 +732,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .pc-check { display: inline-flex; align-items: center; gap: 8px; }
 .pc-name { font-weight: 600; color: var(--c-primary); }
-.pc-meta { display: flex; gap: 12px; margin-top: 6px; font-size: 13px; color: var(--c-muted); flex-wrap: wrap; }
-.pc-actions { margin-top: 8px; text-align: right; }
+.pc-meta { display: flex; gap: 12px; font-size: 13px; color: var(--c-muted); flex-wrap: wrap; min-width: 0; }
+/* V2.2-1.1：第二行 = 信息 + 编辑按钮（右对齐，与第一行「在售」标签垂直对齐） */
+.pc-row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; }
+.pc-row2 .link-btn { flex: none; }
 /* 弹窗 */
 .overlay {
   position: fixed; inset: 0; background: rgba(15,23,42,0.45);
