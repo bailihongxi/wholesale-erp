@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>家电批发ERP</title>
+    <!-- 应用图标与「发送到桌面」：静态默认值，运行时如换过图标会被覆盖（见 utils/appIcon.ts） -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#16325c" />
+    <meta name="description" content="家电批发进销存 ERP：进货、库存、销售、对账全流程管理，数据保存在本机。" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="批发ERP" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <style>
+      /* 首屏占位：JS 解析完之前先显示品牌与呼吸条，
+         避免白屏一闪（Vue 挂载后 #app 内容会被整块替换掉）。 */
+      html, body { margin: 0; height: 100%; }
+      body { background: #f4f6fa; -webkit-font-smoothing: antialiased; }
+      #app-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #16325c;
+      }
+      #app-boot .boot-logo { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+      #app-boot .boot-bar {
+        width: 148px; height: 4px; border-radius: 999px; overflow: hidden; background: #e3e9f2;
+      }
+      #app-boot .boot-bar::after {
+        content: ''; display: block; width: 60%; height: 100%; border-radius: 999px;
+        background: #2f6bff; animation: boot-move 1s ease-in-out infinite alternate;
+      }
+      @keyframes boot-move { from { transform: translateX(-60%); } to { transform: translateX(110%); } }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BJ15sRR0.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vue-vendor-07M7iixH.js">
+    <link rel="modulepreload" crossorigin href="./assets/supabase-vendor-D_iOwayF.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-d1VLh2rL.css">
+  </head>
+  <body>
+    <div id="app">
+      <div id="app-boot">
+        <div class="boot-logo" id="boot-logo">家电批发ERP</div>
+        <div class="boot-bar"></div>
+      </div>
+    </div>
+    <!--
+      首屏品牌名跟随「系统设置 → 品牌与图标 → 系统名称」。
+      这段静态 HTML 在 JS 之前就被渲染，拿不到 Vue 里的配置，所以这里同步读一次
+      localStorage（键 erp_brand_config，与 src/utils/brand.ts 一致）就地改名；
+      读不到 / 配置损坏时保留上面写死的默认名，绝不会变成空白。
+    -->
+    <script>
+      (function () {
+        var name = '家电批发ERP'
+        try {
+          var raw = localStorage.getItem('erp_brand_config')
+          if (raw) {
+            var saved = JSON.parse(raw)
+            if (saved && typeof saved.loginTitle === 'string' && saved.loginTitle.trim()) {
+              name = saved.loginTitle.trim()
+            }
+          }
+        } catch (e) {
+          /* 隐私模式 / 脏数据：保持默认名 */
+        }
+        document.title = name
+        var logo = document.getElementById('boot-logo')
+        if (logo) {
+          logo.textContent = name
+          // 名字偏长自动缩字号，避免换行把呼吸条挤下去
+          if (name.length > 10) logo.style.fontSize = '18px'
+          if (name.length > 16) logo.style.fontSize = '15px'
+        }
+        var apple = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+        if (apple) apple.setAttribute('content', name)
+      })()
+    </script>
+  </body>
+</html>
