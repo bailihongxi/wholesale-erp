@@ -62,6 +62,7 @@ import { useRouter } from 'vue-router'
 import { usePurchaseStore } from '../../stores/purchase'
 import { useSalesStore } from '../../stores/sales'
 import { db } from '../../db'
+import { USE_CLOUD } from '../../db/supabaseClient'
 import type { Customer, Supplier } from '../../types'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SectionCard from '../../components/ui/SectionCard.vue'
@@ -94,12 +95,17 @@ function go(p: string): void { router.push(p) }
 async function reload(): Promise<void> {
   // 待入库 / 待出库 / 客户 / 供应商 / 今日流水互不依赖，全部并发。
   // 原来 stockRecords 是等前四个跑完才拉的第 5 段串行往返（C 档 V2.1-2.34-C）
+  // V6·#5 今日流水只需 type/quantity/createdAt 三字段，云端走窄字段扫描，本地回退 toArray。
+  const recordsPromise: Promise<Array<{ type?: string; quantity?: number; createdAt?: string }>> = USE_CLOUD
+    ? (db.stockRecords as any).scanNarrow('type,quantity,createdAt')
+    : (db.stockRecords.toArray() as Promise<any[]>)
+
   const [pi, po, cs, ss, records] = await Promise.all([
     purchaseStore.listPendingInbound(),
     salesStore.listPendingOutbound(),
     salesStore.listCustomers(),
     purchaseStore.listSuppliers(),
-    db.stockRecords.toArray()
+    recordsPromise
   ])
   pendingInbound.value = pi
   pendingOutbound.value = po
@@ -110,10 +116,10 @@ async function reload(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10)
   todayInQty.value = records
     .filter(r => r.type === 'purchase_in' && (r.createdAt ?? '').slice(0, 10) === today)
-    .reduce((s, r) => s + r.quantity, 0)
+    .reduce((s, r) => s + (r.quantity ?? 0), 0)
   todayOutQty.value = records
     .filter(r => r.type === 'sale_out' && (r.createdAt ?? '').slice(0, 10) === today)
-    .reduce((s, r) => s + Math.abs(r.quantity), 0)
+    .reduce((s, r) => s + Math.abs(r.quantity ?? 0), 0)
 }
 
 onMounted(reload)

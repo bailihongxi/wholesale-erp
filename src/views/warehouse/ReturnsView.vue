@@ -288,19 +288,31 @@ async function init(useCache = true): Promise<void> {
   }
 
   await inventoryStore.ensureLocations()
-  locations.value = await inventoryStore.listLocations()
-  if (!locationId.value || !locations.value.some(l => l.id === locationId.value)) {
-    locationId.value = await inventoryStore.defaultLocationId()
-  }
-  saleOrders.value = await salesStore.listOrders()
-  purchaseOrders.value = await purchaseStore.listOrders()
-  const customers = await db.customers.toArray()
-  const suppliers = await db.suppliers.toArray()
+  // V6·#3 退换货页面：8 段串行 → ensureLocations 后一次性并行
+  // （listLocations / 销售单 / 采购单 / 客户 / 供应商 / 商品名映射 / 默认库位 / 历史
+  //   彼此互不依赖，合并为单轮；loadHistory 内部自行写入 history.value）
+  const [
+    locs, saleOrders_, purchaseOrders_, customers, suppliers, productNameMap_, defaultLocId
+  ] = await Promise.all([
+    inventoryStore.listLocations(),
+    salesStore.listOrders(),
+    purchaseStore.listOrders(),
+    db.customers.toArray(),
+    db.suppliers.toArray(),
+    productStore.nameMap(),
+    inventoryStore.defaultLocationId(),
+    loadHistory()
+  ])
+  locations.value = locs
+  saleOrders.value = saleOrders_
+  purchaseOrders.value = purchaseOrders_
   customerMap.value = Object.fromEntries(customers.map(c => [c.id!, c.name]))
   supplierMap.value = Object.fromEntries(suppliers.map(s => [s.id!, s.name]))
   // 只读名字：走窄字段扫描，不为显示名称去拉全字段整表
-  productNameMap.value = await productStore.nameMap()
-  await loadHistory()
+  productNameMap.value = productNameMap_
+  if (!locationId.value || !locs.some(l => l.id === locationId.value)) {
+    locationId.value = defaultLocId
+  }
   // 写入缓存
   listCache.set({
     locations: locations.value,

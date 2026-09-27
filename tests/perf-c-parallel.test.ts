@@ -548,7 +548,8 @@ describe('C 档 · 静态契约（防止被改回串行）', () => {
     expect(t).toContain('const [, locs, prods, hist] = await Promise.all([')
     expect(t).toContain('inv.syncLocationStock(),')
     expect(t).toContain('inv.listLocations(),')
-    expect(t).toContain('productStore.listAll(),')
+    // V6·#6 选商品列表改走窄字段 listProductLites()（仍在同一个 Promise.all 内，并发语义不变）
+    expect(t).toContain('productStore.listProductLites(),')
     expect(t).toContain('inv.listStocktakes()')
     expect(t).not.toContain('locations.value = await inv.listLocations()')
     expect(t).not.toContain('products.value = await productStore.listAll()')

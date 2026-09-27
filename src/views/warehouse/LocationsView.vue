@@ -145,14 +145,18 @@ const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 async function load(): Promise<void> {
   await inventoryStore.ensureLocations()
   locations.value = await inventoryStore.listLocations()
-  totals.value = await inventoryStore.locationTotals()
 
-  // 商品种数：该库房里数量 > 0 的商品个数
+  // V6·#4 库房一览：locationStock 只全表读一次（distributionAll），
+  // totals（各库房件数合计）与 kinds（各库房商品种数）均从同一次结果派生，
+  // 去掉原 locationTotals 的第二次整表读。
   const { byLocation } = await inventoryStore.distributionAll()
+  const t: Record<number, number> = {}
   const k: Record<number, number> = {}
   for (const [locId, map] of Object.entries(byLocation)) {
+    t[Number(locId)] = Object.values(map).reduce((s, v) => s + v, 0)
     k[Number(locId)] = Object.keys(map).length
   }
+  totals.value = t
   kinds.value = k
 }
 

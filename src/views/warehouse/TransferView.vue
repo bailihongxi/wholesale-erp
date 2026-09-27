@@ -164,6 +164,7 @@ import { useResponsive } from '../../composables/useResponsive'
 import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
+import type { ProductLite } from '../../stores/product'
 
 const productStore = useProductStore()
 const inv = useInventoryStore()
@@ -176,7 +177,7 @@ const fromLoc = ref(1)
 const toLoc = ref(2)
 const fromMap = ref<Record<number, number>>({})
 const toMap = ref<Record<number, number>>({})
-const products = ref<Product[]>([])
+const products = ref<ProductLite[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; fromStock: number; toStock: number; qty: number }>>([])
 const history = ref<TransferRow[]>([])
 
@@ -197,7 +198,7 @@ const selectedMap = computed<Record<number, number>>(() => {
 })
 const canSubmit = computed(() => fromLoc.value !== toLoc.value && totalQty.value > 0)
 const pickerRows = computed<PickerRow[]>(() =>
-  products.value.map(p => ({ product: p, stock: fromMap.value[p.id!] ?? 0 }))
+  products.value.map(p => ({ product: p as unknown as Product, stock: fromMap.value[p.id] ?? 0 }))
 )
 
 async function reloadMaps(): Promise<void> {
@@ -255,7 +256,7 @@ async function init(): Promise<void> {
   const [, locs, prods, hist] = await Promise.all([
     inv.syncLocationStock(),
     inv.listLocations(),
-    productStore.listAll(),
+    productStore.listProductLites(),
     inv.listTransfers()
   ])
   locations.value = locs

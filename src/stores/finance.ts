@@ -404,17 +404,22 @@ export const useFinanceStore = defineStore('finance', () => {
   }
 
   /** 记一笔汇总：总收入 / 总支出 / 净额 / 按分类小计 */
-  async function ledgerSummary(from?: string, to?: string): Promise<{
+  async function ledgerSummary(
+    from?: string,
+    to?: string,
+    /** V6·#2 复用：调用方已拉取并筛选好的同一批 rows，传进来避免全表再拉一遍 */
+    rows?: LedgerEntry[]
+  ): Promise<{
     income: number
     expense: number
     net: number
     byCategory: Array<{ category: string; label: string; amount: number; direction: LedgerDirection }>
   }> {
-    const rows = await listLedger({ from, to })
+    const src = rows ?? (await listLedger({ from, to }))
     let income = 0
     let expense = 0
     const bucket = new Map<string, number>()
-    for (const r of rows) {
+    for (const r of src) {
       if (r.direction === 'in') income += r.amount
       else expense += r.amount
       const key = `${r.direction}:${r.category}`

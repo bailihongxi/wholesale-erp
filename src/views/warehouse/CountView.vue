@@ -163,6 +163,7 @@ import { useResponsive } from '../../composables/useResponsive'
 import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
+import type { ProductLite } from '../../stores/product'
 
 const productStore = useProductStore()
 const inv = useInventoryStore()
@@ -173,7 +174,7 @@ const tab = ref<'create' | 'history'>('create')
 const locations = ref<Array<{ id?: number; name: string }>>([])
 const locId = ref(1)
 const sysMap = ref<Record<number, number>>({})
-const products = ref<Product[]>([])
+const products = ref<ProductLite[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; sys: number; actual: number }>>([])
 const history = ref<StocktakeRow[]>([])
 
@@ -198,7 +199,7 @@ const totalLoss = computed(() =>
   lines.value.reduce((s, l) => s + Math.max(0, l.sys - (Number(l.actual) || 0)), 0)
 )
 const pickerRows = computed<PickerRow[]>(() =>
-  products.value.map(p => ({ product: p, stock: sysMap.value[p.id!] ?? 0 }))
+  products.value.map(p => ({ product: p as unknown as Product, stock: sysMap.value[p.id] ?? 0 }))
 )
 
 async function reloadSys(): Promise<void> {
@@ -254,7 +255,7 @@ async function init(): Promise<void> {
   const [, locs, prods, hist] = await Promise.all([
     inv.syncLocationStock(),
     inv.listLocations(),
-    productStore.listAll(),
+    productStore.listProductLites(),
     inv.listStocktakes()
   ])
   locations.value = locs

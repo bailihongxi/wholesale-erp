@@ -11,6 +11,19 @@ import { escapeOr } from '../db/cloudDb'
 // 否则明细页会一直显示「商品#6287」（详见 useProductCache.markDirty 注释）
 import { markDirty as markProductCacheDirty } from '../composables/useProductCache'
 
+/** 轻量商品对象：只含选商品弹窗 / 盘点 / 调拨等展示与下单所需字段。
+ *  比 Product 全字段少得多，云端走窄字段扫描，避免 6281 行全字段传输。 */
+export interface ProductLite {
+  id: number
+  brand: string
+  model: string
+  category: string
+  spec: string
+  unit: string
+  warnStock: number
+  status: string
+}
+
 export const useProductStore = defineStore('product', () => {
   const products = ref<Product[]>([])
 
@@ -48,6 +61,28 @@ export const useProductStore = defineStore('product', () => {
   async function listAll(includeInactive = false): Promise<Product[]> {
     const all = await db.products.toArray()
     return includeInactive ? all : all.filter(p => p.status !== 'inactive')
+  }
+
+  /**
+   * 轻量商品列表：选商品弹窗、盘点、调拨等只用展示字段的场景。
+   * ⚠️ 云端走窄字段扫描（id/brand/model/category/spec/unit/warnStock/status 8 列），
+   * 本地仍 toArray 后映射。注意：商品档案页仍用 listAll() 全字段，请勿用本函数替代它。
+   */
+  async function listProductLites(): Promise<ProductLite[]> {
+    const FIELDS = 'id,brand,model,category,spec,unit,warnStock,status'
+    if (USE_CLOUD) {
+      return (await (db.products as any).scanNarrow(FIELDS)) as ProductLite[]
+    }
+    return (await db.products.toArray()).map((p: Product) => ({
+      id: p.id!,
+      brand: p.brand,
+      model: p.model,
+      category: p.category,
+      spec: p.spec,
+      unit: p.unit,
+      warnStock: p.warnStock,
+      status: p.status
+    }))
   }
 
   /**
@@ -401,7 +436,7 @@ export const useProductStore = defineStore('product', () => {
 
   return {
     products, productName, loadAll, search, createProduct, listAll, listPage, distinctCategories, stockMap,
-    updateProduct, getProduct, nameMap, getStock, getLowStockProducts, findSameName,
+    updateProduct, getProduct, nameMap, getStock, getLowStockProducts, findSameName, listProductLites,
     pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache
   }
 })

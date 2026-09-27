@@ -477,7 +477,8 @@ async function reload(useCache = true): Promise<void> {
     from: filter.from || undefined,
     to: filter.to || undefined
   })
-  summary.value = await financeStore.ledgerSummary(filter.from || undefined, filter.to || undefined)
+  // V6·#2 复用同一批 rows，避免 ledgerSummary 内部再全表拉取一次
+  summary.value = await financeStore.ledgerSummary(filter.from || undefined, filter.to || undefined, rows.value)
   // 写入缓存
   listCache.set({ rows: rows.value, summary: summary.value })
 }

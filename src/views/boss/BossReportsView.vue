@@ -218,10 +218,17 @@ async function reload(useCache = true): Promise<void> {
     }
   }
 
-  summary.value = await financeStore.getProfitSummary(startDate.value || undefined, endDate.value || undefined)
-  receivableTotal.value = await financeStore.getReceivableTotal()
-  payableTotal.value = await financeStore.getPayableTotal()
-  trend.value = await financeStore.getMonthlyTrend(6)
+  // V6·#1 四项聚合互不依赖，合并为单轮并行（原 4 段串行 → 1 轮）
+  const [s, r, p, t] = await Promise.all([
+    financeStore.getProfitSummary(startDate.value || undefined, endDate.value || undefined),
+    financeStore.getReceivableTotal(),
+    financeStore.getPayableTotal(),
+    financeStore.getMonthlyTrend(6),
+  ])
+  summary.value = s
+  receivableTotal.value = r
+  payableTotal.value = p
+  trend.value = t
   // 写入缓存
   listCache.set({
     summary: summary.value,
