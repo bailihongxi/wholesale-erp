@@ -135,33 +135,55 @@
         本单发货批次
         <span class="sec-tip">一次发货生成一张出库单，可单独查看、打印或撤回</span>
       </h4>
-      <table v-if="batches.length" class="data-table">
-        <thead>
-          <tr>
-            <th>出库单号</th>
-            <th>发货时间</th>
-            <th>出库库房</th>
-            <th class="num">件数</th>
-            <th>经手人</th>
-            <th class="center">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="b in batches" :key="b.batchNo">
-            <td class="mono">{{ b.batchNo }}</td>
-            <td>{{ fmtTime(b.createdAt) }}</td>
-            <td>{{ b.locationName || '—' }}</td>
-            <td class="num stock-out">-{{ b.totalQty }}</td>
-            <td>{{ b.operatorName }}</td>
-            <td class="center">
-              <span class="op-cell">
-                <button class="link-btn" type="button" @click="openBatch(b.batchNo)">明细</button>
-                <button class="link-btn danger" type="button" @click="revertBatch(b)">撤销</button>
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- 手机端：批次卡片（全站统一外壳 12A，与入库验货页保持同款）。
+           原来是 6 列表格，手机宽度下被压到每列换行并撑破卡片边缘。 -->
+      <ul v-if="batches.length && isMobile" class="card-list">
+        <li v-for="b in batches" :key="b.batchNo" class="card">
+          <div class="card-head">
+            <span class="card-no mono">{{ b.batchNo }}</span>
+            <span class="ui-badge danger">-{{ b.totalQty }} 件</span>
+          </div>
+          <div class="card-body">
+            <span class="card-party">{{ b.locationName || '—' }} · {{ b.operatorName }}</span>
+          </div>
+          <div class="card-foot">
+            <span class="card-date">{{ fmtTime(b.createdAt) }}</span>
+            <span class="op-cell">
+              <button class="card-act" type="button" @click="openBatch(b.batchNo)">明细</button>
+              <button class="card-del" type="button" @click="revertBatch(b)">撤销</button>
+            </span>
+          </div>
+        </li>
+      </ul>
+      <div v-else-if="batches.length" class="tb-scroll">
+        <table class="data-table batch-table">
+          <thead>
+            <tr>
+              <th>出库单号</th>
+              <th>发货时间</th>
+              <th>出库库房</th>
+              <th class="num">件数</th>
+              <th>经手人</th>
+              <th class="center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in batches" :key="b.batchNo">
+              <td class="mono">{{ b.batchNo }}</td>
+              <td>{{ fmtTime(b.createdAt) }}</td>
+              <td>{{ b.locationName || '—' }}</td>
+              <td class="num stock-out">-{{ b.totalQty }}</td>
+              <td>{{ b.operatorName }}</td>
+              <td class="center">
+                <span class="op-cell">
+                  <button class="link-btn" type="button" @click="openBatch(b.batchNo)">明细</button>
+                  <button class="link-btn danger" type="button" @click="revertBatch(b)">撤销</button>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div v-else class="empty">尚未发货</div>
     </section>
 
@@ -179,6 +201,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
+import { useResponsive } from '../../composables/useResponsive'
 import { clearAllListCaches } from '../../composables/useListCache'
 import { useRoute, useRouter } from 'vue-router'
 import { goBackOr } from '../../composables/useGoBack'
@@ -199,6 +222,7 @@ const productStore = useProductStore()
 const docStore = useStockDocStore()
 const userStore = useUserStore()
 const inventoryStore = useInventoryStore()
+const { isMobile } = useResponsive()
 
 const orderNo = ref('')
 const orderId = ref(0)
@@ -415,6 +439,14 @@ async function handleOutbound(): Promise<void> {
 .loc-sel { width: 100%; max-width: 320px; }
 /* 操作列里的「明细 / 撤销」拉开间距 —— 间距口径统一在 theme.css 的 .op-cell */
 .tb-scroll { overflow-x: auto; }
+/* 手机端批次卡片：.block 本身已是白底卡片，这里只借 12A 的排版，去掉外壳
+   （白底/圆角/阴影），改成块内的分隔线行，避免白底套白底。 */
+.block .card-list { background: none; }
+.block .card {
+  box-shadow: none; border-radius: 0; margin-bottom: 0;
+  padding: 10px 0; border-bottom: 1px solid var(--c-border);
+}
+.block .card:last-child { border-bottom: none; padding-bottom: 0; }
 .mini-input {
   width: 84px; height: 32px; border: 1px solid var(--c-border); border-radius: 6px;
   padding: 0 8px; text-align: right; font-size: 14px;

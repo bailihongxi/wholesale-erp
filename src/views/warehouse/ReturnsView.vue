@@ -129,7 +129,19 @@
           <span class="dp-sub">{{ activeDetail.date }} · {{ activeDetail.operatorName }}</span>
           <button class="link-btn" type="button" @click="activeDetail = null">关闭</button>
         </div>
-        <table class="data-table">
+        <!-- 手机端：明细卡片（12A 外壳），电脑端保持表格 -->
+        <ul v-if="isMobile" class="card-list">
+          <li v-for="(it, i) in activeDetail.items" :key="i" class="card">
+            <div class="card-head">
+              <span class="card-no">{{ it.productName }}</span>
+              <span class="card-amt">¥{{ it.amount.toLocaleString() }}</span>
+            </div>
+            <div class="card-body">
+              <span class="card-party">退货 {{ it.quantity }} × ¥{{ it.price.toLocaleString() }}{{ it.reason ? ' · ' + it.reason : '' }}</span>
+            </div>
+          </li>
+        </ul>
+        <table v-else class="data-table">
           <thead><tr><th>商品名称</th><th class="num">退货数量</th><th class="num">单价</th><th class="num">金额</th><th>原因</th></tr></thead>
           <tbody>
             <tr v-for="(it, i) in activeDetail.items" :key="i">
@@ -343,6 +355,14 @@ watch(tab, () => { activeDetail.value = null; if (tab.value === 'history') void 
 .oc-date { font-size: 12px; }
 .hs-sub { font-size: 12px; color: var(--c-muted); margin-top: 4px; }
 .detail-pop { margin-top: 14px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 10px rgba(26,54,93,0.06); }
+/* 明细弹层里的卡片：弹层本身已是白底圆角面板，把 12A 卡片的白底/阴影去掉，
+   只保留内间距与分隔线，避免「白底套白底」。 */
+.detail-pop .card-list { background: none; box-shadow: none; border-radius: 0; overflow: visible; }
+.detail-pop .card {
+  box-shadow: none; border-radius: 0; margin-bottom: 0;
+  padding: 10px 0; border-bottom: 1px solid var(--c-border);
+}
+.detail-pop .card:last-child { border-bottom: none; padding-bottom: 0; }
 .dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .dp-sub { font-size: 12px; color: var(--c-muted); }
 

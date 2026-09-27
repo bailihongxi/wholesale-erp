@@ -99,10 +99,21 @@
       </ul>
     </section>
 
-    <!-- 入库流水（历史痕迹） -->
+    <!-- 入库流水（历史痕迹）：手机端用卡片（12A 全站外壳），电脑端保持表格 -->
     <section class="block">
       <h4 class="block-title">入库流水（{{ inboundRecords.length }}）</h4>
-      <table v-if="inboundRecords.length" class="item-table">
+      <ul v-if="inboundRecords.length && isMobile" class="card-list">
+        <li v-for="r in inboundRecords" :key="r.id" class="card">
+          <div class="card-head">
+            <span class="card-no">{{ nameOf(r.productId) }}</span>
+            <span class="ui-badge success">+{{ r.quantity }}</span>
+          </div>
+          <div class="card-foot">
+            <span class="card-date">{{ fmtTime(r.createdAt) }} · {{ operatorName(r.operatorId) }}</span>
+          </div>
+        </li>
+      </ul>
+      <table v-else-if="inboundRecords.length" class="item-table">
         <thead><tr><th>时间</th><th>商品名称</th><th class="num">数量</th><th>操作人</th></tr></thead>
         <tbody>
           <tr v-for="r in inboundRecords" :key="r.id">
@@ -116,10 +127,21 @@
       <div v-else class="empty">尚未入库</div>
     </section>
 
-    <!-- 付款记录 -->
+    <!-- 付款记录：手机端卡片，电脑端表格 -->
     <section class="block">
       <h4 class="block-title">付款记录（{{ payments.length }}）</h4>
-      <table v-if="payments.length" class="item-table">
+      <ul v-if="payments.length && isMobile" class="card-list">
+        <li v-for="p in payments" :key="p.id" class="card">
+          <div class="card-head">
+            <span class="card-no">{{ fmtDate(p.payDate) }}</span>
+            <span class="card-amt">¥{{ money(p.amount) }}</span>
+          </div>
+          <div class="card-foot">
+            <span class="card-date">{{ operatorName(p.operatorId) }}{{ p.remark ? ' · ' + p.remark : '' }}</span>
+          </div>
+        </li>
+      </ul>
+      <table v-else-if="payments.length" class="item-table">
         <thead><tr><th>日期</th><th class="num">金额</th><th>操作人</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="p in payments" :key="p.id">
@@ -487,6 +509,19 @@ watch(() => route.params.id, loadOrder)
   .d-meta { grid-template-columns: 1fr; }
   .p-name { width: 110px; }
 }
+
+/* 手机端「入库流水 / 付款记录」用 12A 卡片排版，但 .block 本身就是白底卡片，
+   所以只借排版、去掉外壳（白底/圆角/阴影），改成块内的分隔线行 ——
+   与上方「商品明细」（ItemCards）在 .block 里的观感一致，避免白底套白底。 */
+.block .card-list { background: none; }
+.block .card {
+  box-shadow: none;
+  border-radius: 0;
+  margin-bottom: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.block .card:last-child { border-bottom: none; padding-bottom: 0; }
 
 /* 手机端合计行通栏：统一由 src/styles/theme.css 的 .app-layout.is-mobile 钩子提供。
    页面里不要再写一份 —— scoped 副本特异性更高（(0,2,3)）会盖住全局，而它只声明
