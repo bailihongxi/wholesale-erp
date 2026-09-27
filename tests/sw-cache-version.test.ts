@@ -43,7 +43,9 @@ describe('V2.0-17：Service Worker 缓存名必须随构建版本变化', () => 
 
   it('缓存名由 __BUILD_VERSION__ 占位符派生', () => {
     const code = stripComments(src(SW))
-    expect(code).toContain("const BUILD_VERSION = '__BUILD_VERSION__'")
+    // V2.2-1.2 断言现代化：只认语义（占位符存在），不再过敏于单双引号
+    // （public/sw.js 自 V2.1-2.25 起就是双引号书写，旧断言按字面匹配单引号一直红）
+    expect(code).toMatch(/const BUILD_VERSION = ['"]__BUILD_VERSION__['"]/)
     expect(code).toMatch(/CACHE_NAME\s*=\s*['"]erp-['"]\s*\+\s*BUILD_VERSION/)
   })
 

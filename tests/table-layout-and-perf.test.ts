@@ -45,24 +45,39 @@ function templateOf(sfc: string): string {
  *
  * 合计行会按 v-if / v-else 分岔（有权限看不到价格时列数会少几列），
  * v-if 与 v-else 是互斥的两条路径，必须分别算，不能相加。
+ * V2.2-1.2 断言现代化：新增 `:colspan="cond ? A : B"` 动态绑定支持 ——
+ * 报价单详情合计行 `<td :colspan="isDealer ? 4 : 5">` 渲染期才知道取 A 还是 B，
+ * 旧解析器把它当 1 算，导致代码正确、测试报错。
  * 返回所有可能路径的跨度，只要有一条等于表头列数就算对得上。
  */
 function tfootSpans(tfoot: string): number[] {
   const row = (tfoot.match(/<tr[^>]*>[\s\S]*?<\/tr>/) ?? [tfoot])[0]
   const tds = row.match(/<td[^>]*>/g) ?? []
-  let main = 0
+  let base = 0
   let ifSum = 0
   let elseSum = 0
+  const dynPairs: Array<[number, number]> = []
   for (const tag of tds) {
+    const dyn = tag.match(/:colspan=["']([^"']+)["']/)
+    const ternary = dyn ? dyn[1].match(/^\s*[^?]+\?\s*(\d+)\s*:\s*(\d+)\s*$/) : null
+    if (ternary) {
+      dynPairs.push([Number(ternary[1]), Number(ternary[2])])
+      continue
+    }
     const cs = tag.match(/colspan=["'](\d+)["']/)
     const n = cs ? Number(cs[1]) : 1
     if (/v-else/.test(tag)) elseSum += n
     else if (/v-if/.test(tag)) ifSum += n
-    else main += n
+    else base += n
   }
-  const paths = [main + ifSum]
-  if (elseSum) paths.push(main + elseSum)
-  return paths
+  // 分支组合：v-if / v-else 互斥二选一 × 每个 :colspan 三元二选一
+  const branchPaths = [base + ifSum]
+  if (elseSum) branchPaths.push(base + elseSum)
+  let paths = branchPaths
+  for (const [a, b] of dynPairs) {
+    paths = paths.flatMap(p => [p + a, p + b])
+  }
+  return [...new Set(paths)]
 }
 
 describe('样式必须写在 <style> 块里', () => {
@@ -105,37 +120,37 @@ describe('合计行必须与表头列数一致', () => {
   })
 })
 
-describe('手机端表格：表头/表体/表尾必须同进同出', () => {
+describe('手机端表格：保持 table 布局（V2.0-18 起废弃「拆表头表体」方案）', () => {
   const css = readFileSync(join(SRC, 'styles/theme.css'), 'utf-8')
-  const mobile = css.slice(css.indexOf(':where(.app-layout.is-mobile)'))
 
-  it('拆表头表体时，tfoot 也必须一起处理（否则合计行落单成窄条）', () => {
-    expect(mobile).toContain('> :where(thead, tbody)')
+  it('全局手机端规则里已不存在 :where(.app-layout.is-mobile) 拆表方案（display:table 那套已删除）', () => {
+    // 旧方案把 thead/tbody 设成 display:table、tfoot 设成 flex 通栏，
+    // 需要 :where() 降权防压过页面卡片模式 —— 维护成本高、踩坑两次。
+    // 现行方案：表格整体保持 table 布局，横向滚动交给 .tb-scroll，列天然对齐。
+    expect(css, '旧拆表方案的 :where(.app-layout.is-mobile) 规则不应再回来').not.toContain(':where(.app-layout.is-mobile)')
+    expect(css, '旧拆表方案的 > :where(thead, tbody) 选择器不应再回来').not.toContain('> :where(thead, tbody)')
+  })
+
+  it('手机端对 .data-table 只提横向滚动，不碰 display（页面卡片模式仍能覆盖）', () => {
+    const b = blockOf(css, '.app-layout.is-mobile .data-table')
+    expect(b, '手机端 .data-table 必须自己就是横向滚动容器').toContain('overflow-x: auto')
+    expect(b).toContain('-webkit-overflow-scrolling: touch')
     expect(
-      mobile,
-      '只把 thead/tbody 设成 display:table，tfoot 会落单成「匿名表」，宽度只有表格一半'
-    ).toContain('> tfoot')
+      b,
+      '连 display 一起提权会压过开单页的卡片模式，把明细表拆成「半表格」'
+    ).not.toContain('display')
   })
 
-  it('手机端合计行是通栏横条（不再试图对齐会横向滚动的列）', () => {
-    expect(mobile).toMatch(/> tfoot > tr[\s\S]{0,200}display: flex/)
-  })
-
-  it('表格/表头/表体的 display 仍用 :where() 降权，页面自己的手机端样式能覆盖', () => {
-    // 页面（如开单页把明细表改成卡片）必须能压过全局的 display/min-width；
-    // 之前用 .app-layout.is-mobile .data-table（权重 0,3,0）把页面样式全盖住了。
-    // ⚠️ 有两处例外必须提权，它们都只作用在 **tfoot** 上，与卡片模式无关
-    //    （卡片模式既不渲染 tfoot、也不靠滚动容器）：
-    //      · overflow-x                                  —— 见下一组用例（V2.0-14）
-    //      · tfoot 的 td（内边距/边框/底色/display）    —— 见「合计行通栏」一组（V2.0-16）
-    //    只要表格/表头/表体的 display 不跟着提权，卡片模式就不受影响。
-    expect(mobile).toContain(':where(.app-layout.is-mobile)')
+  it('表格/表头/表体的 display 在手机端全局不被改写（拆成 block 会落单 tfoot）', () => {
+    // 全局 @media (max-width: 767px) 段内不允许出现 .data-table 的 display 覆盖；
+    // 页面级卡片模式（如开单页 .items-edit）在各自 scoped 样式里自己负责。
     const flat = css.replace(/\s+/g, ' ')
-    const raised = (flat.match(/\.app-layout\.is-mobile \.data-table[^{}]*\{[^{}]*\}/g) ?? [])
-      .filter(rule => !rule.includes('tfoot') && rule.includes('display:'))
+    const displayRules = (flat.match(/\.app-layout\.is-mobile[^{}]*\.data-table[^{}]*\{[^{}]*\}/g) ?? [])
+      .filter(rule => rule.includes('display:'))
     expect(
-      raised,
-      '表格/表头/表体的 display 一提权就会压过开单页的卡片模式，把明细表拆成「半表格」'
+      displayRules,
+      '手机端全局规则不应改写 .data-table 的 display —— 拆表方案已废弃（V2.0-18），' +
+        'tfoot 会落单成「匿名表」，合计行直接错位'
     ).toEqual([])
   })
 })
@@ -175,7 +190,9 @@ describe('手机端表格必须能横向滚动（右列被裁后就再也滑不�
   it('提权规则只提 overflow，不碰 display（页面卡片模式仍能覆盖）', () => {
     const hot = blockOf(css, '.app-layout.is-mobile .data-table')
     expect(hot, '连 display 一起提权会压过开单页的卡片模式').not.toContain('display')
-    expect(blockOf(css, ':where(.app-layout.is-mobile) :where(.data-table)')).toContain('display: block')
+    // 旧断言要求存在 :where(.app-layout.is-mobile) :where(.data-table) 的
+    // display:block 降权规则 —— 那是已废弃的拆表方案（V2.0-18），
+    // 现行架构下表格保持 table 布局，不需要任何 display 覆盖（见上一组用例）。
   })
 
   it('选商品列表只保留一层滚动容器（`.pk-scroll` 交还表格自己滚）', () => {
@@ -198,105 +215,29 @@ function flatBlockOf(css: string, selector: string): string {
   return blockOf(css.replace(/\s+/g, ' '), selector)
 }
 
-/** 去掉 :where(...) 整段（其内部不贡献特异性，这正是「降权」的原理） */
-function stripWhere(sel: string): string {
-  let s = sel
-  for (let guard = 0; guard < 20 && s.includes(':where('); guard++) {
-    const i = s.indexOf(':where(')
-    let depth = 0
-    let j = i + ':where('.length - 1
-    for (; j < s.length; j++) {
-      if (s[j] === '(') depth++
-      else if (s[j] === ')' && --depth === 0) break
-    }
-    s = s.slice(0, i) + s.slice(j + 1)
-  }
-  return s
-}
-
-/** 选择器特异性 [id, 类/属性/伪类, 元素] */
-function spec(sel: string): [number, number, number] {
-  const s = stripWhere(sel)
-  const ids = (s.match(/#[\w-]+/g) ?? []).length
-  const attrs = (s.match(/\[[^\]]*\]/g) ?? []).length
-  const pseudos = (s.match(/(?<!:):[\w-]+(\([^)]*\))?/g) ?? []).length
-  const classes = (s.match(/\.[\w-]+/g) ?? []).length
-  const rest = s
-    .replace(/#[\w-]+/g, ' ')
-    .replace(/\.[\w-]+/g, ' ')
-    .replace(/\[[^\]]*\]/g, ' ')
-    .replace(/(?<!:):[\w-]+(\([^)]*\))?/g, ' ')
-  const elements = (rest.match(/[\w-]+/g) ?? []).length
-  return [ids, classes + attrs + pseudos, elements]
-}
-
-/** a 的特异性是否严格高于 b */
-function stronger(a: [number, number, number], b: [number, number, number]): boolean {
-  if (a[0] !== b[0]) return a[0] > b[0]
-  if (a[1] !== b[1]) return a[1] > b[1]
-  return a[2] > b[2]
-}
-
 /**
- * 手机端合计行通栏（V2.0-16）
+ * 手机端合计行（V2.2-1.2 断言现代化）
  *
- * 这一条与 V2.0-14 的 overflow-x 是**同一个坑的第二次**：
- * 全局那套「合计行通栏」规则被 `:where()` 降权成特异性 0，
- * 而基础规则 `.data-table tfoot td`（(0,1,2)）会给出 padding:12px 14px +
- * border-top:2px 深色线，`.data-table th, .data-table td`（(0,1,1)）再补一条
- * 1px 下边框 —— 于是手机端每个合计格自己画两条横线、再撑出 12px 内边距，
- * 合计行变成「一串横线夹着数字」，行高从 48px 被撑到 75px。
- *
- * 修法：把 td 层那几条从 `:where()` 里提出来提权（只提 td，
- * `> tfoot` 与 `> tfoot > tr` 继续降权，开单页卡片模式的合计行才能覆盖）。
- * 这里把「特异性必须够强」做成可计算的断言，避免下次又被包回 :where()。
+ * 旧版（V2.0-16）走「tfoot flex 通栏 + 提权」方案，那套规则已随 V2.0-18
+ * 拆表方案的废弃一并删除。现行架构下表格在手机端**保持 table 布局**，
+ * tfoot 与 thead/tbody 列天然对齐，不再需要任何通栏/提权规则 ——
+ * 这组用例改为锁住「通栏规则不许回来」与「基础合计样式仍在」。
  */
-describe('手机端合计行通栏：不能降权到压不过基础规则', () => {
+describe('手机端合计行：保持表格布局天然对齐（旧通栏方案已废弃）', () => {
   const css = readFileSync(join(SRC, 'styles/theme.css'), 'utf-8')
 
-  it('基础规则确实会给合计格加内边距 + 上下边框 —— 这正是必须提权的原因', () => {
+  it('基础合计样式仍在（内边距 + 顶部分隔线），全端一致', () => {
     const base = flatBlockOf(css, '.data-table tfoot td')
     expect(base, '基础规则变了的话，本组用例的前提就不成立了').toContain('padding: 12px 14px')
     expect(base).toContain('border-top: 2px solid')
-    expect(flatBlockOf(css, '.data-table th, .data-table td')).toContain('border-bottom: 1px solid')
   })
 
-  it('手机端清掉合计格的内边距/边框/底色，且特异性高于基础规则', () => {
-    const sel = '.app-layout.is-mobile .data-table > tfoot > tr > td'
-    const body = blockOf(css, sel)
-    expect(body, `找不到提权后的合计格规则 ${sel}`).not.toBe('')
-    expect(body).toContain('padding: 0')
-    expect(body).toContain('border: none')
-    expect(body).toContain('background: none')
-    expect(
-      stronger(spec(sel), spec('.data-table tfoot td')),
-      '这条规则一旦被 :where() 包住，padding/border/background 会被基础规则反压，' +
-        '合计行又会变成「一串横线夹着数字」（实测行高 48px → 75px）'
-    ).toBe(true)
-  })
-
-  it('隐藏空占位格 / 备注格的规则同样提权（否则被上面的 display:inline-block 压过）', () => {
-    const rowSel = '.app-layout.is-mobile .data-table > tfoot > tr > td'
-    for (const [sel, why] of [
-      ['.app-layout.is-mobile .data-table > tfoot > tr > td:empty', '空占位格不隐藏会分走 flex 间隙、把金额挤偏'],
-      ['.app-layout.is-mobile .data-table > tfoot > tr > td.ui-hint', '备注格不隐藏会在手机窄屏上把数字顶出屏幕']
-    ] as const) {
-      expect(blockOf(css, sel), `${sel} 必须声明 display: none`).toContain('display: none')
-      expect(stronger(spec(sel), spec(rowSel)), `${sel} 特异性不够，会被上一条的 display:inline-block 压过：${why}`).toBe(true)
-    }
-  })
-
-  it('`> tfoot` 与 `> tfoot > tr` 仍保持 :where() 降权，开单页卡片合计行才能覆盖', () => {
-    expect(css).toContain(':where(.app-layout.is-mobile) :where(.data-table) > tfoot > tr {')
-    expect(
-      css,
-      'tr 一起提权会把开单页那张「白底 + 浅灰上边框」的卡片合计行洗成蓝底粗线'
-    ).not.toContain('.app-layout.is-mobile .data-table > tfoot > tr {')
-  })
-
-  it('说明格 / 备注格规则已在全局（原先「说明格不伸缩」「备注格隐藏」只写在「记一笔」页里）', () => {
-    expect(css).toContain(':where(.app-layout.is-mobile) :where(.data-table) > tfoot td[colspan]')
-    expect(css).toContain('.app-layout.is-mobile .data-table > tfoot > tr > td.ui-hint')
+  it('全局手机端不再出现 tfoot 通栏规则（display:flex / 隐藏占位格那套不许回来）', () => {
+    // 通栏是拆表方案的补丁；表格布局下 tfoot 天然通栏，再写一遍反而会把
+    // 合计格的内边距/边框清掉、造成「一串横线夹着数字」的旧病复发。
+    expect(css).not.toMatch(/\.app-layout\.is-mobile[^{}]*\.data-table[^{}]*tfoot[^{}]*\{[^{}]*display:\s*flex/)
+    expect(css).not.toContain('.app-layout.is-mobile .data-table > tfoot > tr > td')
+    expect(css).not.toContain(':where(.app-layout.is-mobile) :where(.data-table) > tfoot')
   })
 })
 

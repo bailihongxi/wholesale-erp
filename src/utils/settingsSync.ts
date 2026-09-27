@@ -165,6 +165,11 @@ export async function pullSettings(): Promise<number> {
   } catch {
     return 0
   }
+  return applyPull(rows)
+}
+
+/** pullSettings 的合并逻辑（输入已取回的云端行，便于 initSettingSync 复用同一次查询） */
+function applyPull(rows: SettingsRow[]): number {
   if (rows.length === 0) return 0
 
   const meta = readMeta()
@@ -211,15 +216,22 @@ export async function pushPending(): Promise<number> {
   const sb = await getClient()
   if (!sb) return 0
 
-  const remoteMap = new Map<string, string>()
+  let remoteRows: Array<{ key?: string; updatedAt?: string }> = []
   try {
     const res = await sb.from(TABLE).select('key,updatedAt')
     if (res.error) return 0
-    for (const r of (res.data ?? []) as Array<{ key?: string; updatedAt?: string }>) {
-      if (r.key) remoteMap.set(r.key, String(r.updatedAt ?? ''))
-    }
+    remoteRows = (res.data ?? []) as Array<{ key?: string; updatedAt?: string }>
   } catch {
     return 0
+  }
+  return applyPush(remoteRows)
+}
+
+/** pushPending 的补推逻辑（输入已取回的云端行，便于 initSettingSync 复用同一次查询） */
+async function applyPush(remoteRows: Array<{ key?: string; updatedAt?: string }>): Promise<number> {
+  const remoteMap = new Map<string, string>()
+  for (const r of remoteRows) {
+    if (r.key) remoteMap.set(r.key, String(r.updatedAt ?? ''))
   }
 
   const meta = readMeta()
@@ -299,23 +311,6 @@ export interface SyncResult {
   error?: string
 }
 
-/** 云端同步表是否可用：表没建、RLS 拒绝、断网都会返回 false */
-async function isTableReady(sb: Awaited<ReturnType<typeof getClient>>): Promise<boolean> {
-  if (!sb) return false
-  try {
-    // head + count 必须写在 from().select() 这一步，链式之后再 select 会被静默忽略。
-    //
-    // 判据只能用 count，**不能**用 error：表不存在时 PostgREST 对 head 请求
-    // 返回的是 `{ error: null, count: null }`（不是报错！），普通 select 才抛 PGRST205。
-    // 实测踩过：写成 `!res.error` 会在表没建时误判成「已连接云端」，
-    // 用户以为在同步，实际各设备还是各存各的。
-    const res = await sb.from(TABLE).select('key', { count: 'exact', head: true })
-    return res.error == null && typeof res.count === 'number'
-  } catch {
-    return false
-  }
-}
-
 /** 最近一次同步的结果，供设置页展示状态 */
 let lastSync: SyncResult = { pulled: 0, pushed: 0, cloudReady: false }
 
@@ -332,11 +327,20 @@ export async function initSettingSync(): Promise<SyncResult> {
   lastSync = empty
   if (!USE_CLOUD) return empty
   const sb = await getClient()
-  // 表没建（还没执行迁移 SQL）时不要让用户白等，直接降级为本机模式
-  if (!(await isTableReady(sb))) return empty
+  if (!sb) return empty
   try {
-    const pulled = await pullSettings()
-    const pushed = await pushPending()
+    // 性能（V2.2-1.2）：旧版启动要串行查 3 次这张表 —— isTableReady 探活
+    // （head+count）→ pullSettings 全量拉 → pushPending 再拉一遍时间戳，
+    // 最慢一次近 1 秒，三次叠加拖慢首屏。现合并为**一次**全量 select：
+    //   · 普通 select 在表没建时会返回 PGRST205 错误（head 才是静默 count:null），
+    //     所以 error != null 就等价于旧版「表不可用」判定，探活那一次可以省掉；
+    //   · 拉到的行同时含 key/value/updatedAt，pull 与 push 共用，第三次的
+    //     `select('key,updatedAt')` 也省掉了。
+    const res = await sb.from(TABLE).select('key,value,updatedAt')
+    if (res.error) return empty
+    const rows = (res.data ?? []) as SettingsRow[]
+    const pulled = applyPull(rows)
+    const pushed = await applyPush(rows)
     if (pulled > 0) notifyReloaded()
     lastSync = { pulled, pushed, cloudReady: true }
     return lastSync

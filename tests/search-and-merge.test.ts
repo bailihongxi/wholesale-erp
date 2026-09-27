@@ -339,6 +339,11 @@ describe('经营报表页（毛利并入 + 日期筛选）', () => {
     setActivePinia(createPinia())
     await db.open()
     await Promise.all(db.tables.map(t => t.clear()))
+    // 报表页用 useListCache('boss-reports') 缓存汇总（30 秒 TTL）：
+    // 上一用例（空库时挂载）会把全 0 快照写进 sessionStorage，本用例命中旧缓存
+    // 就全是 ¥0。真实链路里写操作成功后会 clearAllListCaches()，测试直接调
+    // store 动作绕过了视图层，这里按真实效果清一遍。
+    sessionStorage.clear()
     salesStore = useSalesStore()
     financeStore = useFinanceStore()
     productStore = useProductStore()

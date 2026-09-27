@@ -156,7 +156,8 @@ describe('阶段4：商品中心页面重写', () => {
     const wrapper = mount(ProductEditView, { global: { plugins: [testRouter] } })
     await wrapper.find('input[placeholder="如：格力"]').setValue('海尔')
     await wrapper.find('input[placeholder="如：KFR-35GW"]').setValue('XQB80')
-    await wrapper.find('input[placeholder="如：空调 / 冰箱"]').setValue('洗衣机')
+    // 分类输入框后来升级为「datalist 组合框」（可选可选可输），placeholder 随之改变
+    await wrapper.find('input[placeholder="选择或输入新分类"]').setValue('洗衣机')
     await wrapper.find('input[placeholder="台 / 件 / 套"]').setValue('台')
     await wrapper.find('input[placeholder="采购成本"]').setValue('800')
     await wrapper.find('input[placeholder="给经销商的价格"]').setValue('1000')
@@ -176,9 +177,12 @@ describe('阶段4：商品中心页面重写', () => {
     await testRouter.push(`/boss/products/edit/${p.id}`)
     await testRouter.isReady()
     const wrapper = mount(ProductEditView, { global: { plugins: [testRouter] } })
-    await flushPromises()
+    // V2.2-1.2 断言现代化：initForm 是异步载入（distinctCategories 扫表 + getProduct
+    // 都要走 fake-indexeddb 的宏任务），单次 flushPromises 清不到宏任务，
+    // 表单回填会慢一拍 —— 这里轮询等待回填完成，断言本身不变。
+    const brandValue = (): string => (wrapper.find('input[placeholder="如：格力"]').element as HTMLInputElement).value
+    await vi.waitFor(() => expect(brandValue()).toBe('海尔'), { timeout: 3000 })
     expect(wrapper.text()).toContain('编辑商品')
-    const brandInput = wrapper.find('input[placeholder="如：格力"]').element as HTMLInputElement
-    expect(brandInput.value).toBe('海尔')
+    expect(brandValue()).toBe('海尔')
   })
 })

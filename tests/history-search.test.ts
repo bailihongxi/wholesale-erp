@@ -57,6 +57,11 @@ describe('各模块查询与历史痕迹', () => {
     setActivePinia(createPinia())
     await db.open()
     await Promise.all(db.tables.map(t => t.clear()))
+    // 列表页的 30 秒 sessionStorage 缓存（useListCache）跨用例残留：
+    // 上一用例挂载视图时写入的快照会让本用例命中旧数据（真实链路里写操作
+    // 成功后会 clearAllListCaches()，测试直接调 store 动作绕过了视图层，
+    // 所以这里按真实效果清一遍）。
+    sessionStorage.clear()
     purchaseStore = usePurchaseStore()
     salesStore = useSalesStore()
     productStore = useProductStore()
