@@ -32,6 +32,8 @@ export const useSalesStore = defineStore('sales', () => {
   // operatorId 可选：传入时会记录操作日志
   async function createCustomer(data: Omit<Customer, 'id'>, operatorId?: number): Promise<number> {
     const id = await db.customers.add(data) as number
+    // 同供应商：全局客户缓存是模块级的，不清掉新建的客户在销售单里选不到
+    clearCustomerCache()
     if (operatorId) {
       await writeLog(operatorId, AUDIT_ACTIONS.CUSTOMER_CREATE, `新增客户 ${data.name}${data.loginPhone ? `（经销商账号 ${data.loginPhone}）` : ''}`)
     }

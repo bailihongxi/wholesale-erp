@@ -113,6 +113,24 @@ describe('接线检查：各页面都挂上了 useReloadOnActivate', () => {
     expect(s).toContain('useReloadOnActivate')
   })
 
+  /**
+   * 走 useServerPager 的页面不需要单挂 useReloadOnActivate ——
+   * pager 内部已经内置了「回到本页刷新」，再挂一次就是同一页首屏拉两遍。
+   * 这里只校验它们确实在用 pager（防止哪天被改回自己取数而漏掉刷新）。
+   */
+  const PAGER_PAGES = [
+    'src/views/boss/ProductListView.vue', // V2.2-1.4：商品档案改走服务端分页
+  ]
+
+  it('走 useServerPager 的页面不再单挂钩子（但必须真的在用 pager）', () => {
+    for (const f of PAGER_PAGES) {
+      const s = src(f)
+      // 调用形如 `useServerPager<Product>({...})`，泛型在 ( 之前
+      expect(s, `${f} 应走 useServerPager`).toMatch(/useServerPager\s*[<(]/)
+      expect(s, `${f} 不应同时单挂 useReloadOnActivate`).not.toContain('useReloadOnActivate(')
+    }
+  })
+
   // 这些页面不走 useServerPager，必须各自接上，否则同样会出现
   // 「新建/修改后回到本页还是旧数据」的问题。
   const WIRED = [
@@ -135,13 +153,12 @@ describe('接线检查：各页面都挂上了 useReloadOnActivate', () => {
     'src/views/purchase/PurchaseHomeView.vue',
     'src/views/sales/SalesHomeView.vue',
     'src/views/warehouse/WarehouseHomeView.vue',
-    'src/views/boss/ProductListView.vue',
     'src/views/boss/UsersManageView.vue',
     'src/views/boss/BossReportsView.vue',
     'src/views/boss/BossHomeView.vue',
   ]
 
-  it('23 个非分页页面都调用了 useReloadOnActivate', () => {
+  it('22 个非分页页面都调用了 useReloadOnActivate', () => {
     const missing = WIRED.filter(f => !src(f).includes('useReloadOnActivate('))
     expect(missing, `这些页面漏接了 useReloadOnActivate：${missing.join(', ')}`).toEqual([])
   })

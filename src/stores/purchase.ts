@@ -32,6 +32,8 @@ export const usePurchaseStore = defineStore('purchase', () => {
   // operatorId 可选：传入时会记录操作日志
   async function createSupplier(data: Omit<Supplier, 'id'>, operatorId?: number): Promise<number> {
     const id = await db.suppliers.add(data) as number
+    // 全局供应商缓存是模块级的，不清掉的话「刚建的供应商」在采购单里选不到、详情显示「-」
+    clearSupplierCache()
     if (operatorId) {
       await writeLog(operatorId, AUDIT_ACTIONS.SUPPLIER_CREATE, `新增供应商 ${data.name}`)
     }

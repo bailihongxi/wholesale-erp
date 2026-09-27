@@ -21,6 +21,16 @@ import { db } from '../src/db'
 import { AUDIT_ACTIONS } from '../src/utils/audit'
 import type { Product } from '../src/types'
 
+/**
+ * ⚠️ mount 时必须把这个 pinia 一起注入（plugins: [testRouter, pinia]）。
+ *
+ * 只靠 `setActivePinia()` 是不够的：组件里 `usePurchaseStore()` 拿到的是
+ * **另一个 store 实例**，它的供应商/客户缓存停在第一次查询的结果上 ——
+ * 于是「测试里明明查得到供应商，页面上却显示『-』」这种幽灵失败。
+ * 显式注入同一个 pinia，组件与测试才共用一份 store（也就共用一份缓存）。
+ */
+let pinia: ReturnType<typeof createPinia>
+
 function setWidth(w: number): void {
   Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: w })
 }
@@ -63,7 +73,8 @@ describe('P0-1 单据详情页', () => {
   let productStore: ReturnType<typeof useProductStore>
 
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    pinia = createPinia()
+    setActivePinia(pinia)
     await db.open()
     await Promise.all(db.tables.map(t => t.clear()))
     purchaseStore = usePurchaseStore()
@@ -85,7 +96,7 @@ describe('P0-1 单据详情页', () => {
       items: [{ product: p, quantity: 3 }], remark: '测试单'
     })
 
-    const wrapper = mount(PurchaseOrdersView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(PurchaseOrdersView, { global: { plugins: [testRouter, pinia] } })
     // 等待真实数据行（空态也会渲染一行，因此以「查看」按钮出现为准）
     await vi.waitFor(() => expect(wrapper.findAll('.link-btn').length).toBeGreaterThan(0), { timeout: 3000 })
 
@@ -107,7 +118,7 @@ describe('P0-1 单据详情页', () => {
       items: [{ product: p, quantity: 2 }], remark: ''
     })
 
-    const wrapper = mount(SalesOrdersView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(SalesOrdersView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.findAll('.link-btn').length).toBeGreaterThan(0), { timeout: 3000 })
 
     const btn = wrapper.find('.order-table .link-btn')
@@ -129,7 +140,7 @@ describe('P0-1 单据详情页', () => {
     await testRouter.push(`/purchase/orders/${res.orderId}`)
     await flushPromises()
 
-    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('海尔总代'), { timeout: 3000 })
 
     // 单头信息
@@ -157,7 +168,7 @@ describe('P0-1 单据详情页', () => {
 
     await testRouter.push(`/purchase/orders/${res.orderId}`)
     await flushPromises()
-    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('4 / 4'), { timeout: 3000 })
     expect(wrapper.text()).toContain('已完成')
   })
@@ -174,7 +185,7 @@ describe('P0-1 单据详情页', () => {
     await testRouter.push(`/sales/orders/${res.orderId}`)
     await flushPromises()
 
-    const wrapper = mount(SaleOrderDetailView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(SaleOrderDetailView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('城南电器'), { timeout: 3000 })
     expect(wrapper.text()).toContain('海尔 XQB100')
     await vi.waitFor(() => expect(wrapper.text()).toContain('¥2,400.00'), { timeout: 3000 })
@@ -188,7 +199,8 @@ describe('P0-2 单据打印', () => {
   let productStore: ReturnType<typeof useProductStore>
 
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    pinia = createPinia()
+    setActivePinia(pinia)
     await db.open()
     await Promise.all(db.tables.map(t => t.clear()))
     purchaseStore = usePurchaseStore()
@@ -211,13 +223,14 @@ describe('P0-2 单据打印', () => {
     await testRouter.push(`/purchase/orders/${res.orderId}`)
     await flushPromises()
 
-    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('海尔总代'), { timeout: 3000 })
 
     // 未点击前不应展示预览弹窗
     expect(wrapper.find('.pp-dialog').exists()).toBe(false)
 
-    await wrapper.find('.btn').trigger('click')
+    // 必须点「打印」按钮本身：`.btn` 会先命中「修改」，点它只会进编辑态、不会弹预览
+    await wrapper.find('.btn-print').trigger('click')
     await flushPromises()
 
     // 预览弹窗打开，且带「取消」「打印」两个按钮
@@ -251,9 +264,10 @@ describe('P0-2 单据打印', () => {
     await testRouter.push(`/purchase/orders/${res.orderId}`)
     await flushPromises()
 
-    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(PurchaseOrderDetailView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('海尔总代'), { timeout: 3000 })
-    await wrapper.find('.btn').trigger('click')
+    // 必须点「打印」按钮本身：`.btn` 会先命中「修改」，点它只会进编辑态、不会弹预览
+    await wrapper.find('.btn-print').trigger('click')
     await flushPromises()
 
     const srcDoc = (): string => wrapper.find('.pp-frame').attributes('srcdoc') ?? ''
@@ -280,7 +294,8 @@ describe('P0-3 操作日志', () => {
   let financeStore: ReturnType<typeof useFinanceStore>
 
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    pinia = createPinia()
+    setActivePinia(pinia)
     await db.open()
     await Promise.all(db.tables.map(t => t.clear()))
     purchaseStore = usePurchaseStore()
@@ -344,7 +359,7 @@ describe('P0-3 操作日志', () => {
   it('操作日志页面可读取并展示日志', async () => {
     const r = await productStore.createProduct(productData(), 7)
     expect(r.ok).toBe(true)
-    const wrapper = mount(AuditLogView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(AuditLogView, { global: { plugins: [testRouter, pinia] } })
     // 空态也会渲染一行 <tr>，因此以「真实日志内容」出现为准
     await vi.waitFor(() => expect(wrapper.text()).toContain('海尔'), { timeout: 3000 })
     expect(wrapper.text()).toContain(AUDIT_ACTIONS.PRODUCT_CREATE)
@@ -358,7 +373,7 @@ describe('P0-3 操作日志', () => {
     await productStore.createProduct(productData(), 7)
     await salesStore.createCustomer({ name: '城南电器', contact: '李', phone: '138', address: '', level: 'A', creditLimit: 0, paymentTerm: '', status: 'active', remark: '' }, 7)
 
-    const wrapper = mount(AuditLogView, { global: { plugins: [testRouter] } })
+    const wrapper = mount(AuditLogView, { global: { plugins: [testRouter, pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain('城南电器'), { timeout: 3000 })
     expect(wrapper.findAll('.log-table tbody tr').length).toBe(2)
 

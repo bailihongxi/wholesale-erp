@@ -93,9 +93,15 @@ describe('V2.1-2.32 体验修复', () => {
 
   it('⑥ finance.loadAll 提速：payments 全表复用 + 六表并行', () => {
     const t = src('src/stores/finance.ts')
-    expect(t).toMatch(/listReceivables\(includeSettled = false, paysAll\?/)
-    expect(t).toMatch(/listPayables\(includeSettled = false, paysAll\?/)
-    expect(t).toMatch(/listPaymentHistory\(paysAll\?/)
-    expect(t).toMatch(/Promise\.all\(\[\s*paysAll/)
+    // 签名后来加了第三个参数 ordersAll（复用调用方已拉的单据全表），
+    // 参数换行排版过，断言按当前写法匹配，语义不变：payments 全表可外部传入复用
+    expect(t).toMatch(/async function listReceivables\(\s*includeSettled = false,\s*paysAll\?:/)
+    expect(t).toMatch(/async function listPayables\(\s*includeSettled = false,\s*paysAll\?:/)
+    expect(t).toMatch(/async function listPaymentHistory\(paysAll\?:/)
+    // 六张表并行取，且 payments 优先复用传入的全表
+    expect(t).toMatch(/await Promise\.all\(\[\s*paysAll \? Promise\.resolve\(paysAll/)
+    for (const table of ['saleOrders', 'purchaseOrders', 'customers', 'suppliers', 'users']) {
+      expect(t, `finance 六表并行里缺 ${table}`).toContain(`db.${table}.toArray()`)
+    }
   })
 })

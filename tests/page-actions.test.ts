@@ -199,7 +199,9 @@ describe('二级页面的返回 / 取消按钮', () => {
   })
 
   // ============ 库房作业页：取消 + 确认 ============
-  it('入库验货页有「取消」与「确认入库」，取消回到待收货列表', async () => {
+  // V2.1-2.33 起全站「取消/返回」统一口径：操作页左键统一叫「返回」，
+  // 点它同样是回到上级列表、且不产生任何流水。
+  it('入库验货页有「返回」与「确认入库」，返回回到待收货列表', async () => {
     const sid = await seedSupplier()
     const p = await seedProduct()
     const res = await purchaseStore.createOrder({ supplierId: sid, purchaserId: 1, items: [{ product: p, quantity: 2 }], remark: '' })
@@ -210,7 +212,7 @@ describe('二级页面的返回 / 取消按钮', () => {
     await vi.waitFor(() => expect((wrapper.vm as any).items.length).toBeGreaterThan(0), { timeout: 3000 })
     await flushPromises()
 
-    expect(wrapper.find('.pa-cancel').text()).toBe('取消')
+    expect(wrapper.find('.pa-cancel').text()).toBe('返回')
     expect(wrapper.find('.pa-confirm').text()).toBe('确认入库')
 
     await wrapper.find('.pa-cancel').trigger('click')
@@ -220,7 +222,7 @@ describe('二级页面的返回 / 取消按钮', () => {
     expect(await db.stockRecords.count()).toBe(0)
   })
 
-  it('出库拣货页有「取消」与「确认出库」，取消回到待发货列表', async () => {
+  it('出库拣货页有「返回」与「确认出库」，返回回到待发货列表', async () => {
     const cid = await seedCustomer()
     const p = await seedProduct()
     await db.stock.where('productId').equals(p.id!).modify({ quantity: 100 })
@@ -232,7 +234,7 @@ describe('二级页面的返回 / 取消按钮', () => {
     await vi.waitFor(() => expect((wrapper.vm as any).items.length).toBeGreaterThan(0), { timeout: 3000 })
     await flushPromises()
 
-    expect(wrapper.find('.pa-cancel').text()).toBe('取消')
+    expect(wrapper.find('.pa-cancel').text()).toBe('返回')
     expect(wrapper.find('.pa-confirm').text()).toBe('确认出库')
 
     await wrapper.find('.pa-cancel').trigger('click')

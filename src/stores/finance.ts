@@ -205,6 +205,37 @@ export const useFinanceStore = defineStore('finance', () => {
   // ===== 毛利统计 =====
   // startDate / endDate 为 YYYY-MM-DD。传入时只统计该区间内的销售单；
   // 不传则统计全部（保持向后兼容）。
+  //
+  // ⚠️ V2.2-1.4 提速（原实现是**双重 N+1**，全站最慢的一处）：
+  //   旧写法：for (每单) { await 明细表.where(单号) → for (每行) { await products.get(商品id) } }
+  //   → 200 张单 × 5 行明细 ≈ **1200 次请求**；而 cloudDb.get() 不读热缓存，每次都真发网络请求。
+  //   新写法：明细按单号批量取（1 次）+ 商品 bulkGet 一次取回（1 次），
+  //   与 dashboard.ts 已验证的范式一致。
+  /** 一次性取回「销售单 → 明细 → 商品进价」三层数据，供毛利与月趋势共用 */
+  async function loadSaleCostBase(saleOrders: Array<{ id?: number }>) {
+    const orderIds = saleOrders.map(o => o.id!).filter(Boolean)
+    const allItems = orderIds.length
+      ? await db.saleOrderItems.where('saleOrderId').anyOf(orderIds).toArray()
+      : []
+
+    const productIds = new Set<number>()
+    const itemsByOrder = new Map<number, Array<{ productId: number; quantity: number }>>()
+    for (const it of allItems) {
+      productIds.add(it.productId)
+      const arr = itemsByOrder.get(it.saleOrderId) ?? []
+      arr.push({ productId: it.productId, quantity: it.quantity })
+      itemsByOrder.set(it.saleOrderId, arr)
+    }
+
+    // bulkGet 保序（cloudDb 每 500 一批）；拿不到就当进价 0，与旧版 `if (product)` 的容错一致
+    const products = productIds.size ? await db.products.bulkGet([...productIds] as number[]) : []
+    const priceById = new Map<number, number>()
+    for (const p of products) {
+      if (p) priceById.set((p as any).id, Number((p as any).purchasePrice) || 0)
+    }
+    return { itemsByOrder, priceById }
+  }
+
   async function getProfitSummary(
     startDate?: string,
     endDate?: string
@@ -220,16 +251,16 @@ export const useFinanceStore = defineStore('finance', () => {
         return true
       })
     }
+    if (!saleOrders.length) {
+      return { totalSales: 0, totalCost: 0, grossProfit: 0 }
+    }
+    const { itemsByOrder, priceById } = await loadSaleCostBase(saleOrders)
     let totalSales = 0
     let totalCost = 0
     for (const so of saleOrders) {
       totalSales += so.totalAmount
-      const items = await db.saleOrderItems.where('saleOrderId').equals(so.id!).toArray()
-      for (const item of items) {
-        const product = await db.products.get(item.productId)
-        if (product) {
-          totalCost += product.purchasePrice * item.quantity
-        }
+      for (const it of itemsByOrder.get(so.id!) ?? []) {
+        totalCost += (priceById.get(it.productId) ?? 0) * it.quantity
       }
     }
     return {
@@ -255,15 +286,14 @@ export const useFinanceStore = defineStore('finance', () => {
     }
 
     const saleOrders = await db.saleOrders.toArray()
+    const { itemsByOrder, priceById } = await loadSaleCostBase(saleOrders)
     for (const so of saleOrders) {
       const key = (so.orderDate ?? '').slice(0, 7)
       const bucket = buckets.get(key)
       if (!bucket) continue
       bucket.sales += so.totalAmount
-      const items = await db.saleOrderItems.where('saleOrderId').equals(so.id!).toArray()
-      for (const item of items) {
-        const product = await db.products.get(item.productId)
-        if (product) bucket.cost += product.purchasePrice * item.quantity
+      for (const it of itemsByOrder.get(so.id!) ?? []) {
+        bucket.cost += (priceById.get(it.productId) ?? 0) * it.quantity
       }
     }
 

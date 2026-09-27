@@ -7,6 +7,9 @@ import type { Product } from '../types'
 import { PAGE_SIZE_PRODUCT, PAGE_SIZE_LIST } from '../composables/usePagination'
 import { serverPage } from '../db/serverPage'
 import { escapeOr } from '../db/cloudDb'
+// 商品档案一改，全局「商品id → 名称」缓存就过期了，必须打脏标记，
+// 否则明细页会一直显示「商品#6287」（详见 useProductCache.markDirty 注释）
+import { markDirty as markProductCacheDirty } from '../composables/useProductCache'
 
 export const useProductStore = defineStore('product', () => {
   const products = ref<Product[]>([])
@@ -206,6 +209,7 @@ export const useProductStore = defineStore('product', () => {
     if (existing.length) return { ok: false, message: '相同品牌+型号的商品已存在' }
     const id = await db.products.add({ ...data, brand, model })
     clearPickerCache()
+    markProductCacheDirty()
     // 初始化库存为 0
     await db.stock.add({ productId: id as number, quantity: 0, updatedAt: new Date().toISOString() })
     if (operatorId) {
@@ -222,6 +226,7 @@ export const useProductStore = defineStore('product', () => {
     if (patch.model !== undefined) patch.model = normName(patch.model)
     await db.products.update(id, patch)
     clearPickerCache()
+    markProductCacheDirty()
     if (operatorId) {
       await writeLog(operatorId, AUDIT_ACTIONS.PRODUCT_UPDATE, `修改商品 #${id}`)
     }

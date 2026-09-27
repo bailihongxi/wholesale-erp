@@ -238,7 +238,7 @@ const items = ref<SaleOrderItem[]>([])
 const customer = ref<Customer | null>(null)
 const payments = ref<Payment[]>([])
 const outboundRecords = ref<StockRecord[]>([])
-const { cache: productCache } = useProductCache()
+const { cache: productCache, ensure: ensureProductCache } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 const shippedMap = ref<Record<number, number>>({})
 const userMap = ref<Record<number, string>>({})
@@ -427,24 +427,34 @@ function openPreview(): void {
 async function loadOrder(): Promise<void> {
   const id = Number(route.params.id)
   if (!id) return
-  order.value = (await salesStore.getOrder(id)) ?? null
+
+  // V2.2-1.4 提速：原 6 段串行 await = 6 次排队往返（与采购单详情同一写法，
+  // 详见 PurchaseOrderDetailView 的注释）。这些都只依赖路由 id，一次性并发发出。
+  const [orderRow, itemRows, customersAll, payRows, usersAll, recordRows] = await Promise.all([
+    salesStore.getOrder(id),
+    salesStore.getOrderItems(id),
+    salesStore.listCustomers(),
+    db.payments.where('type').equals('receive').filter(p => p.refOrderId === id).toArray(),
+    db.users.toArray(),
+    db.stockRecords.where('refOrderId').equals(id).toArray(),
+    ensureProductCache()
+  ])
+
+  order.value = orderRow ?? null
   if (!order.value) return
-  items.value = await salesStore.getOrderItems(id)
+  items.value = itemRows
+  customer.value = customersAll.find(c => c.id === order.value!.customerId) ?? null
+  payments.value = payRows
 
-  customer.value = (await salesStore.listCustomers()).find(c => c.id === order.value!.customerId) ?? null
-  payments.value = await db.payments.where('type').equals('receive').filter(p => p.refOrderId === id).toArray()
-
-  const users = await db.users.toArray()
   const um: Record<number, string> = {}
-  for (const u of users) um[u.id!] = u.name
+  for (const u of usersAll) um[u.id!] = u.name
   userMap.value = um
 
   // 用全局商品缓存，不用循环拉商品表了
   productMap.value = {}
 
   // 出库流水（历史痕迹），按时间倒序
-  const records = await db.stockRecords.where('refOrderId').equals(id).toArray()
-  const outs = records
+  const outs = recordRows
     .filter(r => r.type === 'sale_out')
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
   outboundRecords.value = outs

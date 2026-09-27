@@ -9,6 +9,7 @@
  */
 import { db } from '../db'
 import { USE_CLOUD } from '../db/supabaseClient'
+import { markDirty as markProductCacheDirty } from '../composables/useProductCache'
 import type { Product } from '../types'
 
 /** 导出模板 / 导入识别的表头（顺序即模板顺序） */
@@ -266,6 +267,9 @@ export async function importProducts(
     }
   }
   report.created = insertedIds.length
+  // 导入会新增/改名商品，全局「商品id → 名称」缓存必须打脏，
+  // 否则导入完立刻去看单据明细，新商品一律显示「商品#6287」
+  if (report.created || report.updated) markProductCacheDirty()
 
   // 批量建 stock 记录
   if (insertedIds.length) {
@@ -370,6 +374,7 @@ export async function mergeProducts(keepId: number, mergeIds: number[]): Promise
 
   // 3) 删除重复商品
   await db.products.bulkDelete(dupIds)
+  markProductCacheDirty()
 
   return { ok: true, message: `已合并 ${dupIds.length} 条重复商品`, movedItems }
 }
@@ -388,6 +393,7 @@ export async function deleteProducts(ids: number[]): Promise<{ deleted: number; 
     await db.products.delete(id)
     deleted++
   }
+  if (deleted) markProductCacheDirty()
   return { deleted, blocked }
 }
 
@@ -402,7 +408,9 @@ export async function bulkUpdateProducts(
   
   // 云端：用批量更新，一次请求更新多个
   if (USE_CLOUD) {
-    return await (db.products as any).bulkUpdate(ids, clean)
+    const n = await (db.products as any).bulkUpdate(ids, clean)
+    markProductCacheDirty()
+    return n
   }
   
   // 本地IndexedDB：循环更新
@@ -411,5 +419,6 @@ export async function bulkUpdateProducts(
       if (p?.id) await db.products.update(p.id, clean)
     }
   })
+  markProductCacheDirty()
   return ids.length
 }

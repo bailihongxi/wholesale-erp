@@ -255,7 +255,7 @@ const items = ref<PurchaseOrderItem[]>([])
 const supplier = ref<Supplier | null>(null)
 const payments = ref<Payment[]>([])
 const inboundRecords = ref<StockRecord[]>([])
-const { cache: productCache, productName, productUnit } = useProductCache()
+const { cache: productCache, productName, productUnit, ensure: ensureProductCache } = useProductCache()
 const productMap = ref<Record<number, Product>>({})
 const receivedMap = ref<Record<number, number>>({})
 const userMap = ref<Record<number, string>>({})
@@ -435,16 +435,30 @@ function openPreview(): void {
 async function loadOrder(): Promise<void> {
   const id = Number(route.params.id)
   if (!id) return
-  order.value = (await purchaseStore.getOrder(id)) ?? null
+
+  // V2.2-1.4 提速：原来这里 6 段 `await` 一个接一个 = 排队 6 次网络往返
+  //（国内→新加坡单次 0.3~3 秒，实测详情页 3~6 秒就是这么来的）。
+  // 这 6 件事**都只依赖路由 id，彼此没有依赖**，必须一次性并发发出 ——
+  // 墙钟时间从 6 个 RTT 压到 1 个。写法与入库验货页（V2.2-1.0 C 档）保持一致。
+  const [orderRow, itemRows, suppliersAll, payRows, usersAll, recordRows] = await Promise.all([
+    purchaseStore.getOrder(id),
+    purchaseStore.getOrderItems(id),
+    purchaseStore.listSuppliers(),
+    db.payments.where('type').equals('pay').filter(p => p.refOrderId === id).toArray(),
+    db.users.toArray(),
+    db.stockRecords.where('refOrderId').equals(id).toArray(),
+    // 商品名来自全局商品缓存；把它一起并发等，首屏就不会先显示「商品#123」
+    ensureProductCache()
+  ])
+
+  order.value = orderRow ?? null
   if (!order.value) return
-  items.value = await purchaseStore.getOrderItems(id)
+  items.value = itemRows
+  supplier.value = suppliersAll.find(s => s.id === order.value!.supplierId) ?? null
+  payments.value = payRows
 
-  supplier.value = (await purchaseStore.listSuppliers()).find(s => s.id === order.value!.supplierId) ?? null
-  payments.value = await db.payments.where('type').equals('pay').filter(p => p.refOrderId === id).toArray()
-
-  const users = await db.users.toArray()
   const um: Record<number, string> = {}
-  for (const u of users) um[u.id!] = u.name
+  for (const u of usersAll) um[u.id!] = u.name
   userMap.value = um
 
   // 商品信息
@@ -452,8 +466,7 @@ async function loadOrder(): Promise<void> {
   productMap.value = {}
 
   // 入库流水（历史痕迹），按时间倒序
-  const records = await db.stockRecords.where('refOrderId').equals(id).toArray()
-  const ins = records
+  const ins = recordRows
     .filter(r => r.type === 'purchase_in')
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
   inboundRecords.value = ins
