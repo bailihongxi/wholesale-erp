@@ -141,7 +141,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../../components/ui/PageHeader.vue'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { goBackOr } from '../../composables/useGoBack'
 import { showToast } from 'vant'
@@ -266,6 +266,19 @@ async function handleSubmit(): Promise<void> {
 onMounted(async () => {
   customers.value = await salesStore.listCustomers()
   pickerCats.value = await productStore.pickerCategories()
+})
+
+/**
+ * 新建表单每次（重新）进入都要重置：本组件被 App.vue 的 `<keep-alive>` 无差别缓存，
+ * 从别的页面回来是「复活（activated）」而非「重新挂载（mounted）」，`onMounted` 不会
+ * 再跑，`form` 会残留上次填写的内容（客户/备注/已选商品）—— 与新建采购单同病
+ * （V2.2-1.6 修的 2026-09-28 反馈）。这里在每次激活时把表单清空，保证每次进都是一张空白单。
+ * 只清表单，不动 customers / pickerCats（由 onMounted 加载一次即可，缓存复用）。
+ */
+onActivated(() => {
+  form.customerId = 0
+  form.remark = ''
+  form.items = []
 })
 </script>
 

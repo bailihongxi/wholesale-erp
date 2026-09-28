@@ -7,6 +7,7 @@ import 'fake-indexeddb/auto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import PurchaseCreateView from '../src/views/purchase/PurchaseCreateView.vue'
+import SalesCreateView from '../src/views/sales/SalesCreateView.vue'
 import { useUserStore } from '../src/stores/user'
 import { db } from '../src/db'
 
@@ -96,5 +97,67 @@ describe('新建采购单：keep-alive 复用下表单必须重置', () => {
     expect(src, '必须重置备注').toContain("form.remark = ''")
     expect(src, '必须重置已选商品').toContain('form.items = []')
     expect(src, '必须重置供应商').toContain('form.supplierId = 0')
+  })
+})
+
+/**
+ * 全站排查（2026-09-28，老板批准的同类隐患排查）结论：
+ * 其余「新建表单」里只有 SalesCreateView 与采购页同病（专用路由 + reactive form + 零重置，
+ * 残留客户/备注/商品可能被直接提交成错误订单）。报价单/预采询价/记一笔是列表页内联表单，
+ * 提交成功后已全字段含 items 清空（半途离开保留草稿是刻意行为）；ProductEditView 已接
+ * useReloadOnActivate(initForm)；SettingsView 的面板折叠是 UI 偏好。均不动。
+ */
+describe('新建销售单：keep-alive 复用下表单必须重置（与采购单同病同修）', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    await db.open()
+    await Promise.all(db.tables.map(t => t.clear()))
+    setRole('boss')
+    await testRouter.push('/sales/orders/new')
+    await testRouter.isReady()
+  })
+
+  it('复用缓存后再次进入，备注框被清空', async () => {
+    const show = ref(true)
+    const Other = defineComponent({ name: 'OtherView2', setup: () => () => h('div', 'other') })
+    const Host = defineComponent({
+      name: 'Host2',
+      setup: () => () =>
+        h(KeepAlive, null, {
+          default: () => h(show.value ? SalesCreateView : Other)
+        })
+    })
+
+    const wrapper = mount(Host, { global: { plugins: [testRouter] } })
+    await flushPromises()
+
+    const input = wrapper.find('input[placeholder="选填"]')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('上次填的备注')
+    await flushPromises()
+    expect((input.element as HTMLInputElement).value).toBe('上次填的备注')
+
+    show.value = false
+    await nextTick()
+    await flushPromises()
+
+    show.value = true
+    await nextTick()
+    await flushPromises()
+
+    const input2 = wrapper.find('input[placeholder="选填"]')
+    expect((input2.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('静态契约：SalesCreateView 必须在 onActivated 里重置 form', () => {
+    const src = readFileSync(
+      resolve(__dirname, '../src/views/sales/SalesCreateView.vue'),
+      'utf-8'
+    )
+    expect(src, '必须有 onActivated 钩子').toContain('onActivated(')
+    expect(src, '必须重置备注').toContain("form.remark = ''")
+    expect(src, '必须重置已选商品').toContain('form.items = []')
+    expect(src, '必须重置客户').toContain('form.customerId = 0')
   })
 })
