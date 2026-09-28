@@ -73,6 +73,24 @@ function legacyKey(type: 'purchase_in' | 'sale_out', refOrderId: number, created
   return `LEGACY-${type === 'purchase_in' ? 'RK' : 'CK'}-${refOrderId}-${(createdAt ?? '').slice(0, 19).replace(/[-:T]/g, '')}`
 }
 
+/**
+ * V6·#7：按批次号取一张单据的全部流水。
+ *
+ * 原写法是 `where('type').equals(recordType).toArray()` 全类型扫再 filter——流水表
+ * 只增不减，每打开一张出入库单详情 / 改备注 / 撤单，都把该类型**全部**流水拉一遍。
+ * 现在优先走 `batchNo` 索引直取（db/index.ts v3 已建索引，一次只命中本单几条）；
+ * 索引查不到时才回落 legacy 全类型扫（v3 迁移前的老流水没有 batchNo，靠 legacyKey
+ * 归并），语义与原实现完全一致：direct 结果仍按 recordType 过滤，legacy 行只在
+ * 「无 batchNo 且 legacyKey 相等」时参与匹配（真实批次号与 LEGACY- 前缀天然不相交）。
+ */
+async function recordsOfBatch(recordType: 'purchase_in' | 'sale_out', batchNo: string) {
+  const direct = (await db.stockRecords.where('batchNo').equals(batchNo).toArray())
+    .filter(r => r.type === recordType)
+  if (direct.length) return direct
+  const all = await db.stockRecords.where('type').equals(recordType).toArray()
+  return all.filter(r => !r.batchNo && legacyKey(recordType, r.refOrderId, r.createdAt) === batchNo)
+}
+
 function absQty(r: { quantity: number }): number { return Math.abs(r.quantity) }
 
 export const useStockDocStore = defineStore('stockDoc', () => {
@@ -210,8 +228,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
   /** 单张出入库单的明细：列表 + 每件商品的实际数量与来源单价 */
   async function getDoc(type: StockDocType, batchNo: string): Promise<StockDocDetail> {
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
-    const all = await db.stockRecords.where('type').equals(recordType).toArray()
-    const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
+    const records = await recordsOfBatch(recordType, batchNo)
     if (!records.length) return { doc: null, items: [] }
 
     const refOrderId = records[0].refOrderId
@@ -298,8 +315,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     if (!doc) return { ok: false, message: '单据不存在' }
 
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
-    const all = await db.stockRecords.where('type').equals(recordType).toArray()
-    const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
+    const records = await recordsOfBatch(recordType, batchNo)
 
     // ⓪ 改单前先把「总库存 vs 库房分布」对齐，否则上一步的校验会用到过期分布
     const invForReconcile = useInventoryStore()
@@ -368,8 +384,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     const { doc } = await getDoc(type, batchNo)
     if (!doc) return { ok: false, message: '单据不存在' }
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
-    const all = await db.stockRecords.where('type').equals(recordType).toArray()
-    const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
+    const records = await recordsOfBatch(recordType, batchNo)
     await safeBulkUpdate(db.stockRecords as any, records.map(r => r.id!), { remark })
     await writeLog(operatorId, AUDIT_ACTIONS.STOCK_ADJUST, `修改${type === 'in' ? '入库' : '出库'}单 ${batchNo} 备注`)
     return { ok: true, message: '备注已保存' }
@@ -381,8 +396,7 @@ export const useStockDocStore = defineStore('stockDoc', () => {
     if (!doc) return { ok: false, message: '单据不存在' }
 
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
-    const all = await db.stockRecords.where('type').equals(recordType).toArray()
-    const records = all.filter(r => (r.batchNo || legacyKey(recordType, r.refOrderId, r.createdAt)) === batchNo)
+    const records = await recordsOfBatch(recordType, batchNo)
 
     await applyStockDeltas(records.map(r => ({ productId: r.productId, delta: -r.quantity, locationId: r.locationId })))
     await db.stockRecords.bulkDelete(records.map(r => r.id!))

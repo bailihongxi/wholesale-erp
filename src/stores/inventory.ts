@@ -13,6 +13,7 @@
  */
 import { defineStore } from 'pinia'
 import { db } from '../db'
+import { USE_CLOUD } from '../db/supabaseClient'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { genStockDocNo } from '../utils/orderNo'
 import { applyQuantityDeltas, anyOfBatch, foldQuantityDeltas, safeBulkAdd, safeBulkPut } from '../utils/bulkWrite'
@@ -23,6 +24,34 @@ export const DEFAULT_LOCATIONS: Array<{ id: number; name: string }> = [
   { id: 1, name: '总仓' },
   { id: 2, name: '门店' }
 ]
+
+/**
+ * V6·#9：调拨/盘点列表共用的名称映射。
+ * 原 listTransfers / listStocktakes 各自 `db.products.toArray()` 拉整表全字段
+ * （6281 行 ≈1.4MB）只为拼「品牌 型号」；现在云端走 `scanNarrow('id,brand,model')`
+ * 窄字段（本地/测试回退 toArray，与 WarehouseHomeView V6·#5 同一范式），
+ * 三张表仍一轮并发、pmap 构建表达式与原实现逐字一致。
+ */
+async function loadNameMaps(): Promise<{
+  userMap: Map<number, string>
+  locMap: Map<number, string>
+  pmap: Map<number, string>
+}> {
+  const [users, locs, products] = await Promise.all([
+    db.users.toArray(),
+    db.locations.toArray(),
+    USE_CLOUD
+      ? ((db.products as any).scanNarrow('id,brand,model') as Promise<
+          Array<{ id: number; brand?: string; model?: string }>
+        >)
+      : db.products.toArray()
+  ])
+  return {
+    userMap: new Map(users.map(u => [u.id!, u.name])),
+    locMap: new Map(locs.map(l => [l.id!, l.name])),
+    pmap: new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+  }
+}
 
 export interface TransferRow {
   orderNo: string
@@ -476,14 +505,8 @@ export const useInventoryStore = defineStore('inventory', () => {
   async function listTransfers(): Promise<TransferRow[]> {
     const orders = await db.transferOrders.toArray()
     if (!orders.length) return []
-    const [users, locs, products] = await Promise.all([
-      db.users.toArray(),
-      db.locations.toArray(),
-      db.products.toArray()
-    ])
-    const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const locMap = new Map(locs.map(l => [l.id!, l.name]))
-    const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+    // V6·#9：三张字典表映射改走共享 loadNameMaps（一轮并发不变，products 云端窄字段）
+    const { userMap, locMap, pmap } = await loadNameMaps()
 
     const items = await anyOfBatch(
       db.transferItems as any,
@@ -584,14 +607,8 @@ export const useInventoryStore = defineStore('inventory', () => {
   async function listStocktakes(): Promise<StocktakeRow[]> {
     const orders = await db.stocktakes.toArray()
     if (!orders.length) return []
-    const [users, locs, products] = await Promise.all([
-      db.users.toArray(),
-      db.locations.toArray(),
-      db.products.toArray()
-    ])
-    const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const locMap = new Map(locs.map(l => [l.id!, l.name]))
-    const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+    // V6·#9：三张字典表映射改走共享 loadNameMaps（一轮并发不变，products 云端窄字段）
+    const { userMap, locMap, pmap } = await loadNameMaps()
 
     const items = await anyOfBatch(db.stocktakeItems as any, 'stocktakeId', orders.map(o => o.id!))
     const byOrder = new Map<number, Array<{ id: number; productId: number; systemQty: number; actualQty: number }>>()

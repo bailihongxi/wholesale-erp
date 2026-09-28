@@ -12,10 +12,12 @@
  */
 import { defineStore } from 'pinia'
 import { db } from '../db'
+import { USE_CLOUD } from '../db/supabaseClient'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
 import { genStockDocNo } from '../utils/orderNo'
 import { useInventoryStore } from './inventory'
 import { anyOfBatch, safeBulkAdd } from '../utils/bulkWrite'
+import type { ReturnOrder, ReturnItem } from '../types'
 
 /** 取商品名（品牌+型号），用于校验提示文案 */
 async function productNameOf(productId: number): Promise<string> {
@@ -201,29 +203,83 @@ export const useReturnsStore = defineStore('returns', () => {
   }
 
   // ---------------------------------------------------------- 查询
+
+  /**
+   * V6·#8：列表/详情共用的关联数据。
+   * 原写法 users/customers/suppliers/products 四段串行 `await`，且 products 拉整表
+   * 全字段（6281 行 ≈1.4MB）只为拼「品牌 型号」。现在一轮 `Promise.all` 并发，
+   * 商品表在云端走 `scanNarrow('id,brand,model')` 窄字段（本地/测试回退 toArray，
+   * 与 WarehouseHomeView V6·#5 同一范式），结果与原实现完全一致。
+   */
+  async function loadRefMaps(): Promise<{
+    userMap: Map<number, string>
+    customerMap: Map<number, string>
+    supplierMap: Map<number, string>
+    pmap: Map<number, string>
+  }> {
+    const [users, customers, suppliers, productRows] = await Promise.all([
+      db.users.toArray(),
+      db.customers.toArray(),
+      db.suppliers.toArray(),
+      USE_CLOUD
+        ? ((db.products as any).scanNarrow('id,brand,model') as Promise<
+            Array<{ id: number; brand?: string; model?: string }>
+          >)
+        : db.products.toArray()
+    ])
+    return {
+      userMap: new Map(users.map(u => [u.id!, u.name])),
+      customerMap: new Map(customers.map(c => [c.id!, c.name])),
+      supplierMap: new Map(suppliers.map(s => [s.id!, s.name])),
+      pmap: new Map(productRows.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
+    }
+  }
+
+  /** 由一张退货单 + 其明细构建展示行（listReturns / getReturn 共用，口径只有一份） */
+  function rowOfOrder(
+    o: ReturnOrder,
+    items: ReturnItem[],
+    maps: Awaited<ReturnType<typeof loadRefMaps>>
+  ): ReturnRow {
+    const detail = items.map(it => ({
+      productName: maps.pmap.get(it.productId) ?? `商品#${it.productId}`,
+      quantity: it.quantity,
+      price: it.price,
+      amount: it.amount,
+      reason: it.reason
+    }))
+    const partyName = o.kind === 'sale'
+      ? (maps.customerMap.get(o.partyId) ?? `客户#${o.partyId}`)
+      : (maps.supplierMap.get(o.partyId) ?? `供应商#${o.partyId}`)
+    return {
+      orderNo: o.orderNo,
+      kind: o.kind,
+      refOrderId: o.refOrderId,
+      refOrderNo: o.refOrderNo,
+      partyName,
+      date: (o.date ?? '').slice(0, 16).replace('T', ' '),
+      operatorName: maps.userMap.get(o.operatorId) ?? `#${o.operatorId}`,
+      totalAmount: o.totalAmount,
+      itemCount: items.length,
+      remark: o.remark,
+      items: detail
+    }
+  }
+
   async function listReturns(kind?: 'sale' | 'purchase'): Promise<ReturnRow[]> {
     const orders = await db.returnOrders.toArray()
     if (!orders.length) return []
     const filtered = kind ? orders.filter(o => o.kind === kind) : orders
     if (!filtered.length) return []
 
-    const users = await db.users.toArray()
-    const userMap = new Map(users.map(u => [u.id!, u.name]))
-    const customers = await db.customers.toArray()
-    const suppliers = await db.suppliers.toArray()
-    const customerMap = new Map(customers.map(c => [c.id!, c.name]))
-    const supplierMap = new Map(suppliers.map(s => [s.id!, s.name]))
-    const products = await db.products.toArray()
-    const pmap = new Map(products.map(p => [p.id!, `${p.brand} ${p.model}`.trim()]))
-
-    // ↓ V2.1-2.34 A 档：原先 M 张退货单要发 M 次明细查询（列表 N+1），
-    // 改成一次 anyOf 批量拉完再内存分组，结果完全一样。
-    const orderIds = filtered.map(o => o.id!).filter(v => v !== null && v !== undefined)
-    const allItems = await anyOfBatch<{
-      returnOrderId: number; productId: number; quantity: number
-      price: number; amount: number; reason?: string
-    }>(db.returnItems as any, 'returnOrderId', orderIds)
-    const itemsByOrder = new Map<number, typeof allItems>()
+    const [maps, allItems] = await Promise.all([
+      loadRefMaps(),
+      // ↓ V2.1-2.34 A 档：原先 M 张退货单要发 M 次明细查询（列表 N+1），
+      // 改成一次 anyOf 批量拉完再内存分组，结果完全一样。
+      anyOfBatch<ReturnItem>(db.returnItems as any, 'returnOrderId',
+        filtered.map(o => o.id!).filter(v => v !== null && v !== undefined))
+    ])
+    const itemsByOrder = new Map<number, ReturnItem[]>()
     for (const it of allItems) {
       const arr = itemsByOrder.get(it.returnOrderId) ?? []
       arr.push(it)
@@ -232,41 +288,22 @@ export const useReturnsStore = defineStore('returns', () => {
 
     const rows: ReturnRow[] = []
     for (const o of filtered) {
-      const items = itemsByOrder.get(o.id!) ?? []
-      const detail = items.map(it => ({
-        productName: pmap.get(it.productId) ?? `商品#${it.productId}`,
-        quantity: it.quantity,
-        price: it.price,
-        amount: it.amount,
-        reason: it.reason
-      }))
-      const partyName = o.kind === 'sale'
-        ? (customerMap.get(o.partyId) ?? `客户#${o.partyId}`)
-        : (supplierMap.get(o.partyId) ?? `供应商#${o.partyId}`)
-      rows.push({
-        orderNo: o.orderNo,
-        kind: o.kind,
-        refOrderId: o.refOrderId,
-        refOrderNo: o.refOrderNo,
-        partyName,
-        date: (o.date ?? '').slice(0, 16).replace('T', ' '),
-        operatorName: userMap.get(o.operatorId) ?? `#${o.operatorId}`,
-        totalAmount: o.totalAmount,
-        itemCount: items.length,
-        remark: o.remark,
-        items: detail
-      })
+      rows.push(rowOfOrder(o, itemsByOrder.get(o.id!) ?? [], maps))
     }
     return rows.sort((a, b) => (a.date < b.date ? 1 : -1))
   }
 
   async function getReturn(orderNo: string): Promise<ReturnDetail | null> {
-    const o = (await db.returnOrders.where('orderNo').equals(orderNo).first())
+    // V6·#10：原先调 listReturns() 把全部退货单（含全部明细/商品表）拉一遍，
+    // 只为 find 出本单这一行；现在按单号直取本单，明细与关联数据都只按本单所需取，
+    // 构建口径走同一个 rowOfOrder，结果与原实现完全一致。
+    const o = await db.returnOrders.where('orderNo').equals(orderNo).first()
     if (!o) return null
-    const list = await listReturns()
-    const row = list.find(r => r.orderNo === orderNo)
-    if (!row) return null
-    return { ...row, id: o.id! }
+    const [items, maps] = await Promise.all([
+      db.returnItems.where('returnOrderId').equals(o.id!).toArray(),
+      loadRefMaps()
+    ])
+    return { ...rowOfOrder(o, items, maps), id: o.id! }
   }
 
   return { salesReturn, purchaseReturn, listReturns, getReturn }

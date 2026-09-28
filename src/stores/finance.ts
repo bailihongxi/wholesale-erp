@@ -236,11 +236,19 @@ export const useFinanceStore = defineStore('finance', () => {
     return { itemsByOrder, priceById }
   }
 
+  // V6·#11：可选 saleOrdersAll / costBase —— 老板报表页把基表与「明细+进价」一次算好，
+  // 复用给毛利汇总与月趋势（原两函数各自独立全表拉 saleOrders、各调一次 loadSaleCostBase）。
+  // 不传时行为与原实现完全一致（向后兼容，既有无参测试不受影响）。
   async function getProfitSummary(
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    saleOrdersAll?: Array<{ id?: number; totalAmount: number; orderDate: string }>,
+    costBase?: {
+      itemsByOrder: Map<number, Array<{ productId: number; quantity: number }>>
+      priceById: Map<number, number>
+    }
   ): Promise<{ totalSales: number; totalCost: number; grossProfit: number }> {
-    let saleOrders = await db.saleOrders.toArray()
+    let saleOrders = saleOrdersAll ?? await db.saleOrders.toArray()
     if (startDate || endDate) {
       const from = startDate ? `${startDate}T00:00:00.000Z` : ''
       // 结束日按当天 23:59 处理，采用字符串比较即可覆盖整日
@@ -254,7 +262,7 @@ export const useFinanceStore = defineStore('finance', () => {
     if (!saleOrders.length) {
       return { totalSales: 0, totalCost: 0, grossProfit: 0 }
     }
-    const { itemsByOrder, priceById } = await loadSaleCostBase(saleOrders)
+    const { itemsByOrder, priceById } = costBase ?? (await loadSaleCostBase(saleOrders))
     let totalSales = 0
     let totalCost = 0
     for (const so of saleOrders) {
@@ -272,7 +280,14 @@ export const useFinanceStore = defineStore('finance', () => {
 
   // ===== 按月的销售/毛利趋势 =====
   // 返回近 months 个月（含当前月）的数组，用于报表趋势图。
-  async function getMonthlyTrend(months = 6): Promise<
+  async function getMonthlyTrend(
+    months = 6,
+    saleOrdersAll?: Array<{ id?: number; totalAmount: number; orderDate: string }>,
+    costBase?: {
+      itemsByOrder: Map<number, Array<{ productId: number; quantity: number }>>
+      priceById: Map<number, number>
+    }
+  ): Promise<
     Array<{ key: string; label: string; sales: number; cost: number; profit: number }>
   > {
     const buckets = new Map<string, { sales: number; cost: number }>()
@@ -285,8 +300,8 @@ export const useFinanceStore = defineStore('finance', () => {
       buckets.set(key, { sales: 0, cost: 0 })
     }
 
-    const saleOrders = await db.saleOrders.toArray()
-    const { itemsByOrder, priceById } = await loadSaleCostBase(saleOrders)
+    const saleOrders = saleOrdersAll ?? await db.saleOrders.toArray()
+    const { itemsByOrder, priceById } = costBase ?? (await loadSaleCostBase(saleOrders))
     for (const so of saleOrders) {
       const key = (so.orderDate ?? '').slice(0, 7)
       const bucket = buckets.get(key)
@@ -310,13 +325,21 @@ export const useFinanceStore = defineStore('finance', () => {
   }
 
   // ===== 应收/应付总额（用于报表与工作台） =====
-  async function getReceivableTotal(): Promise<number> {
-    const list = await listReceivables()
+  // V6·#11：可选 paysAll / ordersAll 透传给 listReceivables / listPayables
+  // （includeSettled 仍走默认 false，与原实现一致），报表页复用已拉的基表，不再各拉一遍。
+  async function getReceivableTotal(
+    paysAll?: Array<{ type: string; refOrderId: number; amount: number }>,
+    ordersAll?: Array<{ id?: number; orderNo: string; customerId: number; totalAmount: number; orderDate: string }>
+  ): Promise<number> {
+    const list = await listReceivables(undefined, paysAll, ordersAll)
     return list.reduce((s, r) => s + r.balance, 0)
   }
 
-  async function getPayableTotal(): Promise<number> {
-    const list = await listPayables()
+  async function getPayableTotal(
+    paysAll?: Array<{ type: string; refOrderId: number; amount: number }>,
+    ordersAll?: Array<{ id?: number; orderNo: string; supplierId: number; totalAmount: number; orderDate: string }>
+  ): Promise<number> {
+    const list = await listPayables(undefined, paysAll, ordersAll)
     return list.reduce((s, p) => s + p.balance, 0)
   }
 
@@ -438,6 +461,7 @@ export const useFinanceStore = defineStore('finance', () => {
     listReceivables, listPayables, recordReceive, recordPay,
     listPaymentHistory,
     getProfitSummary, getMonthlyTrend, getReceivableTotal, getPayableTotal,
+    loadSaleCostBase,
     addLedger, listLedger, deleteLedger, ledgerSummary
   }
 })

@@ -123,6 +123,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { db } from '../../db'
 import { useReloadOnActivate } from '../../composables/useReloadOnActivate'
 import { useListCache } from '../../composables/useListCache'
 import { useFinanceStore } from '../../stores/finance'
@@ -218,12 +219,20 @@ async function reload(useCache = true): Promise<void> {
     }
   }
 
-  // V6·#1 四项聚合互不依赖，合并为单轮并行（原 4 段串行 → 1 轮）
+  // V6·#11：三张基表一轮拉取，连同一次算好的「明细+进价」costBase 复用给四个聚合。
+  // 原来四个函数各自独立全表拉：saleOrders 拉 3 遍、payments 2 遍、明细+商品进价各 2 遍；
+  // 现在基表全页只拉一次，请求数 ~14 → ~5。各函数不传参数时行为不变（向后兼容）。
+  const [saleOrders, pays, purchaseOrders] = await Promise.all([
+    db.saleOrders.toArray(),
+    db.payments.toArray(),
+    db.purchaseOrders.toArray(),
+  ])
+  const costBase = await financeStore.loadSaleCostBase(saleOrders)
   const [s, r, p, t] = await Promise.all([
-    financeStore.getProfitSummary(startDate.value || undefined, endDate.value || undefined),
-    financeStore.getReceivableTotal(),
-    financeStore.getPayableTotal(),
-    financeStore.getMonthlyTrend(6),
+    financeStore.getProfitSummary(startDate.value || undefined, endDate.value || undefined, saleOrders, costBase),
+    financeStore.getReceivableTotal(pays, saleOrders),
+    financeStore.getPayableTotal(pays, purchaseOrders),
+    financeStore.getMonthlyTrend(6, saleOrders, costBase),
   ])
   summary.value = s
   receivableTotal.value = r
