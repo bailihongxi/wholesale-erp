@@ -726,10 +726,15 @@ async function openDetail(id: number): Promise<void> {
     // 不增加明细显示的等待。口径与选商品弹窗一致 = 全部库位合计。
     if (!isDealer.value) {
       stockMap.value = {}
+      // V2.2-1.13：stockLoaded 区分「加载中」和「云端无库存记录」。
+      // 此前两者都显示「…」，老板误会成程序一直转圈/卡死；实际是 6280 个商品
+      // 从未入库、stock 表里根本没有该商品行（数据现状，不是 bug）。
+      // 现在无记录（含请求失败兜底）与选商品弹窗同口径 = 库存 0。
+      stockLoaded.value = false
       productStore
         .stockOf(items.map(i => i.productId))
-        .then(m => { stockMap.value = m })
-        .catch(() => { stockMap.value = {} })
+        .then(m => { stockMap.value = m; stockLoaded.value = true })
+        .catch(() => { stockMap.value = {}; stockLoaded.value = true })
     } else {
       stockMap.value = {}
     }
@@ -740,10 +745,13 @@ async function openDetail(id: number): Promise<void> {
 
 /** 明细当前库存（productId → 全库位合计）。经销商恒为空对象 → 界面不显示该列 */
 const stockMap = ref<Record<number, number>>({})
+/** V2.2-1.13：库存请求是否已返回。false = 加载中（显示「…」）；
+ *  true 后 map 里查不到 = 云端无库存记录（显示 0，与选商品弹窗口径一致） */
+const stockLoaded = ref(false)
 
 function stockText(id: number): string {
-  const n = stockMap.value[id]
-  return n === undefined ? '…' : String(n)
+  if (!stockLoaded.value) return '…'
+  return String(stockMap.value[id] ?? 0)
 }
 /** 库存配色：无货红 / ≤10 橙 / 正常绿（同 ProductPicker 分级口径） */
 function stockClass(id: number): string {

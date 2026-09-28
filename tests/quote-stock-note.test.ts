@@ -128,7 +128,30 @@ describe('不波及其它页面 / 不影响速度', () => {
   })
 
   it('明细加载的等待时间不变：库存仍是 fire-and-forget 补上', () => {
-    expect(quotes).toContain('.then(m => { stockMap.value = m })')
+    expect(quotes).toContain('.then(m => { stockMap.value = m; stockLoaded.value = true })')
     expect(quotes).toContain('不增加明细显示的等待')
+  })
+})
+
+describe('V2.2-1.13：库存「…」只表示加载中，无记录显示 0', () => {
+  it('stockText 必须用 stockLoaded 区分加载中与无记录', () => {
+    expect(quotes).toContain('const stockLoaded = ref(false)')
+    // 加载中才显示「…」
+    expect(quotes).toContain("if (!stockLoaded.value) return '…'")
+    // 无记录（undefined）回落为 0 —— 与选商品弹窗 pickerPage 的 `?? 0` 同口径
+    expect(quotes).toContain('return String(stockMap.value[id] ?? 0)')
+    // 旧写法（把 undefined 一律当「…」）不得回归
+    expect(quotes).not.toContain("n === undefined ? '…' : String(n)")
+  })
+
+  it('stockLoaded 在打开详情时先复位，then 与 catch 都要置 true（防失败后永远转圈）', () => {
+    // 打开新详情必须复位，避免沿用上一单的已加载状态
+    expect(quotes).toContain('stockLoaded.value = false')
+    expect(quotes).toContain('.catch(() => { stockMap.value = {}; stockLoaded.value = true })')
+  })
+
+  it('不新增任何库存请求：stockOf 仍只调 1 次', () => {
+    const hits = quotes.split('stockOf(').length - 1
+    expect(hits).toBe(1)
   })
 })
