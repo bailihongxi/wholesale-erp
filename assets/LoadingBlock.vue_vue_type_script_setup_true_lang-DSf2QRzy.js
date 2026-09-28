@@ -1,0 +1,1 @@
+import{k as n,A as e,B as r,Z as a,F as o,H as i}from"./vue-vendor-07M7iixH.js";const m=n({__name:"LoadingBlock",props:{rows:{default:6}},setup(s){return(l,c)=>(e(),r("div",{class:"ui-skeleton",style:a({minHeight:`${s.rows*26+20}px`}),"aria-hidden":"true"},[(e(!0),r(o,null,i(s.rows,t=>(e(),r("i",{key:t,class:"ui-skeleton-row"}))),128))],4))}});export{m as _};

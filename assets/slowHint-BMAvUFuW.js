@@ -1,0 +1,1 @@
+const l=5e3,u=Symbol("slow-hint");function o(e,r=5e3,i){if(!i||r<=0)return e;let n=null;const c=new Promise(t=>{n=setTimeout(()=>t(u),r)});return Promise.race([e,c]).then(t=>{if(t===u){try{i()}catch{}return e}return t}).finally(()=>{n&&clearTimeout(n)})}export{l as S,o as w};

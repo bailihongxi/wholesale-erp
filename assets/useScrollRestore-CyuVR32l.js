@@ -1,0 +1,1 @@
+import{a as e,c}from"./vue-vendor-07M7iixH.js";const s=new Map;function i(o){e(()=>{s.set(o,window.scrollY)}),c(()=>{const t=s.get(o);t!==void 0&&setTimeout(()=>{window.scrollTo(0,t)},50)})}export{i as u};
