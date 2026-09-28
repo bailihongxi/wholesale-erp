@@ -48,9 +48,11 @@
             <span class="ui-items-op">×</span>
             <span class="ui-items-price">¥{{ money(it.price) }}</span>
             <span class="ui-items-op">=</span>
+            <!-- V2.2-1.12：noteLead 开启时 note 挪到金额左侧（报价单「库N」专用） -->
+            <span v-if="leadNote(it)" class="ui-items-note lead">{{ it.note }}</span>
             <b class="ui-items-amount">¥{{ money(it.amount ?? (it.qty || 0) * (it.price || 0)) }}</b>
           </template>
-          <span v-if="it.note" class="ui-items-note">{{ it.note }}</span>
+          <span v-if="it.note && !leadNote(it)" class="ui-items-note">{{ it.note }}</span>
         </div>
       </li>
 
@@ -89,15 +91,26 @@ const props = withDefaults(
     totalAmount?: number
     /** 空态文案 */
     emptyText?: string
+    /**
+     * V2.2-1.12：把 note 从行尾挪到金额左侧（报价单「库N」专用）。
+     * 默认 false —— 全站其余页面（销售单/采购单的赠品说明等）位置与字号一律不变。
+     */
+    noteLead?: boolean
   }>(),
   {
     title: '商品明细',
     showPrice: true,
     showTotal: true,
     qtyUnit: '件',
-    emptyText: '暂无明细'
+    emptyText: '暂无明细',
+    noteLead: false
   }
 )
+
+/** 只有「开了 noteLead + 有 note + 显示金额」时才前移；其余一律走原来的行尾位置 */
+function leadNote(it: ItemCardRow): boolean {
+  return !!props.noteLead && it.note != null && props.showPrice && it.price != null
+}
 
 /** 千分位 + 两位小数，全站金额格式统一 */
 function money(n: number | undefined): string {
@@ -177,6 +190,22 @@ const shownAmount = computed(() =>
 .ui-items-price { font-variant-numeric: tabular-nums; }
 .ui-items-op { color: var(--c-border-strong); }
 .ui-items-note { color: var(--c-accent); }
+/* V2.2-1.12：报价单「库N」专用——挪到金额左侧，与金额之间固定 2 个字符（13px×2）
+   margin-left:auto 把「库N + 金额」整体顶到右侧；字号与单价 .ui-items-price 一致。
+   不开 noteLead 的页面不命中这个类，观感与改动前逐像素相同。 */
+.ui-items-note.lead {
+  margin-left: auto;
+  /* 与金额之间固定 2 个字符：13px × 2 = 26px。
+     行内还有 .ui-items-calc 的 gap: 6px 夹在中间，所以这里只补 20px（20 + 6 = 26px）。 */
+  padding-right: 20px;
+  font-size: 13px;
+  /* ⚠️ flex:1 + text-align:right 不能省：金额 .ui-items-amount 自己也挂着 margin-left:auto，
+     两个 auto 会把行的剩余空间**平分**，「库N」就被甩到行的中间而不是贴着金额。
+     让 lead 独占剩余空间并把文字右对齐，金额自然贴在最右，
+     「库N」稳定停在金额左侧 26px（= 2 个字符）处 —— 与老板确认的效果图一致。 */
+  flex: 1;
+  text-align: right;
+}
 .ui-items-amount {
   margin-left: auto;
   font-size: 16px;
@@ -217,6 +246,8 @@ const shownAmount = computed(() =>
   .ui-items-row { padding: 10px 12px; }
   .ui-items-name { font-size: 14px; }
   .ui-items-calc { font-size: 12px; gap: 4px; }
+  /* 极窄屏跟着单价一起降一档：2 个字符 = 12px × 2 = 24px，扣掉 gap: 4px → 20px */
+  .ui-items-note.lead { font-size: 12px; padding-right: 20px; }
   .ui-items-amount { font-size: 15px; }
   .ui-items-total-amount { font-size: 17px; }
 }

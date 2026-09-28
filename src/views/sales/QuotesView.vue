@@ -279,6 +279,7 @@
           v-if="isMobile"
           title="报价明细"
           :items="detailCards"
+          :note-lead="!isDealer"
           :total-amount="quote?.totalAmount ?? 0"
           empty-text="暂无明细"
         />
@@ -762,8 +763,10 @@ const detailCards = computed<ItemCardRow[]>(() =>
     qty: it.quantity,
     price: it.price,
     amount: it.subtotal,
-    // V2.1-2.32：非经销商在卡片里带一行当前库存（经销商不可见）
-    note: isDealer.value ? undefined : `库存 ${stockText(it.productId)}`
+    // V2.1-2.32：非经销商在卡片里带当前库存（经销商不可见）
+    // V2.2-1.12：文案由「库存 12」改为「库12」，并前移到金额左侧（noteLead），
+    // 字号与单价一致、颜色仍为蓝色。经销商没有这条 note → 界面零变化。
+    note: isDealer.value ? undefined : `库${stockText(it.productId)}`
   }))
 )
 function fmtDate(s: string): string { return s ? s.slice(0, 10) : '-' }
