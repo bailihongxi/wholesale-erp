@@ -127,16 +127,21 @@ async function handleLogin(): Promise<void> {
     showToast('请输入账号和密码')
     return
   }
+  // loading 复位必须放 finally（铁律）：login 内部已把异常转成失败文案，
+  // 但仍可能有意外的同步/异步异常 —— 任何情况都不能让按钮永久停在「登录中…」。
   loading.value = true
-  const res = await userStore.login(name, password.value)
-  loading.value = false
-  if (res.ok) {
-    if (remember.value) saveRememberedAccount(name)
-    else clearRememberedAccount()
-    showToast('登录成功')
-    router.push(userStore.homeRouteForRole(userStore.role))
-  } else {
-    showToast(res.message)
+  try {
+    const res = await userStore.login(name, password.value)
+    if (res.ok) {
+      if (remember.value) saveRememberedAccount(name)
+      else clearRememberedAccount()
+      showToast('登录成功')
+      router.push(userStore.homeRouteForRole(userStore.role))
+    } else {
+      showToast(res.message)
+    }
+  } finally {
+    loading.value = false
   }
 }
 

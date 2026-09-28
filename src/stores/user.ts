@@ -139,8 +139,35 @@ export const useUserStore = defineStore('user', () => {
    * 登录：账号支持「登录名」或「手机号」两种写法。
    * 顺序 —— 查员工 → 查经销商；密码走哈希校验，老数据（明文）通过后自动升级。
    * 连续失败会被 utils/loginGuard 计数并锁定。
+   *
+   * ⚠️ 2026-09-28 修复「换手机登录一直显示登录中」：
+   * 这条链全部是云端请求（supabase-js 的 fetch **默认没有超时**），且此前整条链
+   * 没有任何 try/catch、没有超时 —— 换设备（无本地会话快照、必须走真实云端登录）时，
+   * 只要手机所在网络到 Supabase 新加坡后端不通/极慢，fetch 就无限挂起，登录按钮
+   * 永远停在「登录中…」且没有任何报错（老手机正常只是因为本地快照直接恢复会话、
+   * 根本不走这条链）。现在：① 整链 15 秒超时兜底；② 任何异常转成明确的失败文案，
+   * 绝不让 Promise 抛出到登录页（登录页 loading 复位也已改 try/finally）。
    */
+  const LOGIN_TIMEOUT_MS = 15_000
+
   async function login(account: string, password: string): Promise<LoginResult> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<LoginResult>(resolve => {
+      timer = setTimeout(
+        () => resolve({ ok: false, message: '连接服务器超时，请检查网络后重试' }),
+        LOGIN_TIMEOUT_MS
+      )
+    })
+    try {
+      return await Promise.race([loginInner(account, password), timeout])
+    } catch {
+      return { ok: false, message: '网络异常，无法连接服务器，请检查网络后重试' }
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  async function loginInner(account: string, password: string): Promise<LoginResult> {
     await initDefaultAdmin()
     const key = account.trim()
     const lockKey = normalizeUsername(key)

@@ -128,7 +128,20 @@ export const db = (USE_CLOUD ? createCloudDb() : _localDb) as unknown as ERPData
 export const localDb = _localDb
 
 // 初始化默认管理员账号与默认库位
+//
+// ⚠️ 2026-09-28：整体包 try/catch —— 本函数只是「补种兜底数据」，不是登录的前置校验。
+// 它在每次 login() 的最前面跑，全是云端请求；弱网/被墙时任一请求失败会把整个
+// login() 拖崩（登录页从此卡在「登录中…」，因为异常没人接）。种子数据缺失的后果
+// 远小于登录链路被拖崩，故失败只告警不阻断；真正的账号校验在 findUser/verifyPassword。
 export async function initDefaultAdmin(): Promise<void> {
+  try {
+    await initDefaultAdminInner()
+  } catch (e) {
+    console.warn('[initDefaultAdmin] 初始化兜底数据失败，跳过（不阻塞登录）：', e)
+  }
+}
+
+async function initDefaultAdminInner(): Promise<void> {
   const count = await db.users.count()
   if (count === 0) {
     await db.users.add({
