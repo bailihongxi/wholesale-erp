@@ -2,6 +2,7 @@ import {
   getPrintSettings,
   resolveRowsPerPage,
   PAPER_MM,
+  PAPER_ROW_RESERVES,
   type PaperSize,
   type PrintSettings,
   type PrintColumn,
@@ -177,14 +178,23 @@ function money(n: number): string {
 /**
  * 明细分页：首页要给「往来单位」留位置，末页要给「合计 / 大写 / 备注 / 签章」留位置。
  * 保证：每页不超容量、末页不超末页容量、行数守恒（不丢行不重复）。
+ *
+ * @param cap      满页容量（中间页行数）
+ * @param reserves 首页 / 末页预留行数（按纸张传入，见 PAPER_ROW_RESERVES；
+ *                 缺省 {3,4} 保持 A4 原行为）
+ *
+ * 2026-09-28 老板拍板 A5：满页 12、首页 10（-2）、末页 6（-6）。
+ * 收尾两页的分配改为「优先填满前一页」（remaining - lastCap），
+ * 但保底均分（ceil），避免为了凑满页出现只有一两行的孤页。
  */
-export function paginateItems(items: PrintItem[], cap: number): PrintItem[][] {
+export function paginateItems(
+  items: PrintItem[],
+  cap: number,
+  reserves: { first: number; last: number } = { first: 3, last: 4 }
+): PrintItem[][] {
   if (!items.length) return [[]]
-  // 预留量（行）：首页多一个「往来单位」栏，末页多「合计 + 备注 + 签章」。
-  // V2.1-1.4：原为 -4 / -5，配 A5=6 时首页只剩 3 行（老板反馈「四行就换纸」）；
-  // 现容量改按纸张高度算（A5=9），预留同步收紧到 -3 / -4 → 首页 6 行、中间页 9 行、末页 5 行。
-  const firstCap = Math.max(3, cap - 3)
-  const lastCap = Math.max(3, cap - 4)
+  const firstCap = Math.max(3, cap - reserves.first)
+  const lastCap = Math.max(3, cap - reserves.last)
   if (items.length <= firstCap) return [items]
 
   const chunks: PrintItem[][] = []
@@ -199,7 +209,7 @@ export function paginateItems(items: PrintItem[], cap: number): PrintItem[][] {
     }
     let take: number
     if (isFirst) take = firstCap
-    else if (remaining <= cap + lastCap) take = Math.ceil(remaining / 2) // 余两页时均分
+    else if (remaining <= cap + lastCap) take = Math.max(remaining - lastCap, Math.ceil(remaining / 2)) // 收尾两页：优先填满前一页，末页不超 lastCap
     else take = cap
     take = Math.max(1, Math.min(take, remaining - 1))
     chunks.push(items.slice(i, i + take))
@@ -367,7 +377,7 @@ export function buildOrderPrintHTML(
   settings: PrintSettings = getPrintSettings()
 ): string {
   const cap = resolveRowsPerPage(settings)
-  const chunks = paginateItems(data.items, cap)
+  const chunks = paginateItems(data.items, cap, PAPER_ROW_RESERVES[settings.paper])
   const pageCount = chunks.length
 
   let startNo = 1

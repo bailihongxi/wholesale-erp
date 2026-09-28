@@ -440,7 +440,6 @@ const customers = ref<Customer[]>([])
 const pager = useServerPager<QuoteOrder>({
   watch: [keyword, statusFilter],
   loader: async (pg, size) => {
-    await ensureCustomers()
     const kw = keyword.value.trim()
     const lower = kw.toLowerCase()
     const parts = ['or(kind.eq.sale,kind.is.null)']
@@ -449,10 +448,12 @@ const pager = useServerPager<QuoteOrder>({
       parts.push(`customerId.eq.${userStore.currentUser.id}`)
     }
     if (kw) {
+      // 关键词搜索要按客户名拼 customerId.in，客户名单必须先就位（缓存命中时无网络开销）
+      await ensureCustomers()
       const ids = customers.value
         .filter(c => String(c.name ?? '').toLowerCase().includes(lower))
         .map(c => c.id!)
-      const kwParts = [`orderNo.ilike.*${escapeOr(kw)}*`, `customerName.ilike.*${escapeOr(kw)}*`]
+      const kwParts = [`orderNo.ilike."*${escapeOr(kw)}*"`, `customerName.ilike."*${escapeOr(kw)}*"`]
       if (ids.length) kwParts.push(`customerId.in.(${ids.join(',')})`)
       parts.push(`or(${kwParts.join(',')})`)
     }
@@ -470,15 +471,21 @@ const pager = useServerPager<QuoteOrder>({
             .toLowerCase().includes(lower))
       )
     }
-    return serverPage<QuoteOrder>(db.quoteOrders, {
-      page: pg,
-      pageSize: size,
-      eq: statusFilter.value ? { status: statusFilter.value } : {},
-      orExpr: parts.length > 1 ? `and(${parts.join(',')})` : parts[0],
-      extraFilter,
-      orderBy: 'quoteDate',
-      ascending: false,
-    })
+    // 无关键词时：客户名单（展示客户名用）与分页查询并行发出，列表首屏少等一个跨境往返；
+    // 有关键词时上面已 await，这里直接命中会话缓存，无网络开销。
+    const [res] = await Promise.all([
+      serverPage<QuoteOrder>(db.quoteOrders, {
+        page: pg,
+        pageSize: size,
+        eq: statusFilter.value ? { status: statusFilter.value } : {},
+        orExpr: parts.length > 1 ? `and(${parts.join(',')})` : parts[0],
+        extraFilter,
+        orderBy: 'quoteDate',
+        ascending: false,
+      }),
+      ensureCustomers(),
+    ])
+    return res
   },
 })
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
@@ -498,6 +505,8 @@ function resetFilter(): void { keyword.value = ''; statusFilter.value = '' }
  */
 function statusText(s: string): string {
   if (isDealer.value) {
+    // 2026-09-28 老板拍板：各端文案保持原样（经销商「已确认」/ 内部「已报价」），
+    // 只对 sent 状态做样式放大加红（见样式区 sent 状态规则）
     return { draft: '待确认', sent: '已确认', converted: '已转销售单', void: '已失效' }[s] ?? s
   }
   return { draft: '待报价', sent: '已报价', converted: '已转销售单', void: '已失效' }[s] ?? s
@@ -690,23 +699,23 @@ async function openDetail(id: number): Promise<void> {
   mode.value = 'detail'  // 先切到详情模式，显示加载中的骨架屏
   
   try {
-    const q = await quotesStore.getQuote(id)
+    // 2026-09-28 提速：单头与明细并行拉取。原实现 getQuote → getQuoteItems 串行，
+    // 云端（新加坡）要等两个跨境往返 ≈ 1~2.5s，这就是「点单号反应慢」的主因；
+    // 并行后只等一个往返。权限校验仍以单头结果为准，明细拉了不合规就丢弃。
+    const [q, items] = await Promise.all([
+      quotesStore.getQuote(id),
+      quotesStore.getQuoteItems(id),
+    ])
     if (!q) {
       mode.value = 'list'
-      detailLoading.value = false
       return
     }
     // 经销商只能打开自己的单；列表虽已按 customerId 过滤，这里再兜一道（防直接调用/URL）
     if (isDealer.value && q.customerId !== userStore.currentUser?.id) {
       showToast('无权查看该报价单')
       mode.value = 'list'
-      detailLoading.value = false
       return
     }
-    // 并行加载基本信息和明细，不要串行
-    const [items] = await Promise.all([
-      quotesStore.getQuoteItems(id)
-    ])
     quote.value = q
     detailItems.value = items
     // 用全局商品缓存，不用再拉商品表了
@@ -920,6 +929,20 @@ useQuoteRealtime({
 .qc-status, .d-badge { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: var(--c-primary); }
 .qc-status.converted, .d-badge.converted { background: #e8f5ec; color: #1a8a4a; }
 .qc-status.void { background: #f1f5f9; color: var(--c-muted); }
+/* 已确定状态放大加红（2026-09-28 老板要求）：手机端卡片徽章 */
+.qc-status.sent {
+  background: #fdecea;
+  color: #e53935;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+/* 已确定状态放大加红：电脑端表格状态格 */
+.quote-table td.sent {
+  color: #e53935;
+  font-size: 15px;
+  font-weight: 600;
+}
 .d-badge.conv { background: #eaf1ff; color: var(--c-accent); }
 .quote-card { padding: 12px 14px; }
 .qc-head { display: flex; justify-content: space-between; align-items: center; }

@@ -99,7 +99,11 @@
                 class="ui-input"
                 list="ledger-link-docs"
                 :disabled="!form.linkDocType"
-                :placeholder="form.linkDocType ? `选择或输入${linkTypeLabel(form.linkDocType)}号` : '先选择单据类型'"
+                :placeholder="linkDocLoading
+                  ? '单号加载中…'
+                  : form.linkDocType
+                    ? `选择或输入${linkTypeLabel(form.linkDocType)}号`
+                    : '先选择单据类型'"
               />
             </div>
             <datalist id="ledger-link-docs">
@@ -298,6 +302,16 @@ const form = reactive({
 
 /** 当前所选单据类型的全部单号（datalist 候选） */
 const linkDocNos = ref<string[]>([])
+/** 单号列表是否正在拉取（首次无缓存时输入框显示「单号加载中…」） */
+const linkDocLoading = ref(false)
+/**
+ * 单号列表会话级缓存：类型 → 单号数组。
+ * 2026-09-28 优化：原来每切一次「关联单据」类型都现场扫一遍云端对应表，
+ * 切走再切回也要重新等一个跨境往返；现在缓存秒出 + 后台静默刷新。
+ */
+const linkDocCache = new Map<string, string[]>()
+/** 请求序号：快速切换类型时，只有最后一次请求的结果允许回填下拉 */
+let linkDocSeq = 0
 
 /**
  * 窄字段取行：云端只 SELECT 指定列，本地（IndexedDB 保底模式）没有列裁剪，退化为原样读。
@@ -317,11 +331,7 @@ async function narrowRows(
   return t.scanNarrow(fields, cloudApply) as Promise<Array<Record<string, any>>>
 }
 
-async function loadLinkDocs(type: string): Promise<void> {
-  if (!type) {
-    linkDocNos.value = []
-    return
-  }
+async function fetchLinkNos(type: string): Promise<string[]> {
   let rows: Array<Record<string, any>> = []
   let pick = 'orderNo'
   if (type === 'inbound' || type === 'outbound') {
@@ -345,7 +355,39 @@ async function loadLinkDocs(type: string): Promise<void> {
   }
   const nos = rows.map(r => r[pick]).filter(Boolean) as string[]
   // 新单号在前，方便选择最近的单据
-  linkDocNos.value = [...new Set(nos)].sort().reverse()
+  return [...new Set(nos)].sort().reverse()
+}
+
+async function loadLinkDocs(type: string): Promise<void> {
+  if (!type) {
+    linkDocNos.value = []
+    linkDocLoading.value = false
+    return
+  }
+  const seq = ++linkDocSeq
+  const cached = linkDocCache.get(type)
+  if (cached) linkDocNos.value = cached   // 有缓存：候选秒出，下面静默刷新
+  else linkDocLoading.value = true        // 没缓存：显示加载中
+  try {
+    const nos = await fetchLinkNos(type)
+    linkDocCache.set(type, nos)
+    if (seq === linkDocSeq) linkDocNos.value = nos
+  } catch (e) {
+    // 静默失败：下拉里可能仍是缓存或空，不打断记一笔填写
+    console.warn('[ledger] 关联单号列表加载失败', e)
+  } finally {
+    if (seq === linkDocSeq) linkDocLoading.value = false
+  }
+}
+
+/** 进入页面后后台预载各类型单号（火后不理，只填缓存、不动下拉），点开时基本已就绪 */
+function preloadLinkNos(): void {
+  for (const t of LEDGER_LINK_TYPES) {
+    if (linkDocCache.has(t.key)) continue
+    void fetchLinkNos(t.key)
+      .then(nos => { linkDocCache.set(t.key, nos) })
+      .catch(() => { /* 预载失败不打扰用户，切换类型时有兜底加载 */ })
+  }
 }
 
 watch(() => form.linkDocType, t => {
@@ -506,6 +548,7 @@ watch(rows, () => pager.reset())
 const page = computed({ get: () => pager.page.value, set: v => pager.go(v) })
 
 onMounted(async () => {
+  preloadLinkNos() // 后台预载各类型关联单号（火后不理），选类型时候选基本秒出
   await loadParties()
   await reload()
 })

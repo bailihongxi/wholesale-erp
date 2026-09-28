@@ -184,7 +184,7 @@ const pager = useServerPager<Customer>({
     if (kw || ft !== 'all') {
       const parts: string[] = []
       if (kw) {
-        parts.push(`or(${fields.map(f => `${f}.ilike.*${escapeOr(kw)}*`).join(',')})`)
+        parts.push(`or(${fields.map(f => `${f}.ilike."*${escapeOr(kw)}*"`).join(',')})`)
       }
       if (ft === 'dealer') parts.push('and(loginPhone.not.is.null,loginPhone.neq.)')
       else if (ft === 'wholesale') parts.push('or(loginPhone.is.null,loginPhone.eq.)')

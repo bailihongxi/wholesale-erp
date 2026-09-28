@@ -35,9 +35,17 @@ export interface QueryPageOpts {
   ascending?: boolean
 }
 
-/** 转义 PostgREST .or() 语法里的特殊字符，避免关键词破坏查询 */
+/**
+ * 转义 PostgREST .or() 逻辑树里的特殊字符。
+ *
+ * 2026-09-28 修复「搜 CWY22-DFZ696GHU1 (Y6Pro) 报 failed to parse logic tree」：
+ * 值统一由调用方用**双引号**包裹（`f.ilike."*值*"`）——双引号内的括号 / 逗号 /
+ * 星号按普通文字处理，逻辑树解析器不再被它们干扰。旧的反斜杠转义括号
+ * PostgREST 并不认，整个查询直接被拒。
+ * 这里只需处理会破坏双引号语法本身的字符：反斜杠与双引号。
+ */
 export function escapeOr(kw: string): string {
-  return kw.replace(/([\\*,()%])/g, '\\$1')
+  return kw.replace(/(["\\])/g, '\\$1')
 }
 
 /**
@@ -531,7 +539,7 @@ export class CloudTable<T = any> {
     if (opts.search && opts.search.keyword) {
       const kw = opts.search.keyword.trim()
       if (kw) {
-        const parts = (opts.search.fields ?? []).map(f => `${f}.ilike.*${escapeOr(kw)}*`)
+        const parts = (opts.search.fields ?? []).map(f => `${f}.ilike."*${escapeOr(kw)}*"`)
         if (parts.length) q = q.or(parts.join(','))
       }
     }

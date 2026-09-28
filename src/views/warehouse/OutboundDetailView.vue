@@ -389,7 +389,12 @@ onMounted(loadOrder)
 // 回到本页时自动刷新：路由组件被 App.vue 的 <keep-alive> 缓存，
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
 useReloadOnActivate(loadOrder)
-watch(() => route.params.id, loadOrder)
+watch(() => route.params.id, () => {
+  // 只认自己的路由（V2.2-1.10）：keep-alive 让本页常驻，任何其它带 :id 的路由
+  //（销售单/采购单/出入库详情…）变化都会唤醒这里，把单据 id 误当本页 id 空查一趟
+  if (route.name !== 'OutboundDetail') return
+  loadOrder()
+})
 
 async function handleOutbound(): Promise<void> {
   if (loading.value) return

@@ -33,8 +33,10 @@ const routes = [
   { path: '/boss/home', component: () => import('../views/boss/BossHomeView.vue'), meta: { role: 'boss', title: '老板工作台' } },
   { path: '/boss/users', component: () => import('../views/boss/UsersManageView.vue'), meta: { role: 'boss', title: '员工管理' } },
   { path: '/boss/products', component: () => import('../views/boss/ProductListView.vue'), meta: { role: ['boss', 'purchaser', 'sales'], title: '商品档案' } },
-  { path: '/boss/products/new', component: () => import('../views/boss/ProductEditView.vue'), meta: { role: 'boss', title: '新增商品' } },
-  { path: '/boss/products/edit/:id', component: () => import('../views/boss/ProductEditView.vue'), meta: { role: 'boss', title: '编辑商品' } },
+  { path: '/boss/products/new', name: 'ProductNew', component: () => import('../views/boss/ProductEditView.vue'), meta: { role: 'boss', title: '新增商品' } },
+  // name 供 keep-alive 缓存页的路由监听器识别「是不是自己的路由」（V2.2-1.10：
+  // 否则打开销售单/采购单等任何带 :id 的页面都会唤醒缓存里的商品编辑页乱查一通）
+  { path: '/boss/products/edit/:id', name: 'ProductEdit', component: () => import('../views/boss/ProductEditView.vue'), meta: { role: 'boss', title: '编辑商品' } },
   { path: '/boss/business', component: () => import('../views/boss/BossBusinessView.vue'), meta: { role: 'boss', title: '业务中心' } },
   { path: '/boss/mine', component: () => import('../views/boss/BossMineView.vue'), meta: { role: 'boss', title: '我的' } },
   { path: '/boss/audit-logs', component: () => import('../views/boss/AuditLogView.vue'), meta: { role: 'boss', title: '操作日志' } },
@@ -46,7 +48,7 @@ const routes = [
   { path: '/purchase/orders', component: () => import('../views/purchase/PurchaseOrdersView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购单' } },
   { path: '/purchase/quotes', component: () => import('../views/purchase/PurchaseQuotesView.vue'), meta: { role: ['purchaser', 'boss'], title: '预采询价' } },
   { path: '/purchase/orders/new', component: () => import('../views/purchase/PurchaseCreateView.vue'), meta: { role: ['purchaser', 'boss'], title: '新建采购单' } },
-  { path: '/purchase/orders/:id', component: () => import('../views/purchase/PurchaseOrderDetailView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购单详情' } },
+  { path: '/purchase/orders/:id', name: 'PurchaseOrderDetail', component: () => import('../views/purchase/PurchaseOrderDetailView.vue'), meta: { role: ['purchaser', 'boss'], title: '采购单详情' } },
   { path: '/purchase/suppliers', component: () => import('../views/purchase/SuppliersView.vue'), meta: { role: ['purchaser', 'boss'], title: '供应商管理' } },
   { path: '/purchase/mine', component: () => import('../views/RoleMineView.vue'), meta: { role: 'purchaser', title: '我的' } },
 
@@ -54,7 +56,7 @@ const routes = [
   { path: '/sales/home', component: () => import('../views/sales/SalesHomeView.vue'), meta: { role: ['sales', 'boss'], title: '销售工作台' } },
   { path: '/sales/orders', component: () => import('../views/sales/SalesOrdersView.vue'), meta: { role: ['sales', 'boss'], title: '销售单' } },
   { path: '/sales/orders/new', component: () => import('../views/sales/SalesCreateView.vue'), meta: { role: ['sales', 'boss'], title: '新建销售单' } },
-  { path: '/sales/orders/:id', component: () => import('../views/sales/SaleOrderDetailView.vue'), meta: { role: ['sales', 'boss'], title: '销售单详情' } },
+  { path: '/sales/orders/:id', name: 'SaleOrderDetail', component: () => import('../views/sales/SaleOrderDetailView.vue'), meta: { role: ['sales', 'boss'], title: '销售单详情' } },
   { path: '/sales/quotes', component: () => import('../views/sales/QuotesView.vue'), meta: { role: ['sales', 'boss', 'dealer'], title: '报价单' } },
   { path: '/sales/mine', component: () => import('../views/RoleMineView.vue'), meta: { role: ['sales', 'dealer'], title: '我的' } },
 
@@ -77,9 +79,9 @@ const routes = [
   { path: '/warehouse/returns', component: () => import('../views/warehouse/ReturnsView.vue'), meta: { role: ['warehouse', 'boss'], title: '退换货' } },
   { path: '/warehouse/inbound', component: () => import('../views/warehouse/InboundView.vue'), meta: { role: ['warehouse', 'boss'], title: '待收货入库' } },
   { path: '/warehouse/inbound/doc/:batchNo', component: () => import('../views/warehouse/StockDocDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '入库单明细' } },
-  { path: '/warehouse/inbound/:id', component: () => import('../views/warehouse/InboundDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '入库验货' } },
+  { path: '/warehouse/inbound/:id', name: 'InboundDetail', component: () => import('../views/warehouse/InboundDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '入库验货' } },
   { path: '/warehouse/outbound', component: () => import('../views/warehouse/OutboundView.vue'), meta: { role: ['warehouse', 'boss'], title: '待发货出库' } },
-  { path: '/warehouse/outbound/:id', component: () => import('../views/warehouse/OutboundDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '出库拣货' } },
+  { path: '/warehouse/outbound/:id', name: 'OutboundDetail', component: () => import('../views/warehouse/OutboundDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '出库拣货' } },
   { path: '/warehouse/outbound/doc/:batchNo', component: () => import('../views/warehouse/StockDocDetailView.vue'), meta: { role: ['warehouse', 'boss'], title: '出库单明细' } },
 
   // ===== 合并后的统一页面 =====

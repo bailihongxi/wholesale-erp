@@ -118,7 +118,7 @@ describe('转销售单的权限', () => {
     expect(src).toContain('确认询价单')
   })
 
-  it('经销商看到的是流程语言：待确认 / 已确认，不是内部的「待报价」', () => {
+  it('经销商看到的是流程语言：待确认 / 已确认，不是内部的「待报价」（2026-09-28 老板拍板：文案不动，只改样式）', () => {
     const src = SRC('src/views/sales/QuotesView.vue')
     const fn = src.slice(src.indexOf('function statusText'), src.indexOf('const canConvertQuote'))
     expect(fn).toContain("draft: '待确认'")

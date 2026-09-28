@@ -395,7 +395,7 @@ const pager = useServerPager<QuoteOrder>({
       const ids = suppliers.value
         .filter((c: any) => String(c.name ?? '').toLowerCase().includes(lower))
         .map((c: any) => c.id!)
-      const kwParts = [`orderNo.ilike.*${escapeOr(kw)}*`, `customerName.ilike.*${escapeOr(kw)}*`]
+      const kwParts = [`orderNo.ilike."*${escapeOr(kw)}*"`, `customerName.ilike."*${escapeOr(kw)}*"`]
       if (ids.length) kwParts.push(`customerId.in.(${ids.join(',')})`)
       orExpr = `or(${kwParts.join(',')})`
     }

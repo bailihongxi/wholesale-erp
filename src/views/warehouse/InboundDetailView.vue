@@ -359,7 +359,12 @@ onMounted(loadOrder)
 // 从别的页面回来是「复活」而非「重新挂载」，onMounted 不会再跑，数据会停在旧状态。
 useReloadOnActivate(loadOrder)
 // 同一路由只换单据 id 时组件会被复用，必须监听 id 变化重新加载
-watch(() => route.params.id, loadOrder)
+watch(() => route.params.id, () => {
+  // 只认自己的路由（V2.2-1.10）：keep-alive 让本页常驻，任何其它带 :id 的路由
+  //（销售单/采购单/出入库详情…）变化都会唤醒这里，把单据 id 误当本页 id 空查一趟
+  if (route.name !== 'InboundDetail') return
+  loadOrder()
+})
 
 async function handleInbound(): Promise<void> {
   if (loading.value) return

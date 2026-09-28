@@ -378,7 +378,7 @@ export const useProductStore = defineStore('product', () => {
     const tokens = kw.trim().split(/\s+/).filter(Boolean)
     if (!tokens.length) return {}
     const groups = tokens.map(
-      t => `or(${fields.map(f => `${f}.ilike.*${escapeOr(t)}*`).join(',')})`
+      t => `or(${fields.map(f => `${f}.ilike."*${escapeOr(t)}*"`).join(',')})`
     )
     const orExpr = groups.length === 1 ? groups[0].slice(3, -1) : `and(${groups.join(',')})`
     const lc = tokens.map(t => t.toLowerCase())

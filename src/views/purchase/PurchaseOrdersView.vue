@@ -121,7 +121,7 @@ const pager = useServerPager<PurchaseOrder>({
       const ids = [...supplierMap.value.entries()]
         .filter(([, n]) => n.toLowerCase().includes(lower))
         .map(([id]) => id)
-      const parts = [`orderNo.ilike.*${escapeOr(kw)}*`]
+      const parts = [`orderNo.ilike."*${escapeOr(kw)}*"`]
       if (ids.length) parts.push(`supplierId.in.(${ids.join(',')})`)
       orExpr = parts.join(',')
       extraFilter = (r) =>

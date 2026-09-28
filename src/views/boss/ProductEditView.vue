@@ -210,8 +210,14 @@ async function initForm(): Promise<void> {
 }
 
 onMounted(() => { void initForm() })
-// 路由参数变化（换一个商品编辑 / 从编辑切到新增）必须重新初始化
-watch(() => route.params.id, () => { void initForm() })
+// 路由参数变化（换一个商品编辑 / 从编辑切到新增）必须重新初始化。
+// 只认自己的两个路由（V2.2-1.10）：keep-alive 让本页常驻内存，任何其它带 :id 的路由
+//（销售单/采购单/出入库详情…）变化都会唤醒这里，把单据 id 误当商品 id 去查商品表，
+// 查不到就弹「没找到商品 #23」——老板 2026-09-28 反馈的正是它。
+watch(() => route.params.id, () => {
+  if (route.name !== 'ProductEdit' && route.name !== 'ProductNew') return
+  void initForm()
+})
 // 从别的页面回到本页（keep-alive 复活）时重新载入，避免停留在上次的表单
 useReloadOnActivate(initForm)
 
