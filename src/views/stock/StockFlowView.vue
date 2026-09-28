@@ -79,22 +79,56 @@ interface FlowRow {
 
 const { isMobile } = useResponsive()
 
+/** 流水列表只用到这几列：云端按列取，不再整行搬（库存流水是增长最快的表） */
+const FLOW_FIELDS = 'id,type,productId,quantity,refOrderId,createdAt'
+
+function nameOf(p: any): string {
+  return `${p?.brand ?? ''} ${p?.model ?? ''}`.trim()
+}
+
+/** 商品表登录后已 warmUp 进内存缓存；命中缓存 = 0 次网络请求，没有则返回 null */
+function readProductCache(): any[] | null {
+  const t = db.products as any
+  return typeof t?.readCache === 'function' ? (t.readCache() as any[] | null) : null
+}
+
+/** 补取缓存里没有的商品名：云端走窄字段扫描（只取 id/brand/model），本地回落 bulkGet */
+async function fetchProductNames(ids: number[]): Promise<Record<number, string>> {
+  const out: Record<number, string> = {}
+  if (!ids.length) return out
+  const t = db.products as any
+  let rows: any[] = []
+  if (typeof t?.scanNarrow === 'function') {
+    rows = await t.scanNarrow('id,brand,model', (q: any) => q.in('id', ids)).catch(() => [] as any[])
+  }
+  if (!rows.length) rows = ((await t.bulkGet(ids).catch(() => [] as any[])) ?? []).filter(Boolean)
+  for (const p of rows) if (p?.id) out[p.id] = nameOf(p)
+  return out
+}
+
 // 服务端分页：只拉当前页 + 总数，不再把流水整表（旧实现最多 500 条）拉进内存。
 // 商品名只查当前页用到的那些商品，避免逐条查库。
+//
+// V2.2-1.11 提速：原来是「流水分页 → 拿到 productId → 批量取商品」两段串行
+// （实测 1.84s + 0.65s ≈ 2.5s）。现在流水分页发出去的同时就读商品缓存，
+// 缓存里没有的商品再补一次窄字段批量查询，绝大多数情况下只剩一趟。
 const pager = useServerPager<FlowRow>({
   loader: async (pg, size) => {
-    const { rows, total } = await serverPage<any>(db.stockRecords, {
-      page: pg,
-      pageSize: size,
-      orderBy: 'createdAt',
-      ascending: false,
-    })
-    const ids = Array.from(new Set(rows.map(r => r.productId)))
-    const products = await db.products.bulkGet(ids)
+    const [res, cachedProducts] = await Promise.all([
+      serverPage<any>(db.stockRecords, {
+        page: pg,
+        pageSize: size,
+        orderBy: 'createdAt',
+        ascending: false,
+        select: FLOW_FIELDS,
+      }),
+      Promise.resolve(readProductCache() ?? []),
+    ])
     const nameMap: Record<number, string> = {}
-    products.forEach(p => {
-      if (p?.id) nameMap[p.id] = `${p.brand} ${p.model}`.trim()
-    })
+    for (const p of cachedProducts) if (p?.id) nameMap[p.id] = nameOf(p)
+    const miss = Array.from(new Set(res.rows.map(r => r.productId))).filter(id => nameMap[id] == null)
+    if (miss.length) Object.assign(nameMap, await fetchProductNames(miss))
+    const rows = res.rows
     return {
       rows: rows.map(r => ({
         id: r.id,
@@ -105,7 +139,7 @@ const pager = useServerPager<FlowRow>({
         refOrderId: r.refOrderId,
         createdAt: r.createdAt,
       })),
-      total,
+      total: res.total,
     }
   },
 })

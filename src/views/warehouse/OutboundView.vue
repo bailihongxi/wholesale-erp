@@ -126,6 +126,8 @@ import TablePager from '../../components/TablePager.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { SaleOrder, Customer } from '../../types'
 import { useScrollRestore } from '../../composables/useScrollRestore'
+import { withSlowHint, SLOW_HINT_MS } from '../../utils/slowHint'
+import { showToast } from 'vant'
 
 useScrollRestore('outbound-list')
 const router = useRouter()
@@ -232,7 +234,12 @@ async function loadHistory(useCache = true): Promise<void> {
       return
     }
   }
-  docs.value = await docStore.listDocs('out')
+  // V2.2-1.11：云端偶发抖动时给个「还在加载」的提示，别让用户对着空白页干等
+  docs.value = await withSlowHint(
+    docStore.listDocs('out'),
+    SLOW_HINT_MS,
+    () => showToast({ type: 'loading', message: '网络较慢，出库历史仍在加载…', duration: 2500 })
+  )
   historyCache.set(docs.value)
 }
 

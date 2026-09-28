@@ -100,17 +100,33 @@ export const useStockDocStore = defineStore('stockDoc', () => {
   /** 列出全部入库单（type='in'）或出库单（type='out'），按时间倒序 */
   async function listDocs(type: StockDocType): Promise<StockDocRow[]> {
     const recordType = type === 'in' ? 'purchase_in' : 'sale_out'
-    const records = await db.stockRecords.where('type').equals(recordType).toArray()
-    if (!records.length) return []
+    const itemsTable = type === 'in' ? db.purchaseOrderItems : db.saleOrderItems
+    const ordersTable = type === 'in' ? db.purchaseOrders : db.saleOrders
+    const partyTable = type === 'in' ? db.suppliers : db.customers
 
-    // V2.1-2.33 性能修复：四类关联数据一次并行拉取（原来串行 3 趟起步）
-    const productIds = [...new Set(records.map(r => r.productId))]
-    const [users, locs, itemRows, allProducts] = await Promise.all([
+    // V2.2-1.11 提速：原来 4 段串行（流水 → 字典/商品 → 来源单 → 往来单位），
+    // 每次都要等上一趟跨境往返（新加坡 ~0.5s/趟）结束才发下一趟。
+    // 现在压成 2 段：
+    //   段 1 —— 流水表 + 与流水无关的字典/明细/往来单位 全部并行发出；
+    //   段 2 —— 商品与来源单据并行（这俩必须拿到 records 的 id 才能查）。
+    // 往来单位原来是「查完来源单拿到 supplierId/customerId 再 anyOf」的独立一趟，
+    // 改成整表与流水并行：客户/供应商只有几十行且登录后 warmUp 已进内存缓存，
+    // 命中缓存时这一趟是 0 次网络请求。
+    const [records, users, locs, itemRows, partyRows] = await Promise.all([
+      db.stockRecords.where('type').equals(recordType).toArray(),
       db.users.toArray(),
       db.locations.toArray(),
-      type === 'in' ? db.purchaseOrderItems.toArray() : db.saleOrderItems.toArray(),
+      itemsTable.toArray(),
+      partyTable.toArray(),
+    ])
+    if (!records.length) return []
+
+    const productIds = [...new Set(records.map(r => r.productId))]
+    const refOrderIds = [...new Set(records.map(r => r.refOrderId))]
+    const [allProducts, orderRows] = await Promise.all([
       // 商品原来逐个 await products.get(pid)：N 个商品 = N 次网络请求，历史单据一多列表就卡死
-      productIds.length ? db.products.where('id').anyOf(productIds).toArray() : Promise.resolve([])
+      productIds.length ? db.products.where('id').anyOf(productIds).toArray() : Promise.resolve([] as any[]),
+      refOrderIds.length ? ordersTable.where('id').anyOf(refOrderIds).toArray() : Promise.resolve([] as any[]),
     ])
     const userMap = new Map(users.map(u => [u.id!, u.name]))
     const locMap = new Map(locs.map(l => [l.id!, l.name]))
@@ -128,19 +144,10 @@ export const useStockDocStore = defineStore('stockDoc', () => {
       priceMap.set(`${oid}-${it.productId}`, { price: it.price, orderedQty: it.quantity })
     }
 
-    // 来源单号 / 往来单位：原来每张新单据逐个 get（每张 2~4 次请求），改 anyOf 两次批量
-    const refOrderIds = [...new Set(records.map(r => r.refOrderId))]
-    const orderRows: any[] = refOrderIds.length
-      ? await (type === 'in' ? db.purchaseOrders : db.saleOrders).where('id').anyOf(refOrderIds).toArray()
-      : []
-    const orderMap = new Map(orderRows.map(o => [o.id!, o]))
-    const partyIds = [...new Set(orderRows
-      .map(o => (type === 'in' ? o.supplierId : o.customerId))
-      .filter((x): x is number => x != null))]
-    const partyRows: any[] = partyIds.length
-      ? await (type === 'in' ? db.suppliers : db.customers).where('id').anyOf(partyIds).toArray()
-      : []
-    const partyMap = new Map(partyRows.map(x => [x.id!, x.name]))
+    // 来源单号 / 往来单位：原来每张新单据逐个 get（每张 2~4 次请求），改 anyOf 批量。
+    // 往来单位不再按 orderRows 的 id 二次 anyOf——段 1 已随流水并行取回整表。
+    const orderMap = new Map(orderRows.map((o: any) => [o.id!, o]))
+    const partyMap = new Map(partyRows.map((x: any) => [x.id!, x.name]))
     const orderNoOfBatch = (id: number): string =>
       orderMap.get(id)?.orderNo ?? `已删除单据#${id}`
     const partyNameOfBatch = (id: number): string => {

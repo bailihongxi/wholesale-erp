@@ -33,6 +33,11 @@ export interface QueryPageOpts {
   extraFilter?: (row: any) => boolean
   orderBy?: string
   ascending?: boolean
+  /**
+   * 窄字段选择（V2.2-1.11）：只取用到的列，云端按列返回。
+   * 不传 = '*'（原行为）。本地/测试模式忽略（IndexedDB 本来就是整行对象）。
+   */
+  select?: string
 }
 
 /**
@@ -530,7 +535,7 @@ export class CloudTable<T = any> {
     const pageSize = opts.pageSize ?? 20
     const start = (page - 1) * pageSize
     const end = start + pageSize - 1
-    let q: any = this.client.from(this.name).select('*', { count: 'estimated' } as any)
+    let q: any = this.client.from(this.name).select(opts.select || '*', { count: 'estimated' } as any)
     if (opts.eq) {
       for (const [k, v] of Object.entries(opts.eq)) {
         if (v !== '' && v !== null && v !== undefined) q = q.eq(k, v)

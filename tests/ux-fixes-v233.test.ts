@@ -99,11 +99,15 @@ describe('③ 列表加载：批量查询替代逐条 await（N+1 清零）', ()
     }
   })
 
-  it('stockDoc.listDocs：商品/单号/往来单位全部 anyOf 批量，无逐条 await get', () => {
+  it('stockDoc.listDocs：商品/单号/往来单位全部批量取，无逐条 await get', () => {
     const src = read('src/stores/stockDoc.ts')
     expect(src).toContain("db.products.where('id').anyOf(productIds)")
     expect(src).toContain("where('id').anyOf(refOrderIds)")
-    expect(src).toContain("where('id').anyOf(partyIds)")
+    // V2.2-1.11：往来单位不再按 partyIds 二次 anyOf（那要等来源单查完才发得起），
+    // 改成整表随段 1 与流水并行——客户/供应商体量小且 warmUp 已缓存，命中缓存 0 请求。
+    // 批量语义不变（仍是一次查询建索引），只是这一趟提前了。
+    expect(src).toContain('const partyMap = new Map(partyRows.map(')
+    expect(src).toContain('partyTable.toArray()')
     expect(src).toContain('orderNoOfBatch(r.refOrderId)')
     expect(src).toContain('partyNameOfBatch(r.refOrderId)')
     expect(src).not.toContain('await db.products.get(pid)')

@@ -177,15 +177,16 @@ function money(n: number): string {
 
 /**
  * 明细分页：首页要给「往来单位」留位置，末页要给「合计 / 大写 / 备注 / 签章」留位置。
- * 保证：每页不超容量、末页不超末页容量、行数守恒（不丢行不重复）。
+ * 保证：每页不超容量、行数守恒（不丢行不重复）、不出现 1~2 行的孤页。
  *
  * @param cap      满页容量（中间页行数）
  * @param reserves 首页 / 末页预留行数（按纸张传入，见 PAPER_ROW_RESERVES；
  *                 缺省 {3,4} 保持 A4 原行为）
  *
- * 2026-09-28 老板拍板 A5：满页 12、首页 10（-2）、末页 6（-6）。
- * 收尾两页的分配改为「优先填满前一页」（remaining - lastCap），
- * 但保底均分（ceil），避免为了凑满页出现只有一两行的孤页。
+ * 2026-09-29 凌晨修正（老板反馈「20 行单据打成了 10/5/5 三页」）：
+ * 分配规则改为「中间页打满 cap，末页装余数（≤ cap）」——
+ * 原来末页预留 6 行，余数 10 行就会被劈成 5+5、白多一页；
+ * 只有在「照打满会让末页只剩 1~2 行」时才从中间页匀几行过来，避免孤页。
  */
 export function paginateItems(
   items: PrintItem[],
@@ -202,16 +203,25 @@ export function paginateItems(
   while (i < items.length) {
     const remaining = items.length - i
     const isFirst = chunks.length === 0
-    // 剩下的行能塞进末页就一次放完
-    if (remaining <= (isFirst ? firstCap : lastCap)) {
-      chunks.push(items.slice(i))
-      break
+    if (isFirst) {
+      if (remaining <= firstCap) { chunks.push(items.slice(i)); break }
+      chunks.push(items.slice(i, i + firstCap))
+      i += firstCap
+      continue
     }
-    let take: number
-    if (isFirst) take = firstCap
-    else if (remaining <= cap + lastCap) take = Math.max(remaining - lastCap, Math.ceil(remaining / 2)) // 收尾两页：优先填满前一页，末页不超 lastCap
-    else take = cap
-    take = Math.max(1, Math.min(take, remaining - 1))
+    // 余数装得进末页 → 一次放完（不再为「末页预留」多分出一页）
+    if (remaining <= lastCap) { chunks.push(items.slice(i)); break }
+    if (remaining > cap) {
+      let take = cap
+      const gap = remaining - cap
+      // 打满后末页只剩 1~2 行时，本页少打几行，让末页至少有 3 行（防孤页）
+      if (gap >= 1 && gap <= 2) take = cap - (3 - gap)
+      chunks.push(items.slice(i, i + take))
+      i += take
+      continue
+    }
+    // lastCap < 余数 ≤ cap：末页装不下全部，与前一页均分（A4 走这条）
+    const take = Math.max(remaining - lastCap, Math.ceil(remaining / 2))
     chunks.push(items.slice(i, i + take))
     i += take
   }
