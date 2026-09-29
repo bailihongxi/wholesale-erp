@@ -135,12 +135,20 @@ function supplierName(id: number): string {
 function go(p: string): void { router.push(p) }
 
 async function reload(): Promise<void> {
-  const [rs, ps, cs, ss, pays] = await Promise.all([
-    financeStore.listReceivables(),
-    financeStore.listPayables(),
+  // V2.2-2.3 F1：payments / saleOrders / purchaseOrders 各只拉一次，
+  // 透传给 listReceivables / listPayables 复用（paysAll / ordersAll 参数），
+  // 根治财务工作台「payments 拉 3 次、orders 各拉 2 次」的重复全表拉取
+  // （照搬对账页已上线验证的写法；includeSettled 保持 false 与原行为一致）
+  const [cs, ss, pays, saleOrders, purchaseOrders] = await Promise.all([
     salesStore.listCustomers(),
     purchaseStore.listSuppliers(),
-    db.payments.toArray()
+    db.payments.toArray(),
+    db.saleOrders.toArray(),
+    db.purchaseOrders.toArray()
+  ])
+  const [rs, ps] = await Promise.all([
+    financeStore.listReceivables(false, pays, saleOrders),
+    financeStore.listPayables(false, pays, purchaseOrders)
   ])
   receivables.value = rs
   payables.value = ps

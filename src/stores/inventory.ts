@@ -147,12 +147,17 @@ export const useInventoryStore = defineStore('inventory', () => {
    * 只对真正不一致的商品落库。早先是逐个商品查两次库（N 个商品 = 2N 次查询），
    * 商品上千时首屏会被拖到几秒，这是「库存管理页加载慢」的主因。
    */
-  async function reconcileProducts(productIds: number[]): Promise<void> {
+  async function reconcileProducts(
+    productIds: number[],
+    opts?: { stockRows?: any[]; locRows?: any[] }
+  ): Promise<void> {
     if (!productIds.length) return
     const wanted = new Set(productIds)
+    // V2.2-2.3 I2：允许上层（库存管理页）预取 stock / locationStock 并透传，
+    // 避免「自愈 + 全量分布」各拉一遍 locationStock（合并成 1 次读取）
     const [stockRows, locRows] = await Promise.all([
-      db.stock.toArray(),
-      db.locationStock.toArray()
+      opts?.stockRows ?? (await db.stock.toArray()),
+      opts?.locRows ?? (await db.locationStock.toArray())
     ])
     const totalMap = new Map<number, number>()
     for (const s of stockRows) {
@@ -303,11 +308,18 @@ export const useInventoryStore = defineStore('inventory', () => {
    *  - byProduct: productId -> (locationId -> 数量)
    *  - byLocation: locationId -> (productId -> 数量)（按库房筛选时用）
    */
-  async function distributionAll(): Promise<{
+  async function distributionAll(opts?: {
+    locRows?: Array<{ productId: number; locationId: number; quantity: number }>
+  }): Promise<{
     byProduct: Record<number, Record<number, number>>
     byLocation: Record<number, Record<number, number>>
   }> {
-    const rows = await db.locationStock.toArray()
+    // V2.2-2.3 I1：locationStock 改窄字段扫描（只用到三列），多库位下该表可达 1.2 万行，
+    // 全字段拉取是库存明细首屏的主要负担；允许上层透传已读取的 locRows 复用（I2 合并读取）
+    const rows = opts?.locRows
+      ?? (USE_CLOUD
+        ? ((await (db.locationStock as any).scanNarrow('productId,locationId,quantity')) as Array<{ productId: number; locationId: number; quantity: number }>)
+        : await db.locationStock.toArray())
     const byProduct: Record<number, Record<number, number>> = {}
     const byLocation: Record<number, Record<number, number>> = {}
     for (const r of rows) {

@@ -48,6 +48,7 @@ import StockFlowView from './StockFlowView.vue'
 import WarehouseOpsView from '../warehouse/WarehouseOpsView.vue'
 import { useProductStore } from '../../stores/product'
 import { useInventoryStore } from '../../stores/inventory'
+import { db } from '../../db'
 import type { Product, Location } from '../../types'
 
 type StockTab = 'detail' | 'alert' | 'flow' | 'ops'
@@ -99,23 +100,29 @@ async function loadHeavy(): Promise<void> {
   if (heavyLoaded.value) return
   heavyLoaded.value = true
   try {
-    // 一次性取全部商品与库存，避免逐个商品查库（商品上千时会非常慢）
-    const [list, smap] = await Promise.all([
-      productStore.listAll(false),
+    // V2.2-2.3 I2：商品改用窄字段 listProductLites（库存明细/预警子视图只用
+    // brand/model/category/unit/warnStock/id 几列），进页省 ~1MB 传输；
+    // 保留与 listAll(false) 一致的「停售不显示」口径
+    const [lites, smap] = await Promise.all([
+      productStore.listProductLites(),
       productStore.stockMap()
     ])
-    products.value = list
+    const active = lites.filter(p => p.status !== 'inactive')
+    products.value = active as unknown as Product[]
     stockMap.value = smap
     loadingDetail.value = false
 
-    // 库房分布较重（自愈 + 全量分布），放到首屏之后异步补齐
+    // 库房分布较重（自愈 + 全量分布）：stock 与 locationStock 只拉一次，
+    // 透传给 reconcileProducts / distributionAll 复用（合并 2 次读为 1 次）
     await inventoryStore.ensureLocations()
-    const [locs] = await Promise.all([
+    const [locs, stockRows, locRows] = await Promise.all([
       inventoryStore.listLocations(),
-      inventoryStore.reconcileProducts(list.map(p => p.id!))
+      db.stock.toArray(),
+      db.locationStock.toArray()
     ])
     locations.value = locs
-    const { byProduct } = await inventoryStore.distributionAll()
+    await inventoryStore.reconcileProducts(active.map(p => p.id!), { stockRows, locRows })
+    const { byProduct } = await inventoryStore.distributionAll({ locRows })
     distByProduct.value = byProduct
   } catch {
     /* 数据库未就绪时保持空表，不抛断页面 */
