@@ -73,9 +73,10 @@
       </section>
 
       <ProductPicker
-        :rows="pickerRows"
+        :loader="pickerLoader"
+        :categories="pickerCats"
         :selected="selectedMap"
-        :title="`选择要调拨的商品（${fromName}库存）`"
+        :title="`选择要调拨的商品（可用库存）`"
         :show-price="false"
         @pick="onPick"
       />
@@ -161,10 +162,9 @@ import { useProductStore } from '../../stores/product'
 import { useInventoryStore, type TransferRow } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
-import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
-import type { ProductLite } from '../../stores/product'
 
 const productStore = useProductStore()
 const inv = useInventoryStore()
@@ -177,7 +177,7 @@ const fromLoc = ref(1)
 const toLoc = ref(2)
 const fromMap = ref<Record<number, number>>({})
 const toMap = ref<Record<number, number>>({})
-const products = ref<ProductLite[]>([])
+const pickerCats = ref<string[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; fromStock: number; toStock: number; qty: number }>>([])
 const history = ref<TransferRow[]>([])
 
@@ -197,9 +197,15 @@ const selectedMap = computed<Record<number, number>>(() => {
   return m
 })
 const canSubmit = computed(() => fromLoc.value !== toLoc.value && totalQty.value > 0)
-const pickerRows = computed<PickerRow[]>(() =>
-  products.value.map(p => ({ product: p as unknown as Product, stock: fromMap.value[p.id] ?? 0 }))
-)
+const pickerLoader: PickerLoader = (args) =>
+  productStore.pickerPage({
+    page: args.page,
+    pageSize: args.pageSize,
+    keyword: args.keyword,
+    category: args.category,
+    onlyInStock: args.onlyInStock,
+    activeOnly: true
+  })
 
 async function reloadMaps(): Promise<void> {
   // 两个库位的库存互不依赖，一次并发（C 档 V2.1-2.34-C）
@@ -253,10 +259,10 @@ function showDetail(d: TransferRow): void { activeDetail.value = d }
 // C 档（V2.1-2.34-C）：原来 5 步串行 await。同步、库位、商品、调拨历史互不依赖，
 // 改为一次并发；reloadMaps 必须在默认库房确定之后跑，顺序保持原样。
 async function init(): Promise<void> {
-  const [, locs, prods, hist] = await Promise.all([
+  const [, locs, cats, hist] = await Promise.all([
     inv.syncLocationStock(),
     inv.listLocations(),
-    productStore.listProductLites(),
+    productStore.pickerCategories(),
     inv.listTransfers()
   ])
   locations.value = locs
@@ -267,7 +273,7 @@ async function init(): Promise<void> {
   if (!ids.includes(toLoc.value) || toLoc.value === fromLoc.value) {
     toLoc.value = ids.find(id => id !== fromLoc.value) ?? fromLoc.value
   }
-  products.value = prods
+  pickerCats.value = cats
   await reloadMaps()
 }
 

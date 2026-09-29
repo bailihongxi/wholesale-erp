@@ -58,10 +58,9 @@ export const useSalesStore = defineStore('sales', () => {
     // 检查库存是否够
     const { useProductStore } = await import('./product')
     const productStore = useProductStore()
-    // 库存检查并行查
-    const stockResults = await Promise.all(
-      data.items.map(it => productStore.getStock(it.product.id!))
-    )
+    // K1（V2.2-2.2）：逐条 getStock 改一次批量 stockOf（N 个商品只发 1 个请求）
+    const stockMap = await productStore.stockOf(data.items.map(it => it.product.id!))
+    const stockResults = data.items.map(it => stockMap[it.product.id!] ?? 0)
     for (let i = 0; i < data.items.length; i++) {
       const item = data.items[i]
       if (stockResults[i] < item.quantity) {

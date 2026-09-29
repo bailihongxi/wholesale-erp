@@ -64,9 +64,10 @@
       </section>
 
       <ProductPicker
-        :rows="pickerRows"
+        :loader="pickerLoader"
+        :categories="pickerCats"
         :selected="selectedMap"
-        :title="`选择要盘点的商品（${locName}系统库存）`"
+        :title="`选择要盘点的商品（可用库存）`"
         :show-price="false"
         @pick="onPick"
       />
@@ -160,10 +161,9 @@ import { useProductStore } from '../../stores/product'
 import { useInventoryStore, type StocktakeRow } from '../../stores/inventory'
 import { useUserStore } from '../../stores/user'
 import { useResponsive } from '../../composables/useResponsive'
-import ProductPicker, { type PickerRow } from '../../components/ProductPicker.vue'
+import ProductPicker, { type PickerLoader } from '../../components/ProductPicker.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
 import type { Product } from '../../types'
-import type { ProductLite } from '../../stores/product'
 
 const productStore = useProductStore()
 const inv = useInventoryStore()
@@ -174,7 +174,7 @@ const tab = ref<'create' | 'history'>('create')
 const locations = ref<Array<{ id?: number; name: string }>>([])
 const locId = ref(1)
 const sysMap = ref<Record<number, number>>({})
-const products = ref<ProductLite[]>([])
+const pickerCats = ref<string[]>([])
 const lines = ref<Array<{ productId: number; name: string; unit: string; sys: number; actual: number }>>([])
 const history = ref<StocktakeRow[]>([])
 
@@ -185,7 +185,6 @@ const tabOptions = computed(() => [
 ])
 const activeDetail = ref<StocktakeRow | null>(null)
 
-const locName = computed(() => locations.value.find(l => l.id === locId.value)?.name ?? '库位')
 const selectedMap = computed<Record<number, number>>(() => {
   const m: Record<number, number> = {}
   for (const l of lines.value) m[l.productId] = 1
@@ -198,9 +197,15 @@ const totalProfit = computed(() =>
 const totalLoss = computed(() =>
   lines.value.reduce((s, l) => s + Math.max(0, l.sys - (Number(l.actual) || 0)), 0)
 )
-const pickerRows = computed<PickerRow[]>(() =>
-  products.value.map(p => ({ product: p as unknown as Product, stock: sysMap.value[p.id] ?? 0 }))
-)
+const pickerLoader: PickerLoader = (args) =>
+  productStore.pickerPage({
+    page: args.page,
+    pageSize: args.pageSize,
+    keyword: args.keyword,
+    category: args.category,
+    onlyInStock: args.onlyInStock,
+    activeOnly: true
+  })
 
 async function reloadSys(): Promise<void> {
   sysMap.value = await inv.locationStockMap(locId.value)
@@ -216,8 +221,11 @@ function onPick(p: Product): void {
   const sys = sysMap.value[p.id!] ?? 0
   lines.value.push({ productId: p.id!, name: `${p.brand} ${p.model}`.trim(), unit: p.unit, sys, actual: sys })
 }
-function addAll(): void {
-  for (const p of products.value) {
+// 「加入全部商品」是显式重操作：原本进页就同步拉全量商品（6453 条驻内存），
+// 现改为点了才按需拉一次（K2，V2.2-2.2），平时进页零全表负担。
+async function addAll(): Promise<void> {
+  const all = await productStore.listProductLites()
+  for (const p of all) {
     if (!lines.value.some(l => l.productId === p.id)) {
       const sys = sysMap.value[p.id!] ?? 0
       lines.value.push({ productId: p.id!, name: `${p.brand} ${p.model}`.trim(), unit: p.unit, sys, actual: sys })
@@ -252,10 +260,10 @@ function showDetail(d: StocktakeRow): void { activeDetail.value = d }
 // syncLocationStock / 库位列表 / 商品档案 / 盘点历史彼此没有依赖，改为一次并发；
 // 只有 reloadSys 必须等 locations 拿到、默认库房定下来之后才能跑，保持原来的先后。
 async function init(): Promise<void> {
-  const [, locs, prods, hist] = await Promise.all([
+  const [, locs, cats, hist] = await Promise.all([
     inv.syncLocationStock(),
     inv.listLocations(),
-    productStore.listProductLites(),
+    productStore.pickerCategories(),
     inv.listStocktakes()
   ])
   locations.value = locs
@@ -263,7 +271,7 @@ async function init(): Promise<void> {
   // 库房由用户自行设定，数量与 id 都不固定：默认盘第一个库房
   const ids = locations.value.map(l => l.id!).filter(id => id != null)
   if (!ids.includes(locId.value)) locId.value = ids[0] ?? 0
-  products.value = prods
+  pickerCats.value = cats
   await reloadSys()
 }
 
