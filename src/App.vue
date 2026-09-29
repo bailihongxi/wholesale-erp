@@ -17,8 +17,12 @@
       <router-view v-slot="{ Component }">
         <!-- V2.2-2.1 Z1：加内存上限，避免 60+ 路由组件全常驻内存（含 StockManageView 的 6453 行数组），
              长时间使用/弱机内存无限累积导致越用越卡甚至卡死。LRU 淘汰最久未用页，被淘汰页返回时
-              onMounted 会重新拉数据（SalesCreateView 等已挂 onActivated 重置，无副作用）。 -->
-        <keep-alive :max="12">
+              onMounted 会重新拉数据（SalesCreateView 等已挂 onActivated 重置，无副作用）。
+             V2.2-2.4：12 → 24。实测 12 太小：系统 49 个路由，日常跨模块使用必超限，
+             销售/采购等高频列表页被 LRU 挤出缓存 → 每次进入都重新挂载「骨架屏+等网络」，
+             丢失了「旧数据秒开+后台刷新」的体感（老板实测列表变慢）。24 覆盖日常高频页面集，
+             内存上限治卡死的目标不变。 -->
+        <keep-alive :max="24">
           <component :is="Component" />
         </keep-alive>
       </router-view>
