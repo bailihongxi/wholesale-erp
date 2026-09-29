@@ -12,6 +12,9 @@
  * 这样既能支持「总仓调拨到门店」这类真实场景，又不会破坏既有的进销存对账。
  */
 import { defineStore } from 'pinia'
+// V2.2-2.5：库存写入后要让商品 store 的「库存底稿」失效（底稿带 60s 缓存，
+// 不清的话刚入库/盘点完，统计卡与预警清单还是旧数）
+import { useProductStore } from './product'
 import { db } from '../db'
 import { USE_CLOUD } from '../db/supabaseClient'
 import { writeLog, AUDIT_ACTIONS } from '../utils/audit'
@@ -419,6 +422,8 @@ export const useInventoryStore = defineStore('inventory', () => {
     })
     await safeBulkAdd(db.locationStock as any, adds)
     await safeBulkPut(db.locationStock as any, puts)
+    // V2.2-2.5：库房分布变了，库存底稿（统计卡 / 仅看低库存 / 预警）要重算
+    try { useProductStore().clearStockBase() } catch { /* Pinia 未就绪时忽略 */ }
   }
 
   /**
@@ -454,6 +459,8 @@ export const useInventoryStore = defineStore('inventory', () => {
         : null,
       touch: r => { r.updatedAt = opts.now }
     })
+    // V2.2-2.5：总库存变了，库存底稿（统计卡 / 仅看低库存 / 预警）要重算
+    try { useProductStore().clearStockBase() } catch { /* Pinia 未就绪时忽略 */ }
   }
 
   // ---------------------------------------------------------- 调拨

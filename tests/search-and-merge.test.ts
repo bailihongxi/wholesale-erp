@@ -137,14 +137,19 @@ describe('库存管理页（合并后统一页面 /stock）', () => {
     await flushPromises()
     expect(wrapper.find('.search-field').exists(), '库存管理页必须有搜索框').toBe(true)
     expect(wrapper.find('.clear-btn').exists(), '搜索框必须自带清除按钮').toBe(true)
-    expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    // V2.2-2.5：明细改服务端按页取数，首屏是异步的，等表格真正渲染出来再数行
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    }, { timeout: 3000 })
   })
 
   it('搜索关键字可过滤库存明细', async () => {
     await seedProducts()
     const wrapper = mount(StockManageView, { global: { plugins: [testRouter] } })
     await flushPromises()
-    expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    }, { timeout: 3000 })
 
     await wrapper.find('.search-field').setValue('美的')
     await flushPromises()
@@ -197,7 +202,9 @@ describe('库存管理页（合并后统一页面 /stock）', () => {
 
     const wrapper = mount(StockManageView, { global: { plugins: [testRouter] } })
     await flushPromises()
-    expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.stock-table tbody tr').length).toBe(2)
+    }, { timeout: 3000 })
 
     await wrapper.find('.toolbar-btn').trigger('click')
     await flushPromises()

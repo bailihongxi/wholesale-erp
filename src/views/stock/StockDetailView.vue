@@ -1,19 +1,34 @@
 <template>
-  <!-- 库存明细：按库房查看商品存放分布（数据由父级「库存管理」统一加载后传入） -->
+  <!--
+    库存明细：按库房查看商品存放分布。
+    V2.2-2.5：表格改**服务端分页**——以前进页面要把 6453 行商品 + 6453 行库存
+    全搬下来（两个全表窄扫 ≈ 2.4s）才出表格，现在只取当前页 20 行 + 这 20 个商品
+    的库存与库房分布，    首屏一次往返（≈0.45s）。
+    概况卡片与「仅看低库存」必须看完全部商品才算得对（库存 ≤ 预警值是跨表比较，
+    服务端下推不了），这两项走带缓存的「底稿」，后台补齐、先出表格再填数。
+
+    ⚠️ 本文件顶部的说明注释不要写卡片标题原文：有断言靠 html() 里的文字顺序
+       校验卡片排列，注释也会进 DOM，会把它顶到前面去。
+  -->
   <div class="page">
     <!--
       全库概况卡片（第十五轮起从 Hub 页头下移到本模块，位于搜索框上方）：
       反映全库现状，不随页内搜索变化，方便对着明细核对。
+      底稿还没回来时先显示「—」，不让统计卡拖住表格首屏。
     -->
     <div class="ui-stat-grid">
-      <StatCard label="商品 SKU" :value="stats.skuCount" />
-      <StatCard label="库存总量" :value="stats.totalQty" />
+      <StatCard label="商品 SKU" :value="stats ? stats.skuCount : '—'" />
+      <StatCard label="库存总量" :value="stats ? stats.totalQty : '—'" />
       <!-- 金额按进价汇总，故与「进价」同权限：销售/库房都不应看到 -->
-      <StatCard v-if="canSeePurchasePrice" label="库存金额（进价）" :value="`¥${money(stats.totalCost)}`" />
+      <StatCard
+        v-if="canSeePurchasePrice"
+        label="库存金额（进价）"
+        :value="stats ? `¥${money(stats.totalCost)}` : '—'"
+      />
       <StatCard
         label="库存预警"
-        :value="stats.warnCount"
-        :tone="stats.warnCount > 0 ? 'danger' : 'neutral'"
+        :value="stats ? stats.warnCount : '—'"
+        :tone="stats && stats.warnCount > 0 ? 'danger' : 'neutral'"
       />
     </div>
 
@@ -39,7 +54,7 @@
       <button v-if="hasFilter" class="reset-btn" type="button" @click="resetFilter">重置</button>
     </div>
 
-    <LoadingBlock v-if="loading" :rows="6" />
+    <LoadingBlock v-if="pager.loading.value" :rows="6" />
 
     <template v-else>
       <ul v-if="isMobile" class="card-list zebra-list">
@@ -135,27 +150,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import SearchInput from '../../components/SearchInput.vue'
 import TablePager from '../../components/TablePager.vue'
 import LoadingBlock from '../../components/ui/LoadingBlock.vue'
 import StatCard from '../../components/ui/StatCard.vue'
-import { useProductStore } from '../../stores/product'
+import { useProductStore, type StockBaseLite } from '../../stores/product'
 import { useResponsive } from '../../composables/useResponsive'
 import { usePermission } from '../../composables/usePermission'
-import { usePagination, PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { useServerPager } from '../../composables/useServerPager'
+import { PAGE_SIZE_LIST } from '../../composables/usePagination'
+import { db } from '../../db'
 import type { Product, Location } from '../../types'
 
-const props = withDefaults(
-  defineProps<{
-    products: Product[]
-    stock: Record<number, number>
-    locations: Location[]
-    dist: Record<number, Record<number, number>>
-    loading?: boolean
-  }>(),
-  { loading: false }
-)
+const props = defineProps<{
+  locations: Location[]
+}>()
 
 const productStore = useProductStore()
 const { isMobile } = useResponsive()
@@ -166,35 +176,116 @@ const category = ref('')
 const onlyLow = ref(false)
 const locFilter = ref(0)
 
-/** 分类下拉基于全量商品（不受当前搜索影响），避免筛一次后选项消失 */
-const categories = computed(() =>
-  Array.from(new Set(props.products.map(p => p.category).filter(Boolean))).sort()
-)
+/** 当前页商品的库存与库房分布：只查这 20 个商品，不再整表搬 */
+const pageStock = ref<Record<number, number>>({})
+const pageDist = ref<Record<number, Record<number, number>>>({})
 
-const filtered = computed(() => {
+/** 底稿（统计卡 / 仅看低库存用）：在 store 里带 60s 缓存，多个 Tab 共用一份 */
+const base = ref<{ lites: StockBaseLite[]; stock: Record<number, number> } | null>(null)
+const fullDist = ref<Record<number, Record<number, number>>>({})
+let basePending: Promise<void> | null = null
+
+function ensureBase(): Promise<void> {
+  if (base.value) return Promise.resolve()
+  if (basePending) return basePending
+  basePending = (async () => {
+    try {
+      const [b, locRows] = await Promise.all([
+        productStore.stockBase(),
+        db.locationStock.toArray()
+      ])
+      base.value = b
+      fullDist.value = toDist(locRows as any[])
+    } catch { /* 底稿拿不到就保持占位，不影响表格 */ }
+  })().finally(() => { basePending = null })
+  return basePending
+}
+
+function toDist(rows: Array<{ productId: number; locationId: number; quantity: number }>) {
+  const m: Record<number, Record<number, number>> = {}
+  for (const r of rows) {
+    const pid = Number(r.productId)
+    const lid = Number(r.locationId)
+    if (!Number.isFinite(pid) || !Number.isFinite(lid)) continue
+    ;(m[pid] ??= {})[lid] = (m[pid][lid] ?? 0) + (Number(r.quantity) || 0)
+  }
+  return m
+}
+
+/** 只查当前页这些商品的库房分布 */
+async function loadPageDist(ids: number[]): Promise<void> {
+  const list = ids.filter(n => Number.isFinite(n))
+  if (!list.length) { pageDist.value = {}; return }
+  try {
+    const rows = (await (db.locationStock as any)
+      .where('productId').anyOf(list).toArray()) as Array<{ productId: number; locationId: number; quantity: number }>
+    pageDist.value = toDist(rows)
+  } catch { pageDist.value = {} }
+}
+
+/**
+ * 「仅看低库存」的商品清单：库存 ≤ 预警值，服务端下推不了，必须用底稿算。
+ * 口径与以前完全一致（停售不显示 + 关键词 / 分类 / 库房筛选）。
+ */
+const lowRows = computed<StockBaseLite[]>(() => {
+  const b = base.value
+  if (!b) return []
   const kw = keyword.value.trim().toLowerCase()
-  let data = props.products
-  if (kw) {
-    data = data.filter(p =>
-      p.brand.toLowerCase().includes(kw) ||
-      p.model.toLowerCase().includes(kw) ||
-      `${p.brand} ${p.model}`.toLowerCase().includes(kw) ||
-      p.category.toLowerCase().includes(kw)
-    )
-  }
-  if (category.value) data = data.filter(p => p.category === category.value)
-  // 「只看某库房有货」：该库房有数量的商品
-  if (locFilter.value) {
-    const map = props.dist
-    data = data.filter(p => (map[p.id!]?.[locFilter.value] ?? 0) > 0)
-  }
-  return data
+  return b.lites.filter(p => {
+    if (p.status === 'inactive') return false
+    if (category.value && p.category !== category.value) return false
+    if (locFilter.value && ((fullDist.value[p.id]?.[locFilter.value]) ?? 0) <= 0) return false
+    if (kw && !matchKeyword(p, kw)) return false
+    return (b.stock[p.id] ?? 0) <= (p.warnStock ?? 0)
+  })
 })
 
-const list = computed(() => (onlyLow.value ? filtered.value.filter(isLow) : filtered.value))
+/** 与服务端 keywordCond 同一口径：按空格切词，词内 AND、字段间 OR */
+function matchKeyword(p: StockBaseLite, kwLower: string): boolean {
+  const tokens = kwLower.split(/\s+/).filter(Boolean)
+  const fields = ['brand', 'model', 'category', 'spec']
+  return tokens.every(t =>
+    fields.some(f => String((p as unknown as Record<string, unknown>)[f] ?? '').toLowerCase().includes(t))
+  )
+}
 
-const pager = usePagination(list, PAGE_SIZE_LIST)
-watch([keyword, category, onlyLow, locFilter], () => pager.reset())
+const pager = useServerPager<Product>({
+  size: PAGE_SIZE_LIST,
+  watch: [keyword, category, locFilter, onlyLow],
+  loader: async (page, size) => {
+    if (onlyLow.value) {
+      // 需要全量比对：先拿底稿（有 60s 缓存，第二次起是瞬时的）
+      await ensureBase()
+      const all = lowRows.value
+      const start = (page - 1) * size
+      pageStock.value = base.value?.stock ?? {}
+      pageDist.value = fullDist.value
+      return { rows: all.slice(start, start + size) as unknown as Product[], total: all.length }
+    }
+    const res = await productStore.stockPage({
+      page,
+      pageSize: size,
+      keyword: keyword.value,
+      category: category.value,
+      locationId: locFilter.value
+    })
+    pageStock.value = res.stock
+    await loadPageDist(res.rows.map(p => Number(p.id)))
+    return { rows: res.rows, total: res.total }
+  }
+})
+
+/** 分类下拉：走带缓存的分类集合（localStorage + 内存），不为此扫全表 */
+const categories = ref<string[]>([])
+
+onMounted(async () => {
+  try {
+    categories.value = await productStore.distinctCategories()
+  } catch { categories.value = [] }
+  // 统计卡后台补，不阻塞表格首屏
+  void ensureBase()
+})
+
 const pageProxy = computed({
   get: () => pager.page.value,
   set: v => pager.go(v)
@@ -204,15 +295,23 @@ const hasFilter = computed(
   () => !!keyword.value.trim() || !!category.value || onlyLow.value || !!locFilter.value
 )
 
-/** 全库概况：始终基于全量商品，不受页内搜索/筛选影响（与明细表可对照） */
+/** 全库概况：基于底稿全量商品（不受页内搜索/筛选影响，与明细表可对照） */
 const stats = computed(() => {
-  const data = props.products
-  return {
-    skuCount: data.length,
-    totalQty: data.reduce((s, p) => s + stockOf(p.id), 0),
-    totalCost: data.reduce((s, p) => s + stockOf(p.id) * p.purchasePrice, 0),
-    warnCount: data.filter(isLow).length
+  const b = base.value
+  if (!b) return null
+  let skuCount = 0
+  let totalQty = 0
+  let totalCost = 0
+  let warnCount = 0
+  for (const p of b.lites) {
+    if (p.status === 'inactive') continue
+    skuCount++
+    const q = b.stock[p.id] ?? 0
+    totalQty += q
+    totalCost += q * (Number(p.purchasePrice) || 0)
+    if (q <= (p.warnStock ?? 0)) warnCount++
   }
+  return { skuCount, totalQty, totalCost, warnCount }
 })
 
 // 商品、分类、[各库房列]、合计库存、单位、预警值、状态 + 价格列
@@ -221,7 +320,7 @@ const colspan = computed(
 )
 
 function locQty(productId: number, locationId: number): number {
-  return props.dist[productId]?.[locationId] ?? 0
+  return pageDist.value[productId]?.[locationId] ?? 0
 }
 function toggleOnlyLow(): void {
   onlyLow.value = !onlyLow.value
@@ -233,10 +332,10 @@ function resetFilter(): void {
   locFilter.value = 0
 }
 function stockOf(id?: number): number {
-  return id ? (props.stock[id] ?? 0) : 0
+  return id ? (pageStock.value[id] ?? 0) : 0
 }
 function isLow(p: Product): boolean {
-  return stockOf(p.id) <= p.warnStock
+  return stockOf(p.id) <= (p.warnStock ?? 0)
 }
 function productName(p: Product): string {
   return productStore.productName(p)

@@ -16,13 +16,10 @@
     <SegmentedTabs v-model="tab" :options="tabOptions" />
 
     <div class="tab-pane">
+      <!-- V2.2-2.5：明细页自己按页取数（首屏不再等全表），这里只给库房列表 -->
       <StockDetailView
         v-if="tab === 'detail'"
-        :products="products"
-        :stock="stockMap"
         :locations="locations"
-        :dist="distByProduct"
-        :loading="loadingDetail"
       />
       <StockAlertView
         v-else-if="tab === 'alert'"
@@ -38,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PageHeader from '../../components/ui/PageHeader.vue'
 import SegmentedTabs from '../../components/ui/SegmentedTabs.vue'
@@ -79,60 +76,59 @@ function normalize(v: unknown): StockTab {
 }
 
 /**
- * 库存数据在本页统一加载后传给子模块：
- * 切 Tab 不再各自重新查库，避免每次切换都闪一次加载。
+ * 库房列表很轻（现网 2 个库房 / locationStock 4 行），进页就取，
+ * 明细与预警的「库房列」表头不用等全量底稿。
+ */
+const locations = ref<Location[]>([])
+async function loadLocations(): Promise<void> {
+  try {
+    await inventoryStore.ensureLocations()
+    locations.value = await inventoryStore.listLocations()
+  } catch { /* 库房取不到就先留空表，不抛断页面 */ }
+}
+onMounted(async () => {
+  try { await loadLocations() } catch { /* 同上 */ }
+})
+
+/**
+ * 「库存预警」用的全量底稿：库存 ≤ 预警值是跨表比较，服务端下推不了，
+ * 必须看完所有商品，所以它是全表扫描（无法避免，只能缓存复用）。
+ * V2.2-2.5：底稿走 productStore.stockBase()（60s 缓存 + stock 只读一次），
+ * 「库存明细」已改为服务端分页，不再需要这份底稿。
  */
 const products = ref<Product[]>([])
 const stockMap = ref<Record<number, number>>({})
-const locations = ref<Location[]>([])
 const distByProduct = ref<Record<number, Record<number, number>>>({})
-const loadingDetail = ref(true)
 
-/**
- * 明细 / 预警用的商品 + 库存是**整表拉取**（几千条商品 + 几千行库存，云端要
- * 7 次 Range 请求），而本页默认落在「库存作业」Tab。以前一进页面就 Promise.all
- * 拉两份全表，只想做个入库的用户也得先干等两秒 —— 现在改成：
- *   · 切到「库存明细 / 库存预警」才拉；
- *   · 只拉一次，切回来直接用内存里的数据，后续 Tab 切换是瞬时的。
- */
 const heavyLoaded = ref(false)
 async function loadHeavy(): Promise<void> {
   if (heavyLoaded.value) return
   heavyLoaded.value = true
   try {
-    // V2.2-2.3 I2：商品改用窄字段 listProductLites（库存明细/预警子视图只用
-    // brand/model/category/unit/warnStock/id 几列），进页省 ~1MB 传输；
-    // 保留与 listAll(false) 一致的「停售不显示」口径
-    const [lites, smap] = await Promise.all([
-      productStore.listProductLites(),
-      productStore.stockMap()
-    ])
-    const active = lites.filter(p => p.status !== 'inactive')
-    products.value = active as unknown as Product[]
-    stockMap.value = smap
-    loadingDetail.value = false
-
-    // 库房分布较重（自愈 + 全量分布）：stock 与 locationStock 只拉一次，
-    // 透传给 reconcileProducts / distributionAll 复用（合并 2 次读为 1 次）
-    await inventoryStore.ensureLocations()
-    const [locs, stockRows, locRows] = await Promise.all([
-      inventoryStore.listLocations(),
-      db.stock.toArray(),
+    const [b, locRows] = await Promise.all([
+      productStore.stockBase(),
       db.locationStock.toArray()
     ])
-    locations.value = locs
-    await inventoryStore.reconcileProducts(active.map(p => p.id!), { stockRows, locRows })
+    const active = b.lites.filter(p => p.status !== 'inactive')
+    products.value = active as unknown as Product[]
+    stockMap.value = b.stock
+
+    const locs = await inventoryStore.listLocations()
+    if (locs.length) locations.value = locs
+    await inventoryStore.reconcileProducts(active.map(p => p.id!), {
+      stockRows: b.stockRows,
+      locRows
+    })
     const { byProduct } = await inventoryStore.distributionAll({ locRows })
     distByProduct.value = byProduct
   } catch {
     /* 数据库未就绪时保持空表，不抛断页面 */
-    loadingDetail.value = false
   }
 }
 
-// 按需加载：默认 Tab（库存作业）不碰全量数据，切到明细/预警才在此时拉一次
+// 按需加载：只有「库存预警」需要全量底稿（明细自己按页取，秒开）
 watch(tab, v => {
-  if (v === 'detail' || v === 'alert') void loadHeavy()
+  if (v === 'alert') void loadHeavy()
 }, { immediate: true })
 </script>
 

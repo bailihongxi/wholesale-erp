@@ -24,6 +24,19 @@ export interface ProductLite {
   status: string
 }
 
+/** 库存底稿商品行：比 ProductLite 多一个进价（统计卡「库存金额（进价）」要用） */
+export interface StockBaseLite {
+  id: number
+  brand: string
+  model: string
+  category: string
+  spec: string
+  unit: string
+  warnStock: number
+  status: string
+  purchasePrice: number
+}
+
 export const useProductStore = defineStore('product', () => {
   const products = ref<Product[]>([])
 
@@ -83,6 +96,80 @@ export const useProductStore = defineStore('product', () => {
       warnStock: p.warnStock,
       status: p.status
     }))
+  }
+
+  // ==================== 库存明细 / 预警「底稿」（V2.2-2.5）====================
+  //
+  // 有些需求**必须**看完全部商品才能算对，服务端无法下推：
+  //   · 统计卡（库存总量 / 库存金额 / 预警数）——要跨商品汇总；
+  //   · 「仅看低库存」——库存 ≤ 预警值是**两个表的两个列**比较，PostgREST 表达不了；
+  //   · 库存预警清单——同上。
+  // 这些只需要少量列，且结果几分钟内不会变，所以单独缓存起来复用，
+  // 避免每次进页面都重新搬 6453 行（新加坡节点一次 ~2.4s）。
+
+  const BASE_FIELDS = 'id,brand,model,category,spec,unit,warnStock,status,purchasePrice'
+  /** 底稿保鲜期：与 stock/payments 缓存同一档口径（60s） */
+  const BASE_TTL_MS = 60_000
+  let baseCache: {
+    lites: StockBaseLite[]
+    stock: Record<number, number>
+    stockRows: any[]
+    ts: number
+  } | null = null
+  let basePending: Promise<{ lites: StockBaseLite[]; stock: Record<number, number>; stockRows: any[] }> | null = null
+
+  /**
+   * 库存底稿（商品窄字段 + 全量 stock 行 + 汇总好的库存），带 60s 缓存与并发去重。
+   * 首次进入仍是全量窄扫（~2.4s，无法避免），之后 60s 内复用，切 Tab / 重进页面秒开。
+   *
+   * ⚠️ stock 只**读一次全字段**：库存自愈（reconcileProducts）upsert 需要整行，
+   * 窄字段会把行覆盖成几列丢数据；而汇总用的库存量直接从这批行里算出来，
+   * 于是「汇总」与「自愈」共用一次读取（以前是两个表各读一遍）。
+   */
+  function stockBase(): Promise<{
+    lites: StockBaseLite[]
+    stock: Record<number, number>
+    stockRows: any[]
+  }> {
+    if (baseCache && Date.now() - baseCache.ts < BASE_TTL_MS) {
+      return Promise.resolve({ lites: baseCache.lites, stock: baseCache.stock, stockRows: baseCache.stockRows })
+    }
+    if (basePending) return basePending
+    basePending = (async () => {
+      const [lites, stockRows] = await Promise.all([
+        (async () => {
+          if (USE_CLOUD) {
+            return (await (db.products as any).scanNarrow(BASE_FIELDS)) as StockBaseLite[]
+          }
+          return (await db.products.toArray()).map((p: Product) => ({
+            id: p.id!,
+            brand: p.brand,
+            model: p.model,
+            category: p.category,
+            spec: p.spec,
+            unit: p.unit,
+            warnStock: p.warnStock,
+            status: p.status,
+            purchasePrice: p.purchasePrice
+          }))
+        })(),
+        db.stock.toArray() as Promise<any[]>
+      ])
+      const smap: Record<number, number> = {}
+      for (const s of stockRows) {
+        const pid = Number(s.productId)
+        smap[pid] = (smap[pid] ?? 0) + (Number(s.quantity) || 0)
+      }
+      baseCache = { lites, stock: smap, stockRows, ts: Date.now() }
+      return { lites, stock: smap, stockRows }
+    })()
+    basePending.finally(() => { basePending = null })
+    return basePending
+  }
+
+  /** 商品 / 库存变动后调用，让底稿与统计卡下一轮重新算（不清缓存也能靠 TTL 兜底） */
+  function clearStockBase(): void {
+    baseCache = null
   }
 
   /**
@@ -331,6 +418,8 @@ export const useProductStore = defineStore('product', () => {
   function clearPickerCache(): void {
     catCache = null
     catTs = 0
+    // 商品价格 / 预警值改了，库存底稿（统计卡、仅看低库存、库存预警）也要重新算
+    clearStockBase()
     try { if (USE_CLOUD) localStorage.removeItem(CAT_CACHE_KEY) } catch { /* 忽略 */ }
   }
 
@@ -366,6 +455,61 @@ export const useProductStore = defineStore('product', () => {
     }
     const all = await db.stock.toArray()
     return [...new Set(all.filter(s => (Number(s.quantity) || 0) > 0).map(s => s.productId))]
+  }
+
+  /**
+   * 库存明细的服务端分页取数（V2.2-2.5）。
+   *
+   * 以前「库存明细」是进页面先拉 6453 行商品 + 6453 行库存（两个全表窄扫 ≈ 2.4s）
+   * 再在前端过滤切片，表格要干等两秒多才出现。现在：
+   *   · 商品按页取 20 行（关键词 / 分类 / 库房全部下推服务端）；
+   *   · 库存只查这 20 个商品（stockOf 批量）；
+   *   首屏从 ~2.4s 降到一次往返（~0.45s），且商品总数多少都不影响。
+   *
+   * 「仅看低库存」不在这里处理：库存 ≤ 预警值是跨表比较，服务端无法下推，
+   * 由调用方改用底稿（stockBase）计算，保证语义与以前完全一致。
+   */
+  async function stockPage(opts: {
+    page?: number
+    pageSize?: number
+    keyword?: string
+    category?: string
+    /** 只看该库房有货的商品（0 / 空 = 不过滤） */
+    locationId?: number
+  } = {}): Promise<{ rows: Product[]; stock: Record<number, number>; total: number }> {
+    const page = Math.max(1, opts.page ?? 1)
+    const pageSize = opts.pageSize ?? PAGE_SIZE_LIST
+
+    // 「只看某库房有货」：locationStock 行数很少（现网 4 行），取该库房有货的
+    // 商品 id，再下推成 id in (...)。库房列展示用的分布由调用方按需另查。
+    let ids: number[] | undefined
+    if (opts.locationId) {
+      const rows = (await (db.locationStock as any)
+        .where('locationId').equals(opts.locationId).toArray()) as Array<{ productId: number; quantity: number }>
+      ids = [...new Set(
+        rows.filter(r => (Number(r.quantity) || 0) > 0).map(r => Number(r.productId))
+      )]
+      if (!ids.length) return { rows: [], stock: {}, total: 0 }
+    }
+
+    const cond = keywordCond(opts.keyword ?? '')
+    const res = await serverPage<Product>(db.products, {
+      page,
+      pageSize,
+      eq: {
+        status: 'active',
+        ...(opts.category ? { category: opts.category } : {}),
+      },
+      // 固定按 id 升序：翻页必须有稳定顺序，否则页与页之间会重复或漏项
+      orderBy: 'id',
+      ascending: true,
+      orExpr: cond.orExpr,
+      extraFilter: cond.extraFilter,
+      inFilter: ids ? { id: ids } : undefined,
+    })
+
+    const stock = await stockOf(res.rows.map(p => Number(p.id)))
+    return { rows: res.rows, stock, total: res.total }
   }
 
   /**
@@ -437,6 +581,7 @@ export const useProductStore = defineStore('product', () => {
   return {
     products, productName, loadAll, search, createProduct, listAll, listPage, distinctCategories, stockMap,
     updateProduct, getProduct, nameMap, getStock, getLowStockProducts, findSameName, listProductLites,
-    pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache
+    pickerPage, pickerCategories, stockOf, inStockProductIds, clearPickerCache,
+    stockBase, clearStockBase, stockPage
   }
 })

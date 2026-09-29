@@ -145,8 +145,9 @@ describe('阶段6：库房+财务模块重写', () => {
 
     setRole('boss')
     const bossWrapper = mount(StockManageView, { global: { plugins: [testRouter] } })
-    await flushPromises()
-    expect(bossWrapper.text()).toContain('批发价')
+    // V2.2-2.5：库存明细改成服务端按页取数（真正的异步），一次 flushPromises 不够，
+    // 与上面库房那段一致，用 waitFor 等表格真正渲染出来再断言（断言内容不变）
+    await vi.waitFor(() => expect(bossWrapper.text()).toContain('批发价'), { timeout: 3000 })
     expect(bossWrapper.text()).toContain('¥1,200')
   })
 
