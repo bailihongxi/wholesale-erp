@@ -203,6 +203,10 @@ const CACHED_TABLES = new Set([
   // 业务主表也缓存：用户在页面间切换时不用重复拉全表
   // 写操作（增删改）会自动同步缓存，所以数据不会脏
   'saleOrders', 'purchaseOrders', 'quoteOrders',
+  // V2.2-2.1 Z3：收付款加入缓存 —— 根治「返回首页反复全表拉 payments」
+  // （财务工作台曾一次拉 3 次）。add/bulkAdd 会 invalidate() 清空缓存，写入即失效；
+  // 跨设备差异靠下面 60s 短 TTL 自愈。
+  'payments',
 ])
 
 /**
@@ -218,6 +222,8 @@ const CACHED_TABLES = new Set([
 const CACHE_TTL_MS: Record<string, number> = {
   stock: 60_000,
   locationStock: 60_000,
+  // 收付款频繁变动：缓存 60s 抗「返回首页反复全表拉」，又保证跨设备差异最多 60s 自愈
+  payments: 60_000,
 }
 const DEFAULT_CACHE_TTL_MS = 5 * 60_000
 
@@ -639,7 +645,11 @@ export function createCloudDb() {
   /** 登录后预拉常用缓存表到内存，后续切页面命中缓存秒开（不阻塞首屏）。失败静默忽略。 */
   async function warmUp(): Promise<void> {
     if (!USE_CLOUD) return
-    const warm = ['products', 'customers', 'suppliers', 'users', 'locations', 'rolePerms']
+    // V2.2-2.1 Z2：商品不再在这里预拉全字段。6281 行全字段≈1.4MB，且 useProductCache
+    // 已在首次使用时自行用窄字段（5 列≈0.4MB）预热并自带缓存；此处若用全字段 toArray 反而
+    // 会把 CloudTable._cache 填满为「只有 5 列以外的全字段」，与窄字段缓存重复且浪费 1.4MB。
+    // 全字段消费者（product.ts/applyPriceRule/productIO 等）改按需拉取（Batch3 的 I2 再瘦身）。
+    const warm = ['customers', 'suppliers', 'users', 'locations', 'rolePerms']
     await Promise.allSettled(
       warm.map(t => {
         const tbl = (db as Record<string, CloudTable>)[t]

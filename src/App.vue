@@ -15,7 +15,10 @@
   <template v-else>
     <AppLayout v-if="!isPlainRoute">
       <router-view v-slot="{ Component }">
-        <keep-alive>
+        <!-- V2.2-2.1 Z1：加内存上限，避免 60+ 路由组件全常驻内存（含 StockManageView 的 6453 行数组），
+             长时间使用/弱机内存无限累积导致越用越卡甚至卡死。LRU 淘汰最久未用页，被淘汰页返回时
+              onMounted 会重新拉数据（SalesCreateView 等已挂 onActivated 重置，无副作用）。 -->
+        <keep-alive :max="12">
           <component :is="Component" />
         </keep-alive>
       </router-view>

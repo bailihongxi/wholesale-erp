@@ -359,3 +359,54 @@ describe('B 档契约锁', () => {
     expect(ttl).toContain('locationStock:')
   })
 })
+
+// ---------------------------------------------------------------- 6. V2.2-2.1 系统底座（Z2/Z3）
+
+describe('V2.2-2.1 系统底座：登录减重 + payments 缓存', () => {
+  it('Z2 静态契约：warmUp 不再预拉全字段 products（登录省 1.4MB，窄字段改由 useProductCache 负责）', () => {
+    const cloudDb = readFileSync(resolve(__dirname, '..', 'src/db/cloudDb.ts'), 'utf-8')
+    const wi = cloudDb.indexOf('const warm = [')
+    const wb = cloudDb.indexOf(']', wi)
+    const wblock = cloudDb.slice(wi, wb + 1)
+    expect(wblock).not.toContain("'products'")
+    expect(wblock).toContain("'customers'")
+    expect(wblock).toContain("'suppliers'")
+  })
+
+  it('Z3 行为：payments 启用缓存，保鲜期内重复 toArray 不发新请求', async () => {
+    const { client, ctx } = makeClient({ payments: [{ id: 1, type: 'receive', amount: 100 }] })
+    const pays = new CloudTable(client, 'payments')
+    await pays.toArray()
+    expect(ctx.calls.filter(c => c === 'select:payments')).toHaveLength(1)
+    await pays.toArray()
+    await pays.toArray()
+    expect(ctx.calls.filter(c => c === 'select:payments')).toHaveLength(1) // 命中缓存
+  })
+
+  it('Z3 行为：payments.add() 写入即失效，之后 toArray 重拉一次', async () => {
+    const { client, ctx } = makeClient({ payments: [{ id: 1, type: 'receive', amount: 100 }] })
+    const pays = new CloudTable(client, 'payments')
+    await pays.toArray()
+    expect(ctx.calls.filter(c => c === 'select:payments')).toHaveLength(1)
+    await pays.add({ type: 'pay', amount: 50 })
+    await pays.toArray()
+    expect(ctx.calls.filter(c => c === 'select:payments')).toHaveLength(2) // 写入失效后重拉
+  })
+
+  it('Z3 行为：payments 带 60s 短保鲜期，超期自动重拉', async () => {
+    const { client, ctx } = makeClient({ payments: [{ id: 1, type: 'receive', amount: 100 }] })
+    const pays = new CloudTable(client, 'payments')
+    await pays.toArray()
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000)
+    await pays.toArray()
+    expect(ctx.calls.filter(c => c === 'select:payments')).toHaveLength(2)
+  })
+
+  it('Z3 静态契约：CACHED_TABLES 必须包含 payments，且 TTL 含 payments: 60s', () => {
+    const cloudDb = readFileSync(resolve(__dirname, '..', 'src/db/cloudDb.ts'), 'utf-8')
+    const block = cloudDb.slice(cloudDb.indexOf('const CACHED_TABLES'), cloudDb.indexOf('export class CloudTable'))
+    expect(block).toContain("'payments'")
+    const ttl = cloudDb.slice(cloudDb.indexOf('const CACHE_TTL_MS'), cloudDb.indexOf('const DEFAULT_CACHE_TTL_MS'))
+    expect(ttl).toContain('payments:')
+  })
+})
