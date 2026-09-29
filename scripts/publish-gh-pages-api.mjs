@@ -17,7 +17,9 @@ import path from 'path'
 const REPO = 'bailihongxi/wholesale-erp'
 const API = `https://api.github.com/repos/${REPO}`
 // 项目根的 dist（脚本放在 scripts/ 下，向上两级即项目根）
-const DIST = path.resolve(new URL('.', import.meta.url).pathname, '../dist')
+// 注意：项目路径含中文时 import.meta.url 的 pathname 是百分号编码，
+// 必须 decodeURIComponent 还原，否则 resolve 到 /Users/.../%E6%95%B0... 找不到目录。
+const DIST = path.resolve(decodeURIComponent(new URL('.', import.meta.url).pathname), '../dist')
 const BRANCH = 'gh-pages'
 
 const token = execSync('gh auth token').toString().trim()
