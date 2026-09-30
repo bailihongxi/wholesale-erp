@@ -513,21 +513,56 @@ export const useProductStore = defineStore('product', () => {
   }
 
   /**
+   * 搜索容错：把连接符号（空格、括号、连字符、斜杠、点等）归一化后，用语义不变的
+   * 「子序列」方式比对，让「35GW/E1-1 Plus」与「35GW/E1-1Plus」、「72LW/E2-1Pro舒适」
+   * 与「KFR-72LW/E2-1Pro 舒适风Pro」这类「符号差一点」能互相命中。
+   * 只保留字母、数字、中文，其余符号一律删除（不区分大小写）。
+   */
+  function normalizeSearch(s: string): string {
+    return (s || '').toLowerCase().replace(/[^a-z0-9一-龥]/g, '')
+  }
+  /** 判断 needle 是否为 hay 的子序列（字符按顺序出现，可间隔） */
+  function isSubsequence(needle: string, hay: string): boolean {
+    if (!needle) return true
+    let i = 0
+    for (const ch of hay) {
+      if (ch === needle[i]) i++
+      if (i === needle.length) return true
+    }
+    return false
+  }
+
+  /**
    * 关键词 -> 查询条件（云端 orExpr / 本地 extraFilter，两种模式语义完全一致）。
    * 规则：按空格切成多个词，**词内 AND、字段间 OR**——
    * 所以「海尔 H9」能同时命中品牌与型号，比原来只按整串匹配更符合直觉。
+   * 每个词在原有「字面 ilike」基础上，叠加一个「归一子序列 ilike」分支：
+   * 符号差一点也能命中，而精确搜索行为完全保留（零回归）。
    */
   function keywordCond(kw: string): { orExpr?: string; extraFilter?: (r: any) => boolean } {
     const fields = ['brand', 'model', 'category', 'spec']
     const tokens = kw.trim().split(/\s+/).filter(Boolean)
     if (!tokens.length) return {}
-    const groups = tokens.map(
-      t => `or(${fields.map(f => `${f}.ilike."*${escapeOr(t)}*"`).join(',')})`
-    )
+
+    const groups = tokens.map(t => {
+      const literalPieces = fields.map(f => `${f}.ilike."*${escapeOr(t)}*"`)
+      const ns = normalizeSearch(t)
+      const seq = ns.length ? `*${ns.split('').join('*')}*` : ''
+      const fuzzyPieces = seq ? fields.map(f => `${f}.ilike."*${seq}*"`) : []
+      return `or(${[...literalPieces, ...fuzzyPieces].join(',')})`
+    })
     const orExpr = groups.length === 1 ? groups[0].slice(3, -1) : `and(${groups.join(',')})`
+
     const lc = tokens.map(t => t.toLowerCase())
+    const nc = tokens.map(t => normalizeSearch(t))
     const extraFilter = (r: any): boolean =>
-      lc.every(t => fields.some(f => String(r[f] ?? '').toLowerCase().includes(t)))
+      lc.every((t, i) => {
+        const n = nc[i]
+        return fields.some(f => {
+          const sf = String(r[f] ?? '').toLowerCase()
+          return sf.includes(t) || (n.length > 0 && isSubsequence(n, normalizeSearch(sf)))
+        })
+      })
     return { orExpr, extraFilter }
   }
 
